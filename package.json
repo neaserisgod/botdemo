@@ -20,8 +20,10 @@
     "better-sqlite3": "^12.11.1",
     "express": "^4.19.2",
     "node-cron": "^3.0.3",
-    "qrcode-terminal": "^0.12.0",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "optionalDependencies": {
     "whatsapp-web.js": "^1.26.0"
   },
-  "comentario": "whatsapp-web.js es solo para la demo en PC. En el celu (fase 2) se reemplaza por @whiskeysockets/baileys y se desinstala esta dependencia. El núcleo (src/core) no importa ninguna de las dos."
+  "comentario": "whatsapp-web.js está como opcional porque arrastra Chromium (~150 MB): en el celu se instala con 'npm install --omit=optional' y no lo baja. El núcleo (src/core) no importa ninguna librería de WhatsApp."
 }

@@ -13,7 +13,8 @@ DIR="$HOME/bot-turnos"
 
 echo "== [1/7] Paquetes base =="
 pkg update -y
-pkg install -y nodejs-lts git tesseract termux-api openssh
+# python/clang/make: better-sqlite3 no tiene binarios para Android, se compila acá
+pkg install -y nodejs-lts git tesseract termux-api openssh python clang make binutils
 
 # Idioma español para el OCR (el paquete tesseract puede venir sin spa)
 TESSDATA="$PREFIX/share/tessdata"
@@ -37,14 +38,15 @@ else
 fi
 
 echo "== [3/7] Dependencias (sin whatsapp-web.js: en el celu va Baileys) =="
-# --omit=optional evita que intente bajar Chromium en el celu
+# --omit=optional deja afuera whatsapp-web.js y su Chromium (~150 MB).
+# La compilación de better-sqlite3 tarda varios minutos en un celu: es normal.
 npm install --omit=optional
 
 echo "== [4/7] config.json =="
 if [ ! -f config.json ]; then
   cp config.example.json config.json
-  echo ">>> IMPORTANTE: editá config.json con los datos del cliente (nano config.json)"
 fi
+echo ">>> Revisá config.json con los datos del cliente: nano config.json"
 
 echo "== [5/7] PM2 =="
 npm install -g pm2
