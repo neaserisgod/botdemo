@@ -67,9 +67,23 @@ pm2 delete bot-turnos 2>/dev/null || true  # por si quedó de un intento anterio
 if [ -f data/sesion-baileys/creds.json ]; then
   echo "Ya hay una sesión vinculada, sigo."
 else
+  NUM=$(node -p "require('./config.json').numero_actual" 2>/dev/null)
   echo ""
-  echo "Te voy a dar un código para vincular el WhatsApp del bot."
-  echo "Cuando aparezca, andá a: WhatsApp > Dispositivos vinculados >"
+  echo "  El código se va a pedir para el número: $NUM"
+  echo ""
+  echo "  Tiene que ser el número del chip DE ESTE celu:"
+  echo "  549 + característica sin el 0 + número sin el 15."
+  echo "  (ej: Bariloche 2944 123456 → 5492944123456)"
+  echo ""
+  read -r -p "  ¿Es ese el número? [s/N] " RESPUESTA
+  if [ "$RESPUESTA" != "s" ] && [ "$RESPUESTA" != "S" ]; then
+    echo ""
+    echo "  Editalo con:  nano config.json   (campo numero_actual)"
+    echo "  y volvé a correr: bash setup.sh"
+    exit 1
+  fi
+  echo ""
+  echo "Cuando aparezca el código, andá a: WhatsApp > Dispositivos vinculados >"
   echo "Vincular con el número de teléfono, y escribilo."
   echo ""
   node src/index.js --adaptador=baileys --pareo

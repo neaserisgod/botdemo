@@ -75,7 +75,8 @@ function crearAdaptador(config, hooks) {
     }
 
     sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-      if (qr) {
+      // En modo pareo no mostramos el QR: confunde y encima tapa el código.
+      if (qr && !process.argv.includes('--pareo')) {
         console.log('Escaneá este QR desde WhatsApp > Dispositivos vinculados:');
         qrcode.generate(qr, { small: true });
       }
