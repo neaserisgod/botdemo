@@ -15,6 +15,16 @@ echo "== [1/7] Paquetes base =="
 pkg update -y
 pkg install -y nodejs-lts git tesseract termux-api openssh
 
+# Idioma español para el OCR (el paquete tesseract puede venir sin spa)
+TESSDATA="$PREFIX/share/tessdata"
+mkdir -p "$TESSDATA"
+if [ ! -f "$TESSDATA/spa.traineddata" ]; then
+  echo "Bajando idioma español para Tesseract..."
+  curl -L -o "$TESSDATA/spa.traineddata" \
+    https://github.com/tesseract-ocr/tessdata_fast/raw/main/spa.traineddata \
+    || echo "AVISO: no se pudo bajar spa.traineddata; el OCR usará inglés (los montos y números salen igual)"
+fi
+
 echo "== [2/7] Código =="
 if [ -d "$DIR" ]; then
   echo "Ya existe $DIR, actualizando..."

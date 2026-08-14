@@ -39,13 +39,24 @@ const CORTESIA = [
 // msj: { texto, rutaImagen?, productoId? }  →  devuelve [{para, texto, ...}]
 function procesar(config, clienta, msj) {
   const texto = (msj.texto || '').trim();
-  const datos = JSON.parse(clienta.datos_conv || '{}');
+  // datos_conv corrupto (edición a mano, corte de luz a mitad de escritura):
+  // arrancamos de cero en vez de tumbar el bot.
+  let datos = {};
+  try { datos = JSON.parse(clienta.datos_conv || '{}') || {}; } catch {
+    console.error(`datos_conv inválido en clienta ${clienta.id}, reiniciando su estado`);
+    clienta.estado_conv = 'inicio';
+  }
   const ctx = { config, clienta, datos, msj, texto: texto.toLowerCase() };
 
   // Tocaron un ítem del catálogo de WhatsApp Business → arranca directo ahí.
   if (msj.productoId) {
     const servicio = qServicios.porCatalogoId(msj.productoId);
     if (servicio) return elegirServicio(ctx, servicio);
+    // Ítem sin mapear en la DB (catalogo_id vacío o viejo): ofrecemos la lista
+    // igual — la clienta ya mostró que quiere reservar.
+    ctx.datos = {};
+    return responder(ctx, 'eligiendo_servicio',
+      `¡Buenísimo! ¿Qué servicio querés?\n\n${listaServicios(ctx.config)}\n\nRespondé con el número.`);
   }
 
   const manejadores = {
@@ -135,11 +146,16 @@ function inicio(ctx) {
   }
   if (inter.intencion === 'humano') return derivarAHumano(ctx, ctx.msj.texto);
 
-  // "quiero kapping" / "turno para soft gel" → salta directo a elegir día
-  if (inter.servicio) return elegirServicio(ctx, inter.servicio);
+  // "quiero kapping mañana a las 15" → salta todos los pasos que ya vinieron
+  const fh = nlu.extraerFechaHora(t);
+  if (inter.servicio) return elegirServicio(ctx, inter.servicio, fh);
 
-  if (inter.intencion === 'reservar') {
-    ctx.datos = {};
+  // Mencionar un día u hora ya es querer un turno, aunque no diga "reservar"
+  // ("se puede el sábado 10 hs?", "tenés algo mañana a la tarde?")
+  if (inter.intencion === 'reservar' || fh.dia || fh.hora) {
+    // "quería reservar para el viernes a las 10" sin decir el servicio:
+    // guardamos día/hora y los usamos apenas elija el servicio.
+    ctx.datos = { fh };
     return responder(ctx, 'eligiendo_servicio',
       `¡Buenísimo! ¿Qué servicio querés?\n\n${listaServicios(ctx.config)}\n\nRespondé con el número.`);
   }
@@ -173,31 +189,75 @@ function cancelando(ctx) {
 }
 
 function eligiendo_servicio(ctx) {
+  // Primero por nombre, porque puede venir con fecha y hora incluidas
+  // ("kapping el 14/8 a las 10") y esos números NO son una selección múltiple.
+  const porNombre = nlu.servicioPorNombre(ctx.texto, qServicios.activos());
+  if (porNombre && porNombre.activo) {
+    return elegirServicio(ctx, porNombre, nlu.extraerFechaHora(ctx.msj.texto || ''));
+  }
   const nums = numerosDe(ctx.texto);
   if (nums.length > 1) {
     return responder(ctx, 'eligiendo_servicio',
       'De a uno 😅 Puedo agendar *un servicio por turno*: elegí un solo número, y cuando terminemos sacás otro turno si querés.');
   }
-  let servicio = qServicios.porId(nums[0] ?? -1);
-  // ¿Lo escribió por nombre? "kapping", "el soft gel porfa" (tolera typos)
-  if (!servicio) servicio = nlu.servicioPorNombre(ctx.texto, qServicios.activos());
+  const servicio = qServicios.porId(nums[0] ?? -1);
   if (!servicio || !servicio.activo) {
     return noEntendi(ctx, `No encontré ese servicio 🤔 Elegí un número de la lista:\n\n${listaServicios(ctx.config)}`);
   }
-  return elegirServicio(ctx, servicio);
+  return elegirServicio(ctx, servicio, nlu.extraerFechaHora(ctx.msj.texto || ''));
 }
 
-// Compartido entre elección por número y por catálogo (productMessage).
-function elegirServicio(ctx, servicio) {
+// Compartido entre elección por número, por nombre y por catálogo.
+// fh = { dia, hora } sacados del texto libre ("mañana a las 15"): lo que ya
+// vino resuelto se saltea. Si faltó algo, se completa con lo que la clienta
+// haya dicho antes en el mismo flujo (ctx.datos.fh).
+function elegirServicio(ctx, servicio, fh) {
+  const previo = ctx.datos.fh || {};
+  fh = { dia: (fh && fh.dia) || previo.dia || null, hora: (fh && fh.hora) || previo.hora || null };
   ctx.datos = { servicioId: servicio.id };
+
   const dias = agenda.diasDisponibles(ctx.config, servicio);
   if (!dias.length) {
     return responder(ctx, 'inicio', 'Uy, no tengo horarios libres en los próximos días 😔 Escribí *4* si querés coordinar directo con la dueña.');
   }
   ctx.datos.dias = dias;
-  const lista = dias.map((d, i) => `*${i + 1}* — ${fechas.diaLindo(d)}`).join('\n');
+  const listaDias = dias.map((d, i) => `*${i + 1}* — ${fechas.diaLindo(d)}`).join('\n');
+
+  if (fh.dia) {
+    // ¿Pidió una fecha más allá de lo que agendamos?
+    const limite = new Date(Date.now() + ctx.config.turnos.dias_hacia_adelante * 86400000);
+    if (fh.dia > fechas.aTexto(limite).slice(0, 10)) {
+      return responder(ctx, 'eligiendo_dia',
+        `Por ahora agendo hasta ${ctx.config.turnos.dias_hacia_adelante} días para adelante 😅 Estos días puedo:\n\n${listaDias}\n\nRespondé con el número, o *0* para volver.`);
+    }
+    const horas = agenda.horariosLibres(ctx.config, servicio, fh.dia);
+    if (!horas.length) {
+      return responder(ctx, 'eligiendo_dia',
+        `Uy, el ${fechas.diaLindo(fh.dia)} no tengo lugar para *${servicio.nombre}* 😕 Estos días sí puedo:\n\n${listaDias}\n\nRespondé con el número, o *0* para volver.`);
+    }
+    ctx.datos.dia = fh.dia;
+    ctx.datos.horas = horas;
+    const listaHoras = horas.map((h, j) => `*${j + 1}* — ${h}`).join('\n');
+
+    if (fh.hora && horas.includes(fh.hora)) {
+      // Vino todo: servicio + día + hora → derecho al nombre o la confirmación
+      ctx.datos.hora = fh.hora;
+      if (!ctx.clienta.nombre) {
+        return responder(ctx, 'pidiendo_nombre',
+          `¡De una! *${servicio.nombre}* el ${fechas.diaLindo(fh.dia)} a las ${fh.hora} 👌\n¿Me decís tu nombre para agendar?`);
+      }
+      return resumenParaConfirmar(ctx);
+    }
+    if (fh.hora) {
+      return responder(ctx, 'eligiendo_hora',
+        `Uy, a las ${fh.hora} no tengo lugar el ${fechas.diaLindo(fh.dia)} 😕 Ese día puedo:\n\n${listaHoras}\n\nRespondé con el número, o *0* para volver.`);
+    }
+    return responder(ctx, 'eligiendo_hora',
+      `*${servicio.nombre}* el ${fechas.diaLindo(fh.dia)} 👌 Horarios libres:\n\n${listaHoras}\n\nRespondé con el número, o *0* para volver.`);
+  }
+
   return responder(ctx, 'eligiendo_dia',
-    `*${servicio.nombre}* ($${servicio.precio}) 👌\n¿Qué día te queda bien?\n\n${lista}\n\nRespondé con el número, o *0* para volver.`);
+    `*${servicio.nombre}* ($${servicio.precio}) 👌\n¿Qué día te queda bien?\n\n${listaDias}\n\nRespondé con el número, o *0* para volver.`);
 }
 
 function eligiendo_dia(ctx) {
@@ -259,8 +319,21 @@ function eligiendo_hora(ctx) {
 
 function pidiendo_nombre(ctx) {
   const nombre = (ctx.msj.texto || '').trim();
-  if (nombre.length < 2 || nombre.length > 40 || /^\d+$/.test(nombre)) {
-    return noEntendi(ctx, 'Decime tu nombre así te agendo el turno 😊');
+  // Si parece una pregunta u otra intención ("cuánto sale?", "cancelar"),
+  // no es un nombre: repreguntamos en vez de agendar cualquier cosa.
+  const pareceOtraCosa = nombre.includes('?') || nombre.includes('¿')
+    || nlu.interpretar(nombre).intencion;
+  // Tiene que tener al menos 2 letras de verdad: "💅✨", "M" o "123" no son nombres.
+  if (nombre === '0') {
+    ctx.datos = {};
+    return responder(ctx, 'inicio', 'Listo, no reservé nada. Cuando quieras escribí *hola* 😊');
+  }
+  const letras = (nombre.match(/[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]/g) || []).length;
+  if (pareceOtraCosa || letras < 2 || nombre.length > 40) {
+    // Repreguntamos sin contar hacia la derivación: equivocarse escribiendo el
+    // nombre es común y no significa que el bot no la esté entendiendo.
+    return responder(ctx, 'pidiendo_nombre',
+      'Necesito tu nombre para agendar el turno 😊 (o escribí *0* si preferís cancelar)');
   }
   qClientas.guardarNombre(ctx.clienta.id, nombre);
   ctx.clienta.nombre = nombre;

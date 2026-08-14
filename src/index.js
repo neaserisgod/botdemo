@@ -1,9 +1,8 @@
 // Arranque de bot-turnos: junta config + DB + núcleo + adaptador + cron + panel.
 // Elegís el adaptador con la variable ADAPTADOR: whatsappweb (demo PC),
 // consola (pruebas sin WhatsApp), baileys (fase 2, celu).
-const path = require('path');
 const cron = require('node-cron');
-const config = require(path.join(__dirname, '..', 'config.json'));
+const config = require('./config').cargar(); // valida y avisa si algo está mal
 const db = require('./db');
 const { crearMotor } = require('./core/motor');
 const recordatorios = require('./core/recordatorios');

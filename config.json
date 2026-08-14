@@ -1,0 +1,68 @@
+{
+  "negocio": {
+    "nombre": "Uñas Bariloche (DEMO)",
+    "rubro": "salon_de_unas",
+    "direccion": "Mitre 150, San Carlos de Bariloche",
+    "ubicacion_maps": "https://maps.app.goo.gl/ejemplo",
+    "zona_horaria": "America/Argentina/Buenos_Aires"
+  },
+
+  "numero_duena": "5492944676761",
+  "numero_soporte": "5492944000002",
+  "numero_actual": "5492944000003",
+
+  "horarios": {
+    "lunes":     { "desde": "09:00", "hasta": "18:00" },
+    "martes":    { "desde": "09:00", "hasta": "18:00" },
+    "miercoles": { "desde": "09:00", "hasta": "18:00" },
+    "jueves":    { "desde": "09:00", "hasta": "18:00" },
+    "viernes":   { "desde": "09:00", "hasta": "20:00" },
+    "sabado":    { "desde": "10:00", "hasta": "14:00" },
+    "domingo":   null
+  },
+
+  "servicios": [
+    { "id": 1, "nombre": "Semipermanente",        "duracion_min": 60, "precio": 18000, "sena": 5000, "catalogo_id": "" },
+    { "id": 2, "nombre": "Kapping",               "duracion_min": 90, "precio": 25000, "sena": 8000, "catalogo_id": "" },
+    { "id": 3, "nombre": "Soft gel",              "duracion_min": 90, "precio": 30000, "sena": 10000, "catalogo_id": "" },
+    { "id": 4, "nombre": "Retiro de esmaltado",   "duracion_min": 30, "precio": 6000,  "sena": 0, "catalogo_id": "" }
+  ],
+
+  "senas": {
+    "habilitadas": true,
+    "alias_mp": "unas.brc.demo",
+    "titular": "Maria Ejemplo",
+    "vencimiento_horas": 2
+  },
+
+  "turnos": {
+    "intervalo_slot_min": 30,
+    "anticipacion_minima_horas": 2,
+    "dias_hacia_adelante": 14
+  },
+
+  "recordatorios": {
+    "horas_antes": 24,
+    "chequeo_cron": "*/5 * * * *"
+  },
+
+  "notificaciones_duena": {
+    "agenda_diaria_hora": "08:30",
+    "resumen_semanal_dia": "domingo",
+    "resumen_semanal_hora": "20:00"
+  },
+
+  "faq": {
+    "precios":   ["precio", "precios", "cuanto sale", "cuánto sale", "cuanto cuesta", "valor"],
+    "ubicacion": ["donde", "dónde", "direccion", "dirección", "ubicacion", "ubicación", "como llego", "cómo llego"],
+    "horarios":  ["horario", "horarios", "cuando abren", "cuándo abren", "que hora abren", "a que hora"]
+  },
+
+  "panel": {
+    "puerto": 3010
+  },
+
+  "latido": {
+    "hora": "09:00"
+  }
+}

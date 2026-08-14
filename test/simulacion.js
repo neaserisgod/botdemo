@@ -143,17 +143,44 @@ chequear('número dentro de frase: elige Kapping', textoPara(r, C5).includes('Ka
 console.log('\n— 11. Lenguaje natural (nlu.js) —');
 r = decir(C4, 'quiero sacar un turno para soft gel');
 chequear('intención + servicio por nombre: salta a días', textoPara(r, C4).includes('Soft gel') && textoPara(r, C4).includes('¿Qué día'));
-decir(C4, '1'); r = decir(C4, '13:00');
-chequear('hora literal aceptada o lista de horas', true); // según agenda del día
-decir(C4, '0'); // volver al menú
-r = decir(C4, 'tenes lugar esta semana?');
-chequear('"tenes lugar" → lista servicios', textoPara(r, C4).includes('Semipermanente'));
-r = decir(C4, 'kaping'); // typo
+decir(C4, '1');      // día → lista de horarios
+r = decir(C4, '1');  // hora → pide nombre
+chequear('pide nombre', textoPara(r, C4).includes('nombre'));
+r = decir(C4, 'cuanto sale?'); // pregunta en lugar de nombre
+chequear('no toma una pregunta como nombre', textoPara(r, C4).includes('nombre'));
+r = decir(C4, 'Vale');
+chequear('acepta el nombre real', textoPara(r, C4).includes('Vale'));
+decir(C4, '0'); // cancela la reserva → inicio
+r = decir(C4, 'tenes lugar para kaping?'); // intención + typo de servicio
 chequear('typo de servicio: entiende Kapping', textoPara(r, C4).includes('Kapping'));
+decir(C5, '0'); // C5 vuelve al menú
+r = decir(C5, 'hay lugar esta semana?');
+chequear('"hay lugar" → lista servicios', textoPara(r, C5).includes('Semipermanente'));
 const C6 = '5492944666666';
 decir(C6, 'hola');
 r = decir(C6, 'puede atenderme alguien? es urgente');
 chequear('pedido de humano en texto libre: deriva', r.some((s) => s.para === DUENA && s.texto.includes('atención humana')));
+
+console.log('\n— 12. Reserva completa en un solo mensaje —');
+// Ojo: depende de la fecha real (usa "mañana"); si mañana es domingo (cerrado)
+// estos chequeos van a avisar que no hay lugar, lo cual también es correcto.
+const C7 = '5492944777777';
+r = decir(C7, 'hola queria reservar kapping para mañana, si es posible a las 11');
+chequear('servicio + día + hora en un mensaje: va directo al nombre',
+  textoPara(r, C7).includes('11:00') && textoPara(r, C7).includes('nombre'));
+r = decir(C7, 'Camila');
+chequear('resumen listo para confirmar', textoPara(r, C7).includes('Kapping') && textoPara(r, C7).includes('11:00'));
+decir(C7, '1'); // confirma → seña
+
+const C8 = '5492944888888';
+r = decir(C8, 'hola queria reservar para mañana'); // sin servicio
+chequear('sin servicio: pide servicio y recuerda el día', textoPara(r, C8).includes('¿Qué servicio'));
+r = decir(C8, 'semipermanente');
+chequear('al elegir servicio usa el día guardado', textoPara(r, C8).includes('Horarios libres') || textoPara(r, C8).includes('no tengo lugar'));
+
+const C9 = '5492944999999';
+r = decir(C9, 'quiero kapping mañana a las 11'); // 11:00 la acaba de tomar C7
+chequear('hora ocupada: avisa y ofrece las libres', textoPara(r, C9).includes('a las 11:00 no tengo lugar'));
 
 console.log(`\n${fallas === 0 ? '✅ Todo OK' : `❌ ${fallas} chequeos fallaron`}`);
 fs.unlinkSync(RUTA_DB);

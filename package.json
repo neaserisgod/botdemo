@@ -13,7 +13,7 @@
     "demo": "node src/index.js --adaptador=whatsappweb",
     "baileys": "node src/index.js --adaptador=baileys",
     "consola": "node src/index.js --adaptador=consola",
-    "test": "node test/simulacion.js"
+    "test": "node test/simulacion.js && node test/escenarios.js && node test/limites.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.19",

@@ -1,81 +1,113 @@
 # bot-turnos
 
-Bot de WhatsApp para gestión de turnos, pensado para independientes y negocios chicos (barberías, uñas, estética, masajes). Corre local en un celu Android reacondicionado con Termux — sin VPS, sin dependencias pagas.
+Bot de WhatsApp para gestión de turnos: independientes y negocios chicos (barberías, uñas, estética, masajes). Corre local en un celu Android reacondicionado con Termux — sin VPS, sin servicios pagos.
 
-## Arquitectura
+## Arrancar (3 comandos)
 
-La lógica de negocio (`src/core/`) está totalmente desacoplada de WhatsApp. El núcleo recibe mensajes planos `{ de, texto, rutaImagen, productoId }` y devuelve salientes `{ para, texto, imagenRuta }`. Los adaptadores (`src/adaptadores/`) traducen desde/hacia la librería de turno:
+```bash
+git clone <este-repo> bot-turnos
+cd bot-turnos && npm install
+npm run baileys
+```
 
-| Adaptador | Uso | Estado |
-|---|---|---|
-| `whatsappweb` | Demo en PC (usa Chromium) | ✅ funcional |
-| `consola` | Probar el flujo sin WhatsApp | ✅ funcional |
-| `baileys` | Producción en el celu (sin Chromium) | 🔜 fase 2 |
+Escaneás el QR (o usás código, ver abajo) y ya está funcionando. `config.json` viene en el repo con una configuración lista; para un cliente nuevo lo editás y listo.
+
+> ⚠️ El repo incluye `config.json` con el número de la dueña: **mantenelo privado**.
+
+### Comandos
+
+| Comando | Para qué |
+|---|---|
+| `npm run baileys` | Producción y pruebas reales (sin Chromium, anda en el celu) |
+| `npm run consola` | Probar el flujo entero sin WhatsApp |
+| `npm run demo` | whatsapp-web.js (alternativa en PC, usa Chromium) |
+| `npm test` | Las 3 suites de tests (119 chequeos) |
+
+En modo consola: `/soy <numero>` cambia de remitente (usá el `numero_duena` del config para probar los comandos `!`), `/foto <texto>` simula un comprobante, `/producto <id>` simula el catálogo.
+
+## Configuración
+
+Todo se maneja desde `config.json`. Al arrancar se valida y, si algo está mal, el bot lo dice en castellano y no arranca (número sin `549`, seña mayor al precio, horario invertido, día faltante, etc.).
+
+Lo que se toca por cliente: `negocio`, `numero_duena` (recibe avisos y comandos), `numero_soporte` (tuyo, recibe el latido diario), `numero_actual` (el chip del bot), `horarios`, `servicios` (duración, precio, seña) y `senas` (alias y titular de MP).
+
+## Cómo está armado
+
+La lógica de negocio (`src/core/`) no importa nada de WhatsApp: recibe `{ de, texto, rutaImagen, productoId }` y devuelve `{ para, texto, imagenRuta }`. Los adaptadores traducen.
 
 ```
 src/
 ├── index.js            arranque: config + DB + adaptador + cron + panel
-├── core/               núcleo (NO importa nada de WhatsApp)
+├── config.js           carga y valida config.json
+├── core/               núcleo (sin dependencias de WhatsApp)
 │   ├── motor.js        puerta de entrada: rutea dueña / clienta
 │   ├── maquina.js      máquina de estados de la conversación
+│   ├── nlu.js          intenciones + typos + fechas/horas en texto libre
 │   ├── agenda.js       slots libres, sin solapamientos
 │   ├── duena.js        !hoy !semana !turno !ok !no !anular !precio
-│   ├── recordatorios.js  24 hs antes + catch-up al reiniciar + señas vencidas
-│   ├── notificaciones.js mensajes hacia la dueña
-│   ├── ocr.js          tesseract nativo (Termux) con fallback a caption
+│   ├── recordatorios.js 24 hs antes, catch-up al reiniciar, señas vencidas
+│   ├── ocr.js          tesseract nativo (spa → eng → caption)
 │   └── flujos/         faq.js, senas.js
-├── adaptadores/        whatsappweb / consola / baileys
+├── adaptadores/        baileys (producción) / consola / whatsappweb
 ├── db/                 esquema.sql + consultas (better-sqlite3)
 ├── panel/              Express en localhost: estado, uptime, reiniciar
-└── salud/              conectividad, batería (Termux:API), latido diario
+└── salud/              conectividad, batería, latido diario
 ```
 
-## Máquina de estados (clienta)
+### Máquina de estados
 
 ```
-inicio ──1──► eligiendo_servicio ──► eligiendo_dia ──► eligiendo_hora
-  │                                                        │
-  ├─ FAQ (precios/ubicación/horarios) responde y queda     ├─ sin nombre → pidiendo_nombre
-  ├─ "cancelar" → cancelando                               ▼
-  ├─ "confirmo" → marca respuesta del recordatorio     confirmando
-  └─ 2 "no entendí" seguidos → derivación a humano    ┌────┴────────┐
-     (bot calla 12 hs, dueña atiende a mano)     con seña        sin seña
-                                            esperando_comprobante  confirmado
-                                             │ foto → OCR → verificado / a_revisar
-                                             └ 2 hs sin foto → vencido (libera slot)
+inicio ──► eligiendo_servicio ──► eligiendo_dia ──► eligiendo_hora
+  │                                                      │
+  ├─ FAQ (precios/ubicación/horarios), tolera typos      ├─ sin nombre → pidiendo_nombre
+  ├─ "no voy a poder ir" → cancelando                    ▼
+  ├─ "confirmo" → responde el recordatorio           confirmando
+  └─ 2 mensajes sin entender → deriva a humano      ┌────┴────────┐
+     (calla 12 hs, la dueña atiende a mano)    con seña        sin seña
+                                          esperando_comprobante  confirmado
+                                           │ foto → OCR → verificado / a_revisar
+                                           └ 2 hs sin foto → vencido (libera el slot)
 ```
 
-El estado vive en la DB (`clientas.estado_conv` + `datos_conv` JSON): sobrevive reinicios.
+El estado vive en la DB, así que sobrevive reinicios. El lenguaje natural es diccionario puro (sin IA): "hola quería reservar kapping para mañana a las 11" salta directo a pedir el nombre.
 
-## Correr la demo
+## Instalación en el celu (Termux)
 
-```bash
-npm install
-npm run consola     # probar el flujo completo sin WhatsApp
-npm run demo        # con WhatsApp real (whatsapp-web.js, escanear QR)
-```
+1. Chip en el celu, instalar **WhatsApp Business** y registrar el número (ahí también cargás el catálogo).
+2. Desde f-droid.org: **Termux**, **Termux:Boot** y **Termux:API** (no las de Play Store). Abrir Termux:Boot una vez.
+3. En Termux:
+   ```bash
+   pkg install -y git
+   git clone <este-repo> ~/bot-turnos
+   cd ~/bot-turnos && bash setup.sh
+   ```
+4. Editar `config.json` con los datos del cliente (`nano config.json`).
+5. Vincular WhatsApp — el QR no sirve en el mismo celu, se usa código:
+   ```bash
+   node src/index.js --adaptador=baileys --pareo
+   ```
+   El código de 8 caracteres va en WhatsApp > Dispositivos vinculados > Vincular con el número de teléfono. Cuando diga "WhatsApp conectado": `Ctrl+C` y `pm2 start ecosystem.config.js && pm2 save`.
+6. Android > Apps > Termux > Batería > **Sin restricciones** (ídem Termux:Boot). Reiniciar el celu y verificar con `pm2 logs bot-turnos`.
 
-En modo consola: `/soy <numero>` para cambiar de remitente (el número de `numero_duena` en config.json habilita los comandos `!`), `/foto <texto>` simula un comprobante (el texto hace de OCR), `/producto <id>` simula tocar un ítem del catálogo.
+**Migración de número:** borrar `data/sesion-baileys/`, reiniciar, vincular el chip nuevo, avisar a las clientas desde la DB.
 
-## Configurar un cliente nuevo
+## Señas
 
-1. Copiar `config.example.json` → `config.json` y completar: nombre, dirección, horarios, servicios (precio, duración, seña), `numero_duena`, alias y titular de MP.
-2. En el celu: `bash setup.sh <url-repo>` (ver comentarios del script).
-3. Escanear QR, listo.
+1. Turno queda `pendiente_sena`; la clienta recibe alias, monto y plazo.
+2. Manda la foto → OCR (Tesseract nativo, español) → regex saca monto, destinatario, nº de operación y fecha.
+3. Todo cierra → `verificado`, turno confirmado, la dueña recibe la foto con los datos.
+4. Algo no cierra (monto corto, destinatario ajeno, operación repetida — `UNIQUE` en la DB) → `a_revisar`; la dueña resuelve con `!ok N` / `!no N`.
+5. Sin comprobante en 2 hs → `vencido`, el horario se libera y avisa a las dos.
 
-**Migración de número:** borrar `data/sesion*`, reiniciar, escanear QR con el chip nuevo, y avisar a las clientas desde la DB (`clientas.telefono`).
+Nunca se pierde una seña: lo que el OCR no entiende va a revisión manual, no se descarta.
 
-## Señas (flujo)
+## Tests
 
-1. Turno queda `pendiente_sena`; clienta recibe alias + monto + plazo de 2 hs.
-2. Manda foto → OCR (binario `tesseract` en Termux; en PC usa el caption como fallback) → regex extrae monto / destinatario / nº operación / fecha.
-3. Todo cierra → `verificado`, turno confirmado, dueña recibe foto + datos.
-4. Algo no cierra (monto corto, destinatario raro, operación duplicada — UNIQUE en DB) → `a_revisar`, la dueña resuelve con `!ok N` / `!no N`.
-5. 2 hs sin comprobante → `vencido`, slot liberado, avisa a ambas.
+`npm test` corre tres suites (119 chequeos): flujo completo, escenarios hostiles (señas falsas, carreras por el mismo horario, comandos mal usados, fuzzing) y límites (bordes de agenda, persistencia, configuración cambiada a mitad de flujo).
 
-## Notas de producción (fase 2)
+## Operación
 
-- Migrar a Baileys (`src/adaptadores/baileys.js` tiene las notas).
-- `pm2 startup` no existe en Termux: se usa Termux:Boot + `pm2 resurrect` (lo deja armado `setup.sh`).
-- Backup diario: `scripts/backup.sh` (necesita `rclone config` una vez).
-- Panel: `http://localhost:3010` en el celu; remoto vía Tailscale + SSH.
+- Panel: `http://localhost:3010` en el celu (estado, uptime, últimos eventos, reiniciar).
+- Soporte remoto: Tailscale + SSH.
+- Backup: `scripts/backup.sh` (requiere `rclone config` una vez).
+- Latido diario al `numero_soporte`: solo salud del sistema, nunca datos de clientas.

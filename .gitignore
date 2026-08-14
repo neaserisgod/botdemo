@@ -1,4 +1,7 @@
 node_modules/
 data/
 *.log
-config.json
+
+# config.json SÍ va al repo: así clonás y arranca configurado.
+# Ojo: tiene el número de la dueña. Mantené el repo PRIVADO.
+# Para un cliente nuevo, editás config.json y listo.
