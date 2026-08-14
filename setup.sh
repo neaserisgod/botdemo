@@ -106,11 +106,25 @@ echo "== [6/7] Termux:Boot (arranque automático al prender el celu) =="
 mkdir -p ~/.termux/boot
 cat > ~/.termux/boot/arrancar-bot.sh <<'EOF'
 #!/data/data/com.termux/files/usr/bin/bash
-# Se ejecuta al bootear el celu: wake-lock + PM2 con el bot
+# Se ejecuta al prender el celu. Termux:Boot arranca con un entorno mínimo,
+# así que fijamos PATH y HOME a mano.
+export PREFIX=/data/data/com.termux/files/usr
+export HOME=/data/data/com.termux/files/home
+export PATH="$PREFIX/bin:$PATH"
+export PM2_HOME="$HOME/.pm2"
+
+# Que no lo suspenda Android con la pantalla apagada
 termux-wake-lock
-sshd
-export PM2_HOME=$HOME/.pm2
-pm2 resurrect
+
+# SSH para soporte remoto (por Tailscale)
+sshd 2>/dev/null
+
+# Esperamos a que Android levante la red (si no, Baileys arranca a ciegas;
+# igual reintenta solo, pero así evitamos ruido en los logs)
+sleep 20
+
+pm2 resurrect >> "$HOME/boot-bot.log" 2>&1
+echo "$(date '+%Y-%m-%d %H:%M') boot ok" >> "$HOME/boot-bot.log"
 EOF
 chmod +x ~/.termux/boot/arrancar-bot.sh
 
