@@ -1,0 +1,27 @@
+{
+  "name": "bot-turnos",
+  "version": "0.1.0",
+  "description": "Bot de WhatsApp para gestión de turnos — producto comercial para independientes y negocios chicos",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "demo": "node src/index.js --adaptador=whatsappweb",
+    "baileys": "node src/index.js --adaptador=baileys",
+    "consola": "node src/index.js --adaptador=consola",
+    "test": "node test/simulacion.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.19",
+    "better-sqlite3": "^12.11.1",
+    "express": "^4.19.2",
+    "node-cron": "^3.0.3",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.26.0"
+  },
+  "comentario": "whatsapp-web.js es solo para la demo en PC. En el celu (fase 2) se reemplaza por @whiskeysockets/baileys y se desinstala esta dependencia. El núcleo (src/core) no importa ninguna de las dos."
+}
