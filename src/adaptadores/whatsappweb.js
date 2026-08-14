@@ -54,13 +54,19 @@ function crearAdaptador(config, hooks) {
     }
   });
 
+  const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
   async function enviarTodos(salientes) {
     for (const s of salientes || []) {
       try {
+        if (s.demora) await dormir(s.demora); // envíos masivos espaciados
         const jid = `${s.para}@c.us`;
         if (s.imagenRuta && fs.existsSync(s.imagenRuta)) {
           const media = MessageMedia.fromFilePath(s.imagenRuta);
           await client.sendMessage(jid, media, { caption: s.texto });
+        } else if (s.adjunto && fs.existsSync(s.adjunto.ruta)) {
+          const media = MessageMedia.fromFilePath(s.adjunto.ruta);
+          await client.sendMessage(jid, media, { caption: s.texto, sendMediaAsDocument: true });
         } else {
           await client.sendMessage(jid, s.texto);
         }

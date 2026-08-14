@@ -1,6 +1,27 @@
 // Mensajes hacia la dueña. Cada función devuelve un mensaje saliente
 // { para, texto, imagenRuta? } listo para que el adaptador lo mande.
 const fechas = require('./fechas');
+const calendario = require('./calendario');
+
+// Invitación .ics para que la dueña se agregue el turno al calendario del celu.
+// Devuelve [] si está desactivado o si algo falla: nunca frena una confirmación.
+function invitacionCalendario(config, turno, opciones) {
+  if (config.calendario && config.calendario.habilitado === false) return [];
+  try {
+    const adjunto = calendario.archivoDeTurno(config, turno, opciones);
+    return [{
+      para: config.numero_duena,
+      adjunto,
+      texto: opciones?.cancelado
+        ? `🗓️ Cancelación del turno #${turno.id} para tu calendario.`
+        : `🗓️ Tocá el archivo para agregarlo a tu calendario.`,
+      demora: 1500, // que llegue después del aviso del turno
+    }];
+  } catch (e) {
+    console.error('No pude generar el .ics:', e.message);
+    return [];
+  }
+}
 
 function linea(t) {
   const quien = t.clienta_nombre || t.telefono;
@@ -79,4 +100,5 @@ function resumenSemanal(config, turnosSemana) {
 module.exports = {
   turnoSenado, senaARevisar, senaVencida, turnoConfirmado,
   cancelacion, derivacion, agendaDiaria, resumenSemanal, linea,
+  invitacionCalendario,
 };

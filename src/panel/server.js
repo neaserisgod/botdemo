@@ -7,6 +7,7 @@ const { execFile } = require('child_process');
 const qEventos = require('../db/consultas/eventos');
 const qTurnos = require('../db/consultas/turnos');
 const fechas = require('../core/fechas');
+const calendario = require('../core/calendario');
 
 function iniciarPanel(config, obtenerEstado) {
   const app = express();
@@ -50,12 +51,25 @@ ${eventos.map((ev) => `<tr><td>${ev.creado_en}</td><td>${ev.tipo}</td><td>${ev.d
       <a href="/">← volver</a>`);
   });
 
+  // Calendario suscribible: si la dueña está en la misma WiFi, puede agregar
+  // http://<ip-del-celu>:PUERTO/calendario.ics a su app de calendario y ve
+  // todos los turnos sin tocar nada.
+  app.get('/calendario.ics', (_req, res) => {
+    const desde = fechas.aTexto(new Date(Date.now() - 7 * 86400000));
+    const hasta = fechas.aTexto(new Date(Date.now() + 60 * 86400000));
+    res.type('text/calendar').send(
+      calendario.textoDeTurnos(config, qTurnos.entreFechas(desde, hasta))
+    );
+  });
+
   app.get('/salud', (_req, res) => {
     res.json({ conectado: obtenerEstado().conectado, uptime_seg: Math.floor(process.uptime()) });
   });
 
-  // Solo localhost: nada de exponer esto a la red.
-  app.listen(config.panel.puerto, '127.0.0.1', () => {
+  // Por defecto solo localhost. Si querés que la dueña se suscriba al
+  // calendario desde su celu (misma WiFi), poné panel.escuchar_en_red: true.
+  const host = config.panel.escuchar_en_red ? '0.0.0.0' : '127.0.0.1';
+  app.listen(config.panel.puerto, host, () => {
     console.log(`Panel: http://localhost:${config.panel.puerto}`);
   });
 }

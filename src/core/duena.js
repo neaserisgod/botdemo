@@ -3,6 +3,7 @@
 const qTurnos = require('../db/consultas/turnos');
 const qSenas = require('../db/consultas/senas');
 const qServicios = require('../db/consultas/servicios');
+const qClientas = require('../db/consultas/clientas');
 const fechas = require('./fechas');
 const notif = require('./notificaciones');
 const nluDuena = require('./nlu-duena');
@@ -10,8 +11,20 @@ const nluDuena = require('./nlu-duena');
 // Acción destructiva esperando un "sí". En memoria a propósito: si el bot se
 // reinicia, la confirmación se pierde y la dueña la repite (más seguro que
 // ejecutar algo viejo que quedó colgado).
-let pendiente = null; // { accion, id, vence }
+let pendiente = null; // { accion, id, datos, vence }
 const MINUTOS_CONFIRMACION = 5;
+
+// Segundos entre cada mensaje de un aviso masivo. WhatsApp bloquea cuentas que
+// mandan ráfagas: 6 s es lento pero seguro (100 clientas = 10 minutos).
+const SEGUNDOS_ENTRE_AVISOS = 6;
+
+// A quiénes les llega un aviso: todas las clientas registradas, nunca la dueña
+// ni el número de soporte.
+function clientasParaAviso(config) {
+  return qClientas.todas().filter(
+    (c) => c.telefono !== config.numero_duena && c.telefono !== config.numero_soporte
+  );
+}
 
 function procesar(config, msj) {
   const texto = (msj.texto || '').trim();
@@ -22,7 +35,7 @@ function procesar(config, msj) {
     if (nluDuena.esSi(texto)) {
       const accion = pendiente;
       pendiente = null;
-      return ejecutar(config, accion.accion, accion.id, null);
+      return ejecutar(config, accion.accion, accion.id, accion.datos);
     }
     if (nluDuena.esNo(texto)) {
       pendiente = null;
@@ -35,6 +48,25 @@ function procesar(config, msj) {
   const r = nluDuena.interpretar(texto, qServicios.activos());
 
   if (!r.accion) return responder(ayuda());
+
+  // El aviso masivo SIEMPRE se confirma (aunque venga con !): le llega a
+  // todas las clientas y no hay forma de despublicarlo.
+  if (r.accion === 'aviso') {
+    const destinatarias = clientasParaAviso(config);
+    if (!destinatarias.length) {
+      return responder('Todavía no tengo ninguna clienta registrada para avisarle.');
+    }
+    pendiente = {
+      accion: 'aviso', vence: Date.now() + MINUTOS_CONFIRMACION * 60000,
+      datos: { mensaje: r.mensaje },
+    };
+    const minutos = Math.ceil((destinatarias.length * SEGUNDOS_ENTRE_AVISOS) / 60);
+    return responder(
+      `📣 Le voy a mandar esto a *${destinatarias.length} clienta${destinatarias.length > 1 ? 's' : ''}*:\n\n` +
+      `━━━━━━━━━━\n${r.mensaje}\n━━━━━━━━━━\n\n` +
+      `Los mando de a poco para que WhatsApp no lo tome como spam, así que va a tardar unos ${minutos} min.\n\n` +
+      `¿Lo mando? Respondé *sí* o *no*.`);
+  }
 
   // Las acciones que borran cosas, si vinieron en lenguaje natural, se confirman
   if (r.natural && nluDuena.DESTRUCTIVAS.includes(r.accion)) {
@@ -92,6 +124,7 @@ function ejecutar(config, accion, id, r) {
         return [
           { para: config.numero_duena, texto: `👍 Seña del turno #${turno.id} aprobada. Le aviso a la clienta.` },
           { para: turno.telefono, texto: `¡Seña verificada! ✅ Tu turno del ${fechas.diaLindo(turno.inicio.slice(0, 10))} a las ${turno.inicio.slice(11)} quedó confirmado. ¡Te esperamos!` },
+          ...notif.invitacionCalendario(config, qTurnos.porId(turno.id)),
         ];
       }
       qSenas.cambiarEstado(sena.id, 'rechazada', 'duena');
@@ -133,6 +166,24 @@ function ejecutar(config, accion, id, r) {
       return responder(`Listo: *${s.nombre}* ahora sale $${monto}.\n(Acordate de actualizar el catálogo de WhatsApp a mano 😉)`);
     }
 
+    case 'aviso': {
+      const destinatarias = clientasParaAviso(config);
+      const cuerpo = `📣 *${config.negocio.nombre}*\n\n${r.mensaje}`;
+      // Cada mensaje lleva su demora: el adaptador espera antes de mandarlo.
+      const salientes = destinatarias.map((c, i) => ({
+        para: c.telefono,
+        texto: cuerpo,
+        demora: i === 0 ? 0 : SEGUNDOS_ENTRE_AVISOS * 1000,
+      }));
+      const minutos = Math.ceil((destinatarias.length * SEGUNDOS_ENTRE_AVISOS) / 60);
+      return [
+        { para: config.numero_duena,
+          texto: `📣 Mandando el aviso a ${destinatarias.length} clientas. Tarda unos ${minutos} min; te aviso cuando termine.` },
+        ...salientes,
+        { para: config.numero_duena, texto: `✅ Aviso enviado a ${destinatarias.length} clientas.`, demora: 1000 },
+      ];
+    }
+
     case 'ayuda': default:
       return responder(ayuda());
   }
@@ -147,7 +198,8 @@ function ayuda() {
     `❌ *"rechazá la 5"* — rechazar una seña\n` +
     `🗑️ *"anulá el turno 3"* — cancelar un turno\n` +
     `💰 *"precios"* — ver la lista\n` +
-    `✏️ *"el kapping ahora sale 30000"* — cambiar un precio\n\n` +
+    `✏️ *"el kapping ahora sale 30000"* — cambiar un precio\n` +
+    `📣 *"aviso mañana no abrimos por el feriado"* — mensaje a TODAS las clientas\n\n` +
     `También andan los atajos: !hoy !semana !turno N !ok N !no N !anular N !precio`;
 }
 

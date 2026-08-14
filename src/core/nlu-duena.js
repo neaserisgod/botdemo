@@ -5,7 +5,7 @@ const nlu = require('./nlu');
 
 // Acciones destructivas: si vienen en lenguaje natural pedimos confirmación,
 // porque un "anulá el 3" mal interpretado le cancela un turno a una clienta.
-const DESTRUCTIVAS = ['anular', 'rechazar'];
+const DESTRUCTIVAS = ['anular', 'rechazar', 'aviso'];
 
 const CLAVES = {
   // El orden de este objeto define la prioridad al interpretar.
@@ -49,6 +49,14 @@ function esNo(texto) {
 //            las acciones destructivas.
 function interpretar(texto, servicios) {
   const crudo = (texto || '').trim();
+
+  // Aviso masivo: "aviso <mensaje>" / "avisale a todas que <mensaje>".
+  // Se busca primero porque el mensaje puede contener cualquier palabra
+  // ("aviso que mañana no atiendo" no tiene que interpretarse como bloqueo).
+  const av = crudo.match(/^!?(?:aviso|avisar|avisale(?: a todas)?|comunicado)\b[:,]?\s*(?:a todas\s*)?(?:que\s+)?([\s\S]+)/i);
+  if (av && av[1].trim().length >= 3) {
+    return { accion: 'aviso', mensaje: av[1].trim(), natural: !crudo.startsWith('!') };
+  }
 
   // 1) Comandos clásicos con ! — explícitos, sin confirmación
   if (crudo.startsWith('!')) return interpretarComando(crudo);

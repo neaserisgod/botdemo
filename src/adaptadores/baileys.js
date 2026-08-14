@@ -158,12 +158,25 @@ function crearAdaptador(config, hooks) {
     await enviarTodos(salientes);
   }
 
+  const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
   async function enviarTodos(salientes) {
     for (const s of salientes || []) {
       try {
+        // demora: los envíos masivos van espaciados para no disparar el
+        // antispam de WhatsApp (mandar 100 mensajes de golpe es bloqueo seguro)
+        if (s.demora) await dormir(s.demora);
+
         const jid = jidDe(s.para);
         if (s.imagenRuta && fs.existsSync(s.imagenRuta)) {
           await sock.sendMessage(jid, { image: fs.readFileSync(s.imagenRuta), caption: s.texto });
+        } else if (s.adjunto && fs.existsSync(s.adjunto.ruta)) {
+          await sock.sendMessage(jid, {
+            document: fs.readFileSync(s.adjunto.ruta),
+            mimetype: s.adjunto.mime || 'application/octet-stream',
+            fileName: s.adjunto.nombre || 'archivo',
+            caption: s.texto,
+          });
         } else {
           await sock.sendMessage(jid, { text: s.texto });
         }

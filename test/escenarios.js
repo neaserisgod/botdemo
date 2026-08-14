@@ -18,6 +18,7 @@ const salud = require('../src/salud');
 const qTurnos = require('../src/db/consultas/turnos');
 const qSenas = require('../src/db/consultas/senas');
 const agenda = require('../src/core/agenda');
+const fechas = require('../src/core/fechas');
 const qServicios = require('../src/db/consultas/servicios');
 
 const motor = crearMotor(config);
@@ -171,6 +172,61 @@ r = decir(DUENA, 'anulá un turno');
 chequear('sin número, pregunta cuál', txt(r, DUENA).includes('Decime el número'));
 r = decir(DUENA, 'ayuda');
 chequear('ayuda lista ejemplos hablados', txt(r, DUENA).includes('qué tengo hoy'));
+
+console.log('— E3. Aviso masivo a clientas —');
+const cuantas = db.obtener().prepare(
+  'SELECT COUNT(*) n FROM clientas WHERE telefono NOT IN (?, ?)'
+).get(DUENA, config.numero_soporte).n;
+r = decir(DUENA, 'aviso el viernes cerramos a las 15');
+chequear('pide confirmación y dice a cuántas va', txt(r, DUENA).includes('¿Lo mando?')
+  && txt(r, DUENA).includes(`${cuantas} clienta`));
+chequear('todavía no le mandó nada a nadie', r.every((s) => s.para === DUENA));
+r = decir(DUENA, 'no');
+chequear('"no" cancela el aviso', txt(r, DUENA).includes('no hice nada'));
+
+decir(DUENA, 'aviso promo de la semana: 20% off');
+r = decir(DUENA, 'dale');
+const aClientas = r.filter((s) => s.para !== DUENA);
+chequear('manda a todas las clientas', aClientas.length === cuantas);
+chequear('el mensaje lleva el nombre del negocio', aClientas[0].texto.includes(config.negocio.nombre));
+chequear('y el texto que escribió', aClientas[0].texto.includes('20% off'));
+chequear('van espaciados (anti-spam de WhatsApp)',
+  aClientas.slice(1).every((s) => s.demora >= 5000));
+chequear('la dueña recibe aviso de inicio y de fin',
+  r[0].para === DUENA && r[r.length - 1].texto.includes('Aviso enviado'));
+chequear('el aviso NO le llega a la dueña ni a soporte',
+  !aClientas.some((s) => s.para === DUENA || s.para === config.numero_soporte));
+r = decir(DUENA, 'aviso');
+chequear('"aviso" sin texto no dispara nada', !txt(r, DUENA).includes('¿Lo mando?'));
+
+console.log('— E4. Turnos al calendario (.ics) —');
+const cal = require('../src/core/calendario');
+const CC = '5492944000120';
+decir(CC, 'hola'); decir(CC, '1'); decir(CC, '4');
+decir(CC, '1'); decir(CC, '1'); decir(CC, 'Lu');
+r = decir(CC, '1'); // confirma turno sin seña
+const conIcs = r.find((s) => s.adjunto);
+chequear('al confirmar, la dueña recibe el .ics', !!conIcs && conIcs.para === DUENA);
+chequear('el adjunto es un .ics', conIcs.adjunto.nombre.endsWith('.ics')
+  && conIcs.adjunto.mime === 'text/calendar');
+const idCal = db.obtener().prepare(
+  "SELECT t.id FROM turnos t JOIN clientas c ON c.id=t.clienta_id WHERE c.telefono=? ORDER BY t.id DESC LIMIT 1"
+).get(CC).id;
+const ics = fs.readFileSync(conIcs.adjunto.ruta, 'utf8');
+chequear('el .ics tiene el evento con el turno', ics.includes(`UID:turno-${idCal}@bot-turnos`)
+  && ics.includes('BEGIN:VEVENT') && ics.includes('END:VCALENDAR'));
+chequear('incluye clienta, servicio y dirección', ics.includes('Lu')
+  && ics.includes('Retiro de esmaltado') && ics.includes('Mitre 150'));
+chequear('tiene alarma 30 min antes', ics.includes('TRIGGER:-PT30M'));
+const turnoCal = qTurnos.porId(idCal);
+chequear('la hora del evento coincide con el turno',
+  ics.includes(`DTSTART:${turnoCal.inicio.replace(/[-:]/g, '').replace(' ', 'T')}00`));
+chequear('calendario completo se genera para el panel',
+  cal.textoDeTurnos(config, qTurnos.delDia(fechas.hoyYmd())).includes('BEGIN:VCALENDAR'));
+const sinCal = JSON.parse(JSON.stringify(config));
+sinCal.calendario = { habilitado: false };
+chequear('se puede desactivar por config',
+  require('../src/core/notificaciones').invitacionCalendario(sinCal, turnoCal).length === 0);
 
 console.log('— F. FAQ y saludos con typos —');
 const C = '5492944000108';

@@ -59,7 +59,12 @@
   },
 
   "panel": {
-    "puerto": 3010
+    "puerto": 3010,
+    "escuchar_en_red": false
+  },
+
+  "calendario": {
+    "habilitado": true
   },
 
   "latido": {

@@ -63,7 +63,7 @@ Un **adaptador** traduce entre eso y la librería de turno. Hay tres:
 
 Se elige al arrancar: `node src/index.js --adaptador=baileys`.
 
-Esto es lo que permitió, entre otras cosas, migrar de whatsapp-web.js a Baileys sin tocar una línea de lógica de negocio, y tener 132 tests que corren sin WhatsApp.
+Esto es lo que permitió, entre otras cosas, migrar de whatsapp-web.js a Baileys sin tocar una línea de lógica de negocio, y tener 150 tests que corren sin WhatsApp.
 
 ---
 
@@ -156,6 +156,24 @@ La dueña no tiene que aprender comandos: le escribe al bot como le sale.
 Los atajos con `!` (`!hoy`, `!ok 5`, `!anular 3`) siguen funcionando para quien los prefiera.
 
 **Las acciones que borran algo se confirman.** Si la dueña dice "anulá el turno 3" o "rechazá la 5" en lenguaje natural, el bot repite en voz alta qué va a hacer (con día, hora, servicio y clienta) y espera un "sí". Con el comando `!anular 3` se ejecuta directo, porque escribirlo así es inequívoco. La confirmación pendiente vive en memoria y vence a los 5 minutos: si el bot se reinicia en el medio, se pierde y hay que repetirla — preferible a ejecutar algo viejo que quedó colgado.
+
+#### Aviso masivo a todas las clientas
+
+`aviso <mensaje>` (o *"avisale a todas que..."*) le manda un mensaje a todas las clientas de la base. Tres recaudos, porque es la función más peligrosa del bot:
+
+- **Siempre pide confirmación**, incluso con `!aviso`: muestra el texto tal cual va a salir y a cuántas personas le llega. No hay forma de despublicarlo una vez enviado.
+- **Los envíos van espaciados 6 segundos.** Mandar cien mensajes de golpe es la forma más rápida de que WhatsApp bloquee la cuenta. Cien clientas son diez minutos de envío; el bot avisa cuánto va a tardar y avisa cuando termina.
+- La dueña y el número de soporte quedan siempre excluidos.
+
+El espaciado se implementa con un campo `demora` en el mensaje saliente: el núcleo solo lo declara, y el adaptador es el que espera antes de mandar.
+
+#### Turnos al calendario del celular (`core/calendario.js`)
+
+Cuando un turno queda confirmado, la dueña recibe un archivo `.ics` adjunto: lo toca y Android o iOS le ofrecen agregarlo al calendario, con alarma 30 minutos antes. El evento incluye clienta, teléfono, servicio, precio y la dirección del negocio.
+
+Se eligió `.ics` sobre la API de Google Calendar porque no necesita credenciales, ni OAuth, ni cuenta de Google, ni internet. Es un archivo de texto que todos los calendarios entienden desde hace veinte años.
+
+Además, el panel expone `/calendario.ics` con los turnos de los últimos 7 y próximos 60 días. Si se activa `panel.escuchar_en_red`, la dueña puede suscribir su app de calendario a `http://<ip-del-celu>:3010/calendario.ics` estando en la misma WiFi, y ve todo sin tocar nada.
 
 ## 6. Las señas (`core/flujos/senas.js` + `core/ocr.js`)
 
@@ -258,7 +276,7 @@ Al arrancar, `src/config.js` lo valida y, si algo está mal, **no arranca** y ex
 
 ## 12. Tests
 
-Tres suites, 132 chequeos, corren sin WhatsApp con `npm test`:
+Tres suites, 150 chequeos, corren sin WhatsApp con `npm test`:
 
 - **`simulacion.js`** — el flujo completo: reservar, señar, recordar, cancelar, comandos, FAQ, catálogo, lenguaje natural.
 - **`escenarios.js`** — lo que sale mal: comprobantes con monto corto, destinatario ajeno o duplicados; carreras por el mismo horario; comandos mal usados; 40 clientas reservando en cadena; fuzzing con inyección SQL, textos de 5.000 caracteres y bytes nulos.

@@ -21,7 +21,7 @@ Escaneás el QR (o usás código, ver abajo) y ya está funcionando. `config.jso
 | `npm run baileys` | Producción y pruebas reales (sin Chromium, anda en el celu) |
 | `npm run consola` | Probar el flujo entero sin WhatsApp |
 | `npm run demo` | whatsapp-web.js (alternativa en PC, usa Chromium) |
-| `npm test` | Las 3 suites de tests (132 chequeos) |
+| `npm test` | Las 3 suites de tests (150 chequeos) |
 
 En modo consola: `/soy <numero>` cambia de remitente (usá el `numero_duena` del config para probar los comandos `!`), `/foto <texto>` simula un comprobante, `/producto <id>` simula el catálogo.
 
@@ -50,6 +50,7 @@ src/
 │   ├── nlu-duena.js    interpreta "anulá el 3", "qué tengo hoy", etc.
 │   ├── recordatorios.js 24 hs antes, catch-up al reiniciar, señas vencidas
 │   ├── ocr.js          tesseract nativo (spa → eng → caption)
+│   ├── calendario.js   genera los .ics para el calendario de la dueña
 │   └── flujos/         faq.js, senas.js
 ├── adaptadores/        baileys (producción) / consola / whatsappweb
 ├── db/                 esquema.sql + consultas (better-sqlite3)
@@ -102,7 +103,7 @@ Nunca se pierde una seña: lo que el OCR no entiende va a revisión manual, no s
 
 ## Tests
 
-`npm test` corre tres suites (132 chequeos): flujo completo, escenarios hostiles (señas falsas, carreras por el mismo horario, comandos mal usados, fuzzing) y límites (bordes de agenda, persistencia, configuración cambiada a mitad de flujo).
+`npm test` corre tres suites (150 chequeos): flujo completo, escenarios hostiles (señas falsas, carreras por el mismo horario, comandos mal usados, fuzzing) y límites (bordes de agenda, persistencia, configuración cambiada a mitad de flujo).
 
 ## Operación
 

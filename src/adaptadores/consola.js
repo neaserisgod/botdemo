@@ -16,7 +16,10 @@ function crearAdaptador(config, hooks) {
     for (const s of salientes || []) {
       const quien = s.para === config.numero_duena ? 'DUEÑA'
         : s.para === config.numero_soporte ? 'SOPORTE' : s.para;
-      console.log(`\n┌─ Bot → ${quien}${s.imagenRuta ? ' [con imagen]' : ''}\n${s.texto.split('\n').map((l) => '│ ' + l).join('\n')}\n└─`);
+      const extra = s.imagenRuta ? ' [con imagen]'
+        : s.adjunto ? ` [adjunto: ${s.adjunto.nombre}]` : '';
+      const espera = s.demora ? ` (espera ${s.demora / 1000}s)` : '';
+      console.log(`\n┌─ Bot → ${quien}${extra}${espera}\n${s.texto.split('\n').map((l) => '│ ' + l).join('\n')}\n└─`);
     }
   }
 

@@ -50,6 +50,7 @@ function procesarComprobante(config, clienta, turnoId, msj) {
       texto: `¡Listo! Seña recibida ✅\nTu turno quedó confirmado:\n📅 ${fechas.diaLindo(turno.inicio.slice(0, 10))} a las ${turno.inicio.slice(11)}\n💅 ${turno.servicio}\n\nTe mandamos un recordatorio un día antes. ¡Te esperamos!`,
     });
     salientes.push(notif.turnoSenado(config, turno, datos, msj.rutaImagen));
+    salientes.push(...notif.invitacionCalendario(config, qTurnos.porId(turnoId)));
   } else {
     salientes.push({
       para: clienta.telefono,
