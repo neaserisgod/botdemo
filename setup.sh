@@ -60,9 +60,23 @@ if [ ! -f config.json ]; then
 fi
 echo ">>> Revisá config.json con los datos del cliente: nano config.json"
 
-echo "== [5/7] PM2 =="
+echo "== [5/7] Vincular WhatsApp =="
 npm install -g pm2
-pm2 start ecosystem.config.js || true
+pm2 delete bot-turnos 2>/dev/null || true  # por si quedó de un intento anterior
+
+if [ -f data/sesion-baileys/creds.json ]; then
+  echo "Ya hay una sesión vinculada, sigo."
+else
+  echo ""
+  echo "Te voy a dar un código para vincular el WhatsApp del bot."
+  echo "Cuando aparezca, andá a: WhatsApp > Dispositivos vinculados >"
+  echo "Vincular con el número de teléfono, y escribilo."
+  echo ""
+  node src/index.js --adaptador=baileys --pareo
+fi
+
+echo "== [5b] Arrancando el bot con PM2 =="
+pm2 start ecosystem.config.js
 pm2 save
 
 echo "== [6/7] Termux:Boot (arranque automático al prender el celu) =="
@@ -82,17 +96,15 @@ termux-wake-lock
 
 echo ""
 echo "============================================"
-echo " Listo. Pasos manuales que quedan:"
-echo "  1. nano config.json  (datos del cliente)"
-echo "  2. Vincular WhatsApp (el QR no sirve en el mismo celu, usar código):"
-echo "     pm2 delete bot-turnos"
-echo "     node src/index.js --adaptador=baileys --pareo"
-echo "     → meter el código en WhatsApp > Dispositivos vinculados"
-echo "     → Ctrl+C cuando diga 'WhatsApp conectado', y de nuevo:"
-echo "     pm2 start ecosystem.config.js && pm2 save"
-echo "  3. pm2 logs bot-turnos  → verificar que conecta"
-echo "  4. Desactivar optimización de batería para Termux"
-echo "     (Ajustes > Apps > Termux > Batería > Sin restricciones)"
-echo "  5. Instalar Tailscale y loguear el celu (soporte remoto)"
-echo "  6. Configurar backup diario del .db (scripts/backup.sh + cron)"
+echo " ✅ El bot ya está corriendo."
+echo ""
+echo " Verificá con:   pm2 logs bot-turnos"
+echo " Panel:          http://localhost:$(node -p "require('./config.json').panel.puerto" 2>/dev/null || echo 3010)"
+echo ""
+echo " Falta hacer a mano (una vez por celu):"
+echo "  1. Ajustes > Apps > Termux > Batería > Sin restricciones"
+echo "     (ídem Termux:Boot, para que no lo mate Android)"
+echo "  2. Reiniciar el celu y ver que levante solo: pm2 logs bot-turnos"
+echo "  3. Instalar Tailscale y loguear el celu (soporte remoto)"
+echo "  4. Backup diario: rclone config + cron con scripts/backup.sh"
 echo "============================================"

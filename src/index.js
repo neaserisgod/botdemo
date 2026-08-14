@@ -30,6 +30,14 @@ const adaptador = crearAdaptador(config, {
     const primeraVez = !estado.conectado;
     estado.conectado = true;
     console.log('WhatsApp conectado.');
+
+    // Modo vinculación: ya quedó la sesión guardada, salimos para que PM2 lo
+    // levante como servicio (no tiene sentido dejar esta instancia corriendo).
+    if (process.argv.includes('--pareo')) {
+      console.log('\n✅ Vinculado. La sesión quedó guardada en data/sesion-baileys/');
+      setTimeout(() => process.exit(0), 2000); // que termine de escribir las credenciales
+      return;
+    }
     // Aviso a la dueña si venimos de una caída
     adaptador.enviar(salud.alReconectar(config));
     // Catch-up: recordatorios que quedaron pendientes mientras estaba caído

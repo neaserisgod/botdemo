@@ -81,13 +81,9 @@ El estado vive en la DB, así que sobrevive reinicios. El lenguaje natural es di
    git clone <este-repo> ~/bot-turnos
    cd ~/bot-turnos && bash setup.sh
    ```
-4. Editar `config.json` con los datos del cliente (`nano config.json`).
-5. Vincular WhatsApp — el QR no sirve en el mismo celu, se usa código:
-   ```bash
-   node src/index.js --adaptador=baileys --pareo
-   ```
-   El código de 8 caracteres va en WhatsApp > Dispositivos vinculados > Vincular con el número de teléfono. Cuando diga "WhatsApp conectado": `Ctrl+C` y `pm2 start ecosystem.config.js && pm2 save`.
-6. Android > Apps > Termux > Batería > **Sin restricciones** (ídem Termux:Boot). Reiniciar el celu y verificar con `pm2 logs bot-turnos`.
+   El script instala todo y, cuando llega a la vinculación, te muestra un **código de 8 caracteres** (el QR no sirve: WhatsApp está en el mismo celu). Lo metés en WhatsApp > Dispositivos vinculados > **Vincular con el número de teléfono**. Apenas conecta, el script arranca el bot con PM2 y queda andando.
+4. Para otro cliente: editar `config.json` (`nano config.json`) y `pm2 restart bot-turnos`.
+5. Android > Apps > Termux > Batería > **Sin restricciones** (ídem Termux:Boot). Reiniciar el celu y verificar con `pm2 logs bot-turnos`.
 
 **Migración de número:** borrar `data/sesion-baileys/`, reiniciar, vincular el chip nuevo, avisar a las clientas desde la DB.
 
