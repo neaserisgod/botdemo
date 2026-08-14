@@ -119,11 +119,58 @@ chequear('!ok inexistente avisa', txt(r, DUENA).includes('No encontré'));
 r = decir(DUENA, `!ok ${id}`); // seña de B ya resuelta (vencida)
 chequear('!ok sobre seña no pendiente avisa', txt(r, DUENA).includes('no tiene'));
 r = decir(DUENA, '!cualquiercosa');
-chequear('comando desconocido → ayuda', txt(r, DUENA).includes('Comandos disponibles'));
+chequear('comando desconocido → ayuda', txt(r, DUENA).includes('Escribime como te salga'));
 r = decir(DUENA, '!precio 1 abc');
-chequear('!precio con monto inválido avisa formato', txt(r, DUENA).includes('Formato'));
+chequear('!precio con monto inválido avisa cómo se hace', txt(r, DUENA).includes('No entendí qué precio'));
 r = decir(DUENA, '!anular 999');
 chequear('!anular inexistente avisa', txt(r, DUENA).includes('No encontré'));
+
+console.log('— E2. La dueña escribiendo en lenguaje natural —');
+// Turno nuevo para jugar con él
+const CN = '5492944000110';
+decir(CN, 'hola'); decir(CN, '1'); decir(CN, '4'); // retiro: sin seña
+decir(CN, '1'); decir(CN, '1'); decir(CN, 'Nati'); decir(CN, '1');
+const idNat = db.obtener().prepare(
+  "SELECT t.id FROM turnos t JOIN clientas c ON c.id=t.clienta_id WHERE c.telefono=? ORDER BY t.id DESC LIMIT 1"
+).get(CN).id;
+
+r = decir(DUENA, '¿qué tengo hoy?');
+chequear('"qué tengo hoy" → agenda del día', txt(r, DUENA).includes('Agenda de hoy'));
+r = decir(DUENA, 'cómo viene la semana');
+chequear('"cómo viene la semana" → resumen semanal', txt(r, DUENA).includes('Semana'));
+r = decir(DUENA, `quién es el turno ${idNat}`);
+chequear('"quién es el turno N" → detalle', txt(r, DUENA).includes('Nati'));
+r = decir(DUENA, 'el kapping ahora sale 31000');
+chequear('cambio de precio hablado', txt(r, DUENA).includes('31000'));
+r = decir(DUENA, 'precios');
+chequear('"precios" → lista', txt(r, DUENA).includes('Kapping'));
+
+// Acción destructiva: pide confirmación antes de tocar nada
+r = decir(DUENA, `anulá el turno ${idNat}`);
+chequear('anular hablado PIDE confirmación', txt(r, DUENA).includes('¿Confirmás'));
+chequear('y todavía NO anuló nada', qTurnos.porId(idNat).estado !== 'anulado');
+r = decir(DUENA, 'no');
+chequear('"no" cancela la acción', txt(r, DUENA).includes('no hice nada')
+  && qTurnos.porId(idNat).estado !== 'anulado');
+decir(DUENA, `borrá el ${idNat}`);
+r = decir(DUENA, 'dale');
+chequear('"dale" confirma y anula', qTurnos.porId(idNat).estado === 'anulado');
+chequear('le avisa a la clienta', r.some((s) => s.para === CN));
+
+// El comando con ! sigue siendo directo, sin confirmación
+const CN2 = '5492944000111';
+decir(CN2, 'hola'); decir(CN2, '1'); decir(CN2, '4');
+decir(CN2, '1'); decir(CN2, '1'); decir(CN2, 'Pili'); decir(CN2, '1');
+const idCmd = db.obtener().prepare(
+  "SELECT t.id FROM turnos t JOIN clientas c ON c.id=t.clienta_id WHERE c.telefono=? ORDER BY t.id DESC LIMIT 1"
+).get(CN2).id;
+decir(DUENA, `!anular ${idCmd}`);
+chequear('!anular ejecuta directo (sin confirmación)', qTurnos.porId(idCmd).estado === 'anulado');
+
+r = decir(DUENA, 'anulá un turno');
+chequear('sin número, pregunta cuál', txt(r, DUENA).includes('Decime el número'));
+r = decir(DUENA, 'ayuda');
+chequear('ayuda lista ejemplos hablados', txt(r, DUENA).includes('qué tengo hoy'));
 
 console.log('— F. FAQ y saludos con typos —');
 const C = '5492944000108';

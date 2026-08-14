@@ -63,7 +63,7 @@ Un **adaptador** traduce entre eso y la librería de turno. Hay tres:
 
 Se elige al arrancar: `node src/index.js --adaptador=baileys`.
 
-Esto es lo que permitió, entre otras cosas, migrar de whatsapp-web.js a Baileys sin tocar una línea de lógica de negocio, y tener 119 tests que corren sin WhatsApp.
+Esto es lo que permitió, entre otras cosas, migrar de whatsapp-web.js a Baileys sin tocar una línea de lógica de negocio, y tener 132 tests que corren sin WhatsApp.
 
 ---
 
@@ -79,7 +79,7 @@ adaptadores/baileys.js ── traduce el mensaje de Baileys a { de, texto, ... }
    │                      (si vino foto, la baja a data/comprobantes/)
    ▼
 core/motor.js ─────────── ¿quién escribe?
-   │                       • numero_duena  → duena.js (comandos !)
+   │                       • numero_duena  → duena.js (comandos y lenguaje natural)
    │                       • numero_soporte→ ignorar
    │                       • ¿derivada a humano? → silencio
    │                       • si no → clienta
@@ -137,6 +137,25 @@ Además extrae **fecha y hora** del texto libre: `"mañana"`, `"pasado mañana"`
 Un detalle que costó: hay que borrar `"de la mañana"` del texto antes de buscar el día, o *"a las 9 de la **mañana** el lunes"* agenda para mañana en vez del lunes.
 
 ---
+
+### Del lado de la dueña (`core/nlu-duena.js` + `core/duena.js`)
+
+La dueña no tiene que aprender comandos: le escribe al bot como le sale.
+
+| Ella escribe | El bot entiende |
+|---|---|
+| "qué tengo hoy", "cómo viene la agenda" | Agenda del día |
+| "cómo viene la semana" | Próximos 7 días |
+| "quién es el turno 5", "detalle del 5" | Ficha del turno |
+| "aprobá la seña del 5", "la 5 está bien" | Aprobar seña |
+| "rechazá la 5", "esa seña es trucha, la 5" | Rechazar seña |
+| "anulá el turno 3", "borrá el 3" | Anular turno |
+| "precios", "cuánto cobro" | Lista de precios |
+| "el kapping ahora sale 30000" | Cambiar precio |
+
+Los atajos con `!` (`!hoy`, `!ok 5`, `!anular 3`) siguen funcionando para quien los prefiera.
+
+**Las acciones que borran algo se confirman.** Si la dueña dice "anulá el turno 3" o "rechazá la 5" en lenguaje natural, el bot repite en voz alta qué va a hacer (con día, hora, servicio y clienta) y espera un "sí". Con el comando `!anular 3` se ejecuta directo, porque escribirlo así es inequívoco. La confirmación pendiente vive en memoria y vence a los 5 minutos: si el bot se reinicia en el medio, se pierde y hay que repetirla — preferible a ejecutar algo viejo que quedó colgado.
 
 ## 6. Las señas (`core/flujos/senas.js` + `core/ocr.js`)
 
@@ -239,7 +258,7 @@ Al arrancar, `src/config.js` lo valida y, si algo está mal, **no arranca** y ex
 
 ## 12. Tests
 
-Tres suites, 119 chequeos, corren sin WhatsApp con `npm test`:
+Tres suites, 132 chequeos, corren sin WhatsApp con `npm test`:
 
 - **`simulacion.js`** — el flujo completo: reservar, señar, recordar, cancelar, comandos, FAQ, catálogo, lenguaje natural.
 - **`escenarios.js`** — lo que sale mal: comprobantes con monto corto, destinatario ajeno o duplicados; carreras por el mismo horario; comandos mal usados; 40 clientas reservando en cadena; fuzzing con inyección SQL, textos de 5.000 caracteres y bytes nulos.

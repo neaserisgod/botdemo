@@ -21,7 +21,7 @@ Escaneás el QR (o usás código, ver abajo) y ya está funcionando. `config.jso
 | `npm run baileys` | Producción y pruebas reales (sin Chromium, anda en el celu) |
 | `npm run consola` | Probar el flujo entero sin WhatsApp |
 | `npm run demo` | whatsapp-web.js (alternativa en PC, usa Chromium) |
-| `npm test` | Las 3 suites de tests (119 chequeos) |
+| `npm test` | Las 3 suites de tests (132 chequeos) |
 
 En modo consola: `/soy <numero>` cambia de remitente (usá el `numero_duena` del config para probar los comandos `!`), `/foto <texto>` simula un comprobante, `/producto <id>` simula el catálogo.
 
@@ -46,7 +46,8 @@ src/
 │   ├── maquina.js      máquina de estados de la conversación
 │   ├── nlu.js          intenciones + typos + fechas/horas en texto libre
 │   ├── agenda.js       slots libres, sin solapamientos
-│   ├── duena.js        !hoy !semana !turno !ok !no !anular !precio
+│   ├── duena.js        comandos de la dueña (lenguaje natural + atajos !)
+│   ├── nlu-duena.js    interpreta "anulá el 3", "qué tengo hoy", etc.
 │   ├── recordatorios.js 24 hs antes, catch-up al reiniciar, señas vencidas
 │   ├── ocr.js          tesseract nativo (spa → eng → caption)
 │   └── flujos/         faq.js, senas.js
@@ -94,14 +95,14 @@ El estado vive en la DB, así que sobrevive reinicios. El lenguaje natural es di
 1. Turno queda `pendiente_sena`; la clienta recibe alias, monto y plazo.
 2. Manda la foto → OCR (Tesseract nativo, español) → regex saca monto, destinatario, nº de operación y fecha.
 3. Todo cierra → `verificado`, turno confirmado, la dueña recibe la foto con los datos.
-4. Algo no cierra (monto corto, destinatario ajeno, operación repetida — `UNIQUE` en la DB) → `a_revisar`; la dueña resuelve con `!ok N` / `!no N`.
+4. Algo no cierra (monto corto, destinatario ajeno, operación repetida — `UNIQUE` en la DB) → `a_revisar`; la dueña resuelve diciendo _"aprobá la 7"_ o _"rechazá la 7"_ (o con `!ok 7` / `!no 7`).
 5. Sin comprobante en 2 hs → `vencido`, el horario se libera y avisa a las dos.
 
 Nunca se pierde una seña: lo que el OCR no entiende va a revisión manual, no se descarta.
 
 ## Tests
 
-`npm test` corre tres suites (119 chequeos): flujo completo, escenarios hostiles (señas falsas, carreras por el mismo horario, comandos mal usados, fuzzing) y límites (bordes de agenda, persistencia, configuración cambiada a mitad de flujo).
+`npm test` corre tres suites (132 chequeos): flujo completo, escenarios hostiles (señas falsas, carreras por el mismo horario, comandos mal usados, fuzzing) y límites (bordes de agenda, persistencia, configuración cambiada a mitad de flujo).
 
 ## Operación
 
