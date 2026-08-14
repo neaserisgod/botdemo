@@ -64,9 +64,18 @@ echo "== [5/7] Vincular WhatsApp =="
 npm install -g pm2
 pm2 delete bot-turnos 2>/dev/null || true  # por si quedó de un intento anterior
 
+# Ojo: creds.json existe apenas arranca Baileys, aunque NO esté vinculado.
+# La sesión sirve solo si quedó registrada (registered + me).
+SESION_OK=1
 if [ -f data/sesion-baileys/creds.json ]; then
-  echo "Ya hay una sesión vinculada, sigo."
+  node -e "const c=require('./data/sesion-baileys/creds.json'); process.exit(c.registered && c.me ? 0 : 1)" 2>/dev/null && SESION_OK=0
+fi
+
+if [ "$SESION_OK" = "0" ]; then
+  echo "Ya hay una sesión vinculada ($(node -p "require('./data/sesion-baileys/creds.json').me.id.split(':')[0]" 2>/dev/null)), sigo."
 else
+  # Sesión a medias de un intento anterior: la limpiamos para empezar de cero
+  rm -rf data/sesion-baileys
   NUM=$(node -p "require('./config.json').numero_actual" 2>/dev/null)
   echo ""
   echo "  El código se va a pedir para el número: $NUM"
