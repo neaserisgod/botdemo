@@ -1,15 +1,16 @@
 // Conexión SQLite + siembra de servicios desde config.json.
 // La DB de la demo va en data/turnos.db (nunca toca la DB de Nefertiti).
-const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
+const { abrirBase } = require('./motor');
 
 let db = null;
 
 function abrir(rutaDb) {
   const ruta = rutaDb || path.join(__dirname, '..', '..', 'data', 'turnos.db');
   fs.mkdirSync(path.dirname(ruta), { recursive: true });
-  db = new Database(ruta);
+  db = abrirBase(ruta);
+  if (process.env.DEPURAR) console.log(`SQLite: ${db.motor}`);
   const esquema = fs.readFileSync(path.join(__dirname, 'esquema.sql'), 'utf8');
   db.exec(esquema);
   return db;

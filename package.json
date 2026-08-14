@@ -17,13 +17,13 @@
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.19",
-    "better-sqlite3": "^12.11.1",
     "express": "^4.19.2",
     "node-cron": "^3.0.3",
     "qrcode-terminal": "^0.12.0"
   },
   "optionalDependencies": {
+    "better-sqlite3": "^12.11.1",
     "whatsapp-web.js": "^1.26.0"
   },
-  "comentario": "whatsapp-web.js está como opcional porque arrastra Chromium (~150 MB): en el celu se instala con 'npm install --omit=optional' y no lo baja. El núcleo (src/core) no importa ninguna librería de WhatsApp."
+  "comentario": "Las dos opcionales son para la PC. En el celu se instala con 'npm install --omit=optional': whatsapp-web.js arrastra Chromium (~150 MB) y better-sqlite3 no compila en Termux (node-gyp no encuentra el NDK de Android). Sin better-sqlite3 el bot usa el SQLite incorporado de Node 22.5+ (ver src/db/motor.js). El núcleo (src/core) no importa ninguna librería de WhatsApp."
 }

@@ -109,5 +109,6 @@ Nunca se pierde una seña: lo que el OCR no entiende va a revisión manual, no s
 
 - Panel: `http://localhost:3010` en el celu (estado, uptime, últimos eventos, reiniciar).
 - Soporte remoto: Tailscale + SSH.
+- Motor de base: better-sqlite3 en PC, SQLite incorporado de Node en el celu (`src/db/motor.js`).
 - Backup: `scripts/backup.sh` (requiere `rclone config` una vez).
 - Latido diario al `numero_soporte`: solo salud del sistema, nunca datos de clientas.

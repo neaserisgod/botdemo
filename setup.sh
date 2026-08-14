@@ -13,8 +13,7 @@ DIR="$HOME/bot-turnos"
 
 echo "== [1/7] Paquetes base =="
 pkg update -y
-# python/clang/make: better-sqlite3 no tiene binarios para Android, se compila acá
-pkg install -y nodejs-lts git tesseract termux-api openssh python clang make binutils
+pkg install -y nodejs-lts git tesseract termux-api openssh
 
 # Idioma español para el OCR (el paquete tesseract puede venir sin spa)
 TESSDATA="$PREFIX/share/tessdata"
@@ -43,10 +42,17 @@ else
   exit 1
 fi
 
-echo "== [3/7] Dependencias (sin whatsapp-web.js: en el celu va Baileys) =="
-# --omit=optional deja afuera whatsapp-web.js y su Chromium (~150 MB).
-# La compilación de better-sqlite3 tarda varios minutos en un celu: es normal.
+echo "== [3/7] Dependencias =="
+# --omit=optional deja afuera whatsapp-web.js (Chromium, ~150 MB) y
+# better-sqlite3 (no compila en Termux). El bot usa el SQLite que trae Node.
 npm install --omit=optional
+
+# Chequeo temprano: sin motor de SQLite no tiene sentido seguir
+node -e "require('node:sqlite')" 2>/dev/null || {
+  echo "ERROR: tu Node ($(node -v)) no trae SQLite incorporado (hace falta 22.5+)."
+  echo "Probá: pkg upgrade nodejs-lts"
+  exit 1
+}
 
 echo "== [4/7] config.json =="
 if [ ! -f config.json ]; then
