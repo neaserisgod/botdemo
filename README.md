@@ -33,6 +33,8 @@ Lo que se toca por cliente: `negocio`, `numero_duena` (recibe avisos y comandos)
 
 ## Cómo está armado
 
+> 📖 Para el detalle completo (arquitectura, decisiones técnicas, cómo viaja un mensaje por dentro, qué pasa ante cada falla) está **[docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md)**.
+
 La lógica de negocio (`src/core/`) no importa nada de WhatsApp: recibe `{ de, texto, rutaImagen, productoId }` y devuelve `{ para, texto, imagenRuta }`. Los adaptadores traducen.
 
 ```
