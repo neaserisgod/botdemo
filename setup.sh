@@ -27,13 +27,19 @@ if [ ! -f "$TESSDATA/spa.traineddata" ]; then
 fi
 
 echo "== [2/7] Código =="
-if [ -d "$DIR" ]; then
+if [ -f "$PWD/package.json" ] && [ -d "$PWD/src" ]; then
+  # Ya estamos parados adentro del repo (no importa cómo se llame la carpeta)
+  echo "Usando el repo de esta carpeta: $PWD"
+  cd "$PWD"
+elif [ -d "$DIR" ]; then
   echo "Ya existe $DIR, actualizando..."
   cd "$DIR" && git pull
 elif [ -n "$REPO" ]; then
   git clone "$REPO" "$DIR" && cd "$DIR"
 else
-  echo "ERROR: no existe $DIR y no pasaste URL de repo. Uso: bash setup.sh <url-repo>"
+  echo "ERROR: no encontré el código."
+  echo "  Opción A: entrá a la carpeta del repo (cd carpeta) y corré: bash setup.sh"
+  echo "  Opción B: bash setup.sh <url-repo>"
   exit 1
 fi
 
