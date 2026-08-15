@@ -254,6 +254,37 @@ chequear('el archivo tiene varias tarjetas',
 chequear('no incluye a la dueña ni a soporte',
   !todas.includes(DUENA) && !todas.includes(config.numero_soporte));
 
+console.log('— E6. "menú": volver al principio desde cualquier estado —');
+const CM = '5492944000140';
+// Desde eligiendo_servicio
+decir(CM, 'hola'); decir(CM, '1');
+r = decir(CM, 'menú');
+chequear('desde eligiendo_servicio vuelve al menú', txt(r, CM).includes('¿Qué necesitás?'));
+// Desde eligiendo_dia
+decir(CM, '1'); decir(CM, '1');
+r = decir(CM, 'volver');
+chequear('"volver" también sirve', txt(r, CM).includes('¿Qué necesitás?'));
+// Desde eligiendo_hora
+decir(CM, '1'); decir(CM, '1'); decir(CM, '1');
+r = decir(CM, 'empezar de nuevo');
+chequear('"empezar de nuevo" también', txt(r, CM).includes('¿Qué necesitás?'));
+// Desde pidiendo_nombre
+decir(CM, '1'); decir(CM, '1'); decir(CM, '1'); decir(CM, '1');
+r = decir(CM, 'menu');
+chequear('desde pidiendo_nombre también', txt(r, CM).includes('¿Qué necesitás?'));
+chequear('y limpia lo que había elegido',
+  JSON.parse(db.obtener().prepare('SELECT datos_conv FROM clientas WHERE telefono = ?').get(CM).datos_conv).servicioId === undefined);
+// Esperando comprobante: NO lo saca del flujo, le recuerda que debe la seña
+const CM2 = '5492944000141';
+decir(CM2, 'hola'); decir(CM2, '1'); decir(CM2, '1');
+decir(CM2, '1'); decir(CM2, '1'); decir(CM2, 'Vicky'); decir(CM2, '1');
+r = decir(CM2, 'menú');
+chequear('esperando seña: avisa en vez de salir', txt(r, CM2).includes('esperando la seña'));
+chequear('el turno sigue reservado',
+  db.obtener().prepare("SELECT COUNT(*) n FROM turnos t JOIN clientas c ON c.id=t.clienta_id WHERE c.telefono=? AND t.estado='pendiente_sena'").get(CM2).n === 1);
+r = decir(CM2, '0');
+chequear('con 0 sí cancela y libera', txt(r, CM2).includes('cancelé'));
+
 console.log('— F. FAQ y saludos con typos —');
 const C = '5492944000108';
 r = decir(C, 'presios porfa?');

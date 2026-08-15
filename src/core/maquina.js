@@ -28,6 +28,13 @@ function numerosDe(texto) {
   return (texto.match(/\d+/g) || []).map(Number);
 }
 
+// Escape global: desde cualquier punto de la conversación se vuelve al menú.
+const VOLVER_AL_MENU = [
+  'menu', 'menú', 'inicio', 'volver', 'volver al menu', 'volver al menú',
+  'volver al inicio', 'ir al menu', 'ir al menú', 'menu principal', 'menú principal',
+  'empezar de nuevo', 'empezar de cero', 'de nuevo', 'atras', 'atrás', 'salir',
+];
+
 // Cierres de cortesía: no merecen el menú completo de vuelta.
 const CORTESIA = [
   'gracias', 'muchas gracias', 'mil gracias', 'genial', 'perfecto', 'dale',
@@ -56,7 +63,21 @@ function procesar(config, clienta, msj) {
     // igual — la clienta ya mostró que quiere reservar.
     ctx.datos = {};
     return responder(ctx, 'eligiendo_servicio',
-      `¡Buenísimo! ¿Qué servicio querés?\n\n${listaServicios(ctx.config)}\n\nRespondé con el número.`);
+      `¡Buenísimo! ¿Qué servicio querés?\n\n${listaServicios(ctx.config)}\n\nRespondé con el número (o *menú* para volver al principio).`);
+  }
+
+  // "menú" / "volver" / "empezar de nuevo" funcionan en cualquier estado.
+  if (VOLVER_AL_MENU.includes(ctx.texto.replace(/[!.,¿?]/g, '').trim())) {
+    // Excepción: si está esperando el comprobante hay un turno reservado
+    // ocupando un horario. No la sacamos del flujo sin avisarle.
+    if (clienta.estado_conv === 'esperando_comprobante') {
+      return [{
+        para: clienta.telefono,
+        texto: `Tenés una reserva esperando la seña ⏳\nSi ya transferiste, mandame la *foto del comprobante*.\nSi te arrepentiste, escribí *0* y libero el horario.`,
+      }];
+    }
+    ctx.datos = {};
+    return menu(ctx, '¡Volvamos al principio!');
   }
 
   const manejadores = {
@@ -121,7 +142,7 @@ function inicio(ctx) {
   if (t === '1') {
     ctx.datos = {};
     return responder(ctx, 'eligiendo_servicio',
-      `¡Buenísimo! ¿Qué servicio querés?\n\n${listaServicios(ctx.config)}\n\nRespondé con el número.`);
+      `¡Buenísimo! ¿Qué servicio querés?\n\n${listaServicios(ctx.config)}\n\nRespondé con el número (o *menú* para volver al principio).`);
   }
   if (t === '2') return responder(ctx, 'inicio', faq.precios(listaServicios(ctx.config)));
   if (t === '3') return responder(ctx, 'inicio', faq.ubicacionYHorarios(ctx.config));
@@ -157,7 +178,7 @@ function inicio(ctx) {
     // guardamos día/hora y los usamos apenas elija el servicio.
     ctx.datos = { fh };
     return responder(ctx, 'eligiendo_servicio',
-      `¡Buenísimo! ¿Qué servicio querés?\n\n${listaServicios(ctx.config)}\n\nRespondé con el número.`);
+      `¡Buenísimo! ¿Qué servicio querés?\n\n${listaServicios(ctx.config)}\n\nRespondé con el número (o *menú* para volver al principio).`);
   }
 
   // Saludo o cualquier otra cosa → menú de bienvenida
@@ -228,12 +249,12 @@ function elegirServicio(ctx, servicio, fh) {
     const limite = new Date(Date.now() + ctx.config.turnos.dias_hacia_adelante * 86400000);
     if (fh.dia > fechas.aTexto(limite).slice(0, 10)) {
       return responder(ctx, 'eligiendo_dia',
-        `Por ahora agendo hasta ${ctx.config.turnos.dias_hacia_adelante} días para adelante 😅 Estos días puedo:\n\n${listaDias}\n\nRespondé con el número, o *0* para volver.`);
+        `Por ahora agendo hasta ${ctx.config.turnos.dias_hacia_adelante} días para adelante 😅 Estos días puedo:\n\n${listaDias}\n\nRespondé con el número, *0* para volver o *menú* para empezar de nuevo.`);
     }
     const horas = agenda.horariosLibres(ctx.config, servicio, fh.dia);
     if (!horas.length) {
       return responder(ctx, 'eligiendo_dia',
-        `Uy, el ${fechas.diaLindo(fh.dia)} no tengo lugar para *${servicio.nombre}* 😕 Estos días sí puedo:\n\n${listaDias}\n\nRespondé con el número, o *0* para volver.`);
+        `Uy, el ${fechas.diaLindo(fh.dia)} no tengo lugar para *${servicio.nombre}* 😕 Estos días sí puedo:\n\n${listaDias}\n\nRespondé con el número, *0* para volver o *menú* para empezar de nuevo.`);
     }
     ctx.datos.dia = fh.dia;
     ctx.datos.horas = horas;
@@ -250,14 +271,14 @@ function elegirServicio(ctx, servicio, fh) {
     }
     if (fh.hora) {
       return responder(ctx, 'eligiendo_hora',
-        `Uy, a las ${fh.hora} no tengo lugar el ${fechas.diaLindo(fh.dia)} 😕 Ese día puedo:\n\n${listaHoras}\n\nRespondé con el número, o *0* para volver.`);
+        `Uy, a las ${fh.hora} no tengo lugar el ${fechas.diaLindo(fh.dia)} 😕 Ese día puedo:\n\n${listaHoras}\n\nRespondé con el número, *0* para volver o *menú* para empezar de nuevo.`);
     }
     return responder(ctx, 'eligiendo_hora',
-      `*${servicio.nombre}* el ${fechas.diaLindo(fh.dia)} 👌 Horarios libres:\n\n${listaHoras}\n\nRespondé con el número, o *0* para volver.`);
+      `*${servicio.nombre}* el ${fechas.diaLindo(fh.dia)} 👌 Horarios libres:\n\n${listaHoras}\n\nRespondé con el número, *0* para volver o *menú* para empezar de nuevo.`);
   }
 
   return responder(ctx, 'eligiendo_dia',
-    `*${servicio.nombre}* ($${servicio.precio}) 👌\n¿Qué día te queda bien?\n\n${listaDias}\n\nRespondé con el número, o *0* para volver.`);
+    `*${servicio.nombre}* ($${servicio.precio}) 👌\n¿Qué día te queda bien?\n\n${listaDias}\n\nRespondé con el número, *0* para volver o *menú* para empezar de nuevo.`);
 }
 
 function eligiendo_dia(ctx) {
@@ -291,7 +312,7 @@ function pedirHorarios(ctx, dia) {
   ctx.datos.horas = horas;
   const lista = horas.map((h, j) => `*${j + 1}* — ${h}`).join('\n');
   return responder(ctx, 'eligiendo_hora',
-    `${fechas.diaLindo(dia)} — horarios libres:\n\n${lista}\n\nRespondé con el número, o *0* para volver.`);
+    `${fechas.diaLindo(dia)} — horarios libres:\n\n${lista}\n\nRespondé con el número, *0* para volver o *menú* para empezar de nuevo.`);
 }
 
 function eligiendo_hora(ctx) {
@@ -312,7 +333,7 @@ function eligiendo_hora(ctx) {
 
   ctx.datos.hora = hora;
   if (!ctx.clienta.nombre) {
-    return responder(ctx, 'pidiendo_nombre', '¿Me decís tu nombre para agendar el turno? 😊');
+    return responder(ctx, 'pidiendo_nombre', '¿Me decís tu nombre para agendar el turno? 😊\n(o *menú* para volver al principio)');
   }
   return resumenParaConfirmar(ctx);
 }

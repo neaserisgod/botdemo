@@ -162,10 +162,23 @@ r = decir(C6, 'puede atenderme alguien? es urgente');
 chequear('pedido de humano en texto libre: deriva', r.some((s) => s.para === DUENA && s.texto.includes('atención humana')));
 
 console.log('\n— 12. Reserva completa en un solo mensaje —');
-// Ojo: depende de la fecha real (usa "mañana"); si mañana es domingo (cerrado)
-// estos chequeos van a avisar que no hay lugar, lo cual también es correcto.
+// Usamos el próximo día ABIERTO en vez de "mañana": si el test corre un sábado,
+// "mañana" es domingo (cerrado) y el chequeo fallaría por la config, no por un bug.
+const fechasT = require('../src/core/fechas');
+function proximoDiaAbierto() {
+  const d = new Date(); d.setHours(12, 0, 0, 0);
+  for (let i = 1; i <= 8; i++) {
+    d.setDate(d.getDate() + (i === 1 ? 1 : 1));
+    const ymd = fechasT.aTexto(d).slice(0, 10);
+    if (config.horarios[fechasT.nombreDia(ymd)]) return ymd;
+  }
+  throw new Error('no hay ningún día abierto en config');
+}
+const DIA_OK = proximoDiaAbierto();               // '2026-08-17'
+const DIA_TXT = `${Number(DIA_OK.slice(8))}/${Number(DIA_OK.slice(5, 7))}`; // '17/8'
+
 const C7 = '5492944777777';
-r = decir(C7, 'hola queria reservar kapping para mañana, si es posible a las 11');
+r = decir(C7, `hola queria reservar kapping para el ${DIA_TXT}, si es posible a las 11`);
 chequear('servicio + día + hora en un mensaje: va directo al nombre',
   textoPara(r, C7).includes('11:00') && textoPara(r, C7).includes('nombre'));
 r = decir(C7, 'Camila');
@@ -173,13 +186,13 @@ chequear('resumen listo para confirmar', textoPara(r, C7).includes('Kapping') &&
 decir(C7, '1'); // confirma → seña
 
 const C8 = '5492944888888';
-r = decir(C8, 'hola queria reservar para mañana'); // sin servicio
+r = decir(C8, `hola queria reservar para el ${DIA_TXT}`); // sin servicio
 chequear('sin servicio: pide servicio y recuerda el día', textoPara(r, C8).includes('¿Qué servicio'));
 r = decir(C8, 'semipermanente');
 chequear('al elegir servicio usa el día guardado', textoPara(r, C8).includes('Horarios libres') || textoPara(r, C8).includes('no tengo lugar'));
 
 const C9 = '5492944999999';
-r = decir(C9, 'quiero kapping mañana a las 11'); // 11:00 la acaba de tomar C7
+r = decir(C9, `quiero kapping el ${DIA_TXT} a las 11`); // 11:00 la acaba de tomar C7
 chequear('hora ocupada: avisa y ofrece las libres', textoPara(r, C9).includes('a las 11:00 no tengo lugar'));
 
 console.log(`\n${fallas === 0 ? '✅ Todo OK' : `❌ ${fallas} chequeos fallaron`}`);
