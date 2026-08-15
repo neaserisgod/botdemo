@@ -26,28 +26,43 @@ function mezclar(base, encima) {
   return r;
 }
 
+// La configuración se arma en tres capas, de menor a mayor prioridad:
+//
+//   1. config.example.json  ← versionado. La plantilla con TODOS los campos.
+//                             Al agregarse funciones nuevas, los valores por
+//                             defecto llegan por acá con un simple git pull.
+//   2. config.json          ← NO versionado. Lo del cliente de este equipo.
+//   3. config.local.json    ← NO versionado. Ajustes finos, opcional.
+//
+// Que las capas 2 y 3 estén fuera del repo es lo que hace que `git pull` nunca
+// choque ni pise los datos del cliente. Y que la capa 1 sea la base es lo que
+// hace que una config vieja no se rompa cuando el bot suma opciones nuevas.
 function cargar() {
-  const propio = path.join(RAIZ, 'config.json');
   const ejemplo = path.join(RAIZ, 'config.example.json');
+  const propio = path.join(RAIZ, 'config.json');
   const local = path.join(RAIZ, 'config.local.json');
 
-  let ruta = propio;
-  if (!fs.existsSync(propio)) {
-    if (!fs.existsSync(ejemplo)) {
-      throw new Error('No encontré config.json ni config.example.json');
-    }
-    ruta = ejemplo;
-    console.log('⚠️  No hay config.json: arranco con config.example.json (datos de demo).');
-    console.log('   Para un cliente real: copiá config.example.json a config.json y editalo.\n');
+  if (!fs.existsSync(ejemplo) && !fs.existsSync(propio)) {
+    throw new Error('No encontré config.example.json ni config.json');
   }
 
-  let config = leerJson(ruta);
+  let config = fs.existsSync(ejemplo) ? leerJson(ejemplo) : {};
+  const capas = [];
 
-  // config.local.json: lo propio de ESTA instalación. No está en el repo, así
-  // que un "git pull" nunca pisa los datos del cliente ni da conflictos.
+  if (fs.existsSync(propio)) {
+    config = mezclar(config, leerJson(propio));
+    capas.push('config.json');
+  }
   if (fs.existsSync(local)) {
     config = mezclar(config, leerJson(local));
-    console.log('Configuración local aplicada desde config.local.json');
+    capas.push('config.local.json');
+  }
+
+  if (capas.length) {
+    console.log(`Configuración: config.example.json + ${capas.join(' + ')}`);
+  } else {
+    console.log('⚠️  Solo hay config.example.json (datos de demo).');
+    console.log('   Para un cliente real: cp config.example.json config.json && nano config.json\n');
   }
 
   const problemas = validar(config);

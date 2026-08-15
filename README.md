@@ -27,23 +27,24 @@ En modo consola: `/soy <numero>` cambia de remitente (usá el `numero_duena` del
 
 ## Configuración
 
-Hay dos archivos y la diferencia importa:
+Se arma en capas, de menor a mayor prioridad:
 
-- **`config.json`** — la base, versionada en el repo. Sirve de plantilla para todos los clientes.
-- **`config.local.json`** — lo propio de *esta* instalación. **No está en el repo**, así que `git pull` nunca lo pisa ni genera conflictos. Lo que ponés acá pisa a `config.json`, campo por campo.
+| Archivo | ¿En el repo? | Para qué |
+|---|---|---|
+| `config.example.json` | **sí** | Plantilla con todos los campos. Por acá llegan los valores por defecto de las funciones nuevas |
+| `config.json` | **no** | Los datos de *este* cliente. Es el que se edita |
+| `config.local.json` | **no** | Ajustes finos, opcional |
 
-En cada celu, entonces, solo se edita `config.local.json`:
+Que los dos últimos estén fuera del repo es lo que hace que **`git pull` nunca choque ni pise la configuración de un equipo instalado**. Y que la base sea `config.example.json` es lo que hace que una config vieja no se rompa cuando el bot suma opciones: los campos que falten se toman de ahí.
 
-```json
-{
-  "numero_duena": "5492944123456",
-  "numero_actual": "5492944654321",
-  "negocio": { "nombre": "Uñas de Vicky", "direccion": "Mitre 500" },
-  "senas": { "alias_mp": "vicky.unas", "titular": "Victoria Pérez" }
-}
+En cada celu, entonces:
+
+```bash
+cp config.example.json config.json   # solo la primera vez
+nano config.json                     # números, negocio, servicios, horarios
 ```
 
-Todo lo que no menciones (servicios, horarios, textos) se toma de `config.json`. Al arrancar se valida el resultado y, si algo está mal, el bot lo dice en castellano y no arranca: número sin `549`, seña mayor al precio, horario invertido, día faltante.
+Al arrancar se valida el resultado y, si algo está mal, el bot lo dice en castellano y no arranca: número sin `549`, seña mayor al precio, horario invertido, día faltante.
 
 ## Cómo está armado
 

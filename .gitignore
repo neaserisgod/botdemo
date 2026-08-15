@@ -2,9 +2,10 @@ node_modules/
 data/
 *.log
 
-# config.json SÍ va al repo: así clonás y arranca configurado.
-# Ojo: tiene el número de la dueña. Mantené el repo PRIVADO.
-
-# Lo propio de CADA instalación va acá: números, nombre del negocio, precios
-# del cliente. Al no estar versionado, "git pull" nunca lo pisa ni da conflicto.
+# La configuración del cliente NO va al repo: así `git pull` nunca choca ni
+# pisa los datos de un equipo instalado.
+#   config.example.json → versionado, es la plantilla base (esa sí viaja)
+#   config.json         → lo de ESTE cliente
+#   config.local.json   → ajustes finos opcionales
+config.json
 config.local.json

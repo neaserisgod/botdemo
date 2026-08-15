@@ -55,21 +55,14 @@ node -e "require('node:sqlite')" 2>/dev/null || {
 }
 
 echo "== [4/7] Configuración =="
+# config.json es de ESTE equipo y está fuera del repo: los git pull nunca lo
+# tocan. La plantilla versionada es config.example.json.
 if [ ! -f config.json ]; then
   cp config.example.json config.json
+  echo ">>> Cargá los datos del cliente:  nano config.json"
+else
+  echo "config.json ya existe, lo dejo como está."
 fi
-# Los datos de ESTE cliente van en config.local.json (fuera del repo), así el
-# git pull nunca los pisa ni genera conflictos.
-if [ ! -f config.local.json ]; then
-  cat > config.local.json <<'EOF'
-{
-  "numero_duena": "5490000000000",
-  "numero_actual": "5490000000000"
-}
-EOF
-  echo ">>> Cargá los datos del cliente:  nano config.local.json"
-fi
-echo ">>> Config propia de este equipo: config.local.json"
 
 echo "== [5/7] Vincular WhatsApp =="
 npm install -g pm2
