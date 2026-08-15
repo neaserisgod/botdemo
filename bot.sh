@@ -103,8 +103,18 @@ case "$ACCION" in
     echo -n "Base de datos:   "; [ -f data/turnos.db ] && echo "$(du -h data/turnos.db | cut -f1)" || echo "todavía no existe"
     echo -n "Turnos activos:  "; node -e "process.env.RUTA_DB='./data/turnos.db';const db=require('./src/db');db.abrir('./data/turnos.db');console.log(db.obtener().prepare(\"SELECT COUNT(*) n FROM turnos WHERE estado IN ('pendiente_sena','confirmado')\").get().n)" 2>/dev/null || echo "?"
     echo -n "Espacio libre:   "; df -h "$HOME" 2>/dev/null | tail -1 | awk '{print $4}'
-    echo -n "Wake-lock:       "; pgrep -f termux-wake-lock >/dev/null && echo "activo" || echo "NO (Android puede matar el bot)"
+    # Ojo: el wake-lock NO es un proceso (termux-wake-lock avisa a la app y
+    # termina), así que no se puede detectar con pgrep. Lo tomamos de nuevo,
+    # que es inofensivo, y se confirma mirando la notificación de Termux.
+    echo -n "Wake-lock:       "
+    if command -v termux-wake-lock >/dev/null 2>&1; then
+      termux-wake-lock 2>/dev/null && echo "tomado (verificá que la notificación de Termux diga 'wake lock held')" \
+        || echo "falló al tomarlo"
+    else
+      echo "termux-wake-lock no está (pkg install termux-api)"
+    fi
     echo -n "Arranque al boot:"; [ -f ~/.termux/boot/arrancar-bot.sh ] && echo " configurado" || echo " NO configurado"
+    echo -n "Batería Termux:   "; echo "revisá a mano: Ajustes > Apps > Termux > Batería = Sin restricciones"
     echo ""
     pm2 status
     ;;
