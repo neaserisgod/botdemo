@@ -2,6 +2,8 @@
 // { para, texto, imagenRuta? } listo para que el adaptador lo mande.
 const fechas = require('./fechas');
 const calendario = require('./calendario');
+const contactos = require('./contactos');
+const qTurnos = require('../db/consultas/turnos');
 
 // Invitación .ics para que la dueña se agregue el turno al calendario del celu.
 // Devuelve [] si está desactivado o si algo falla: nunca frena una confirmación.
@@ -97,8 +99,27 @@ function resumenSemanal(config, turnosSemana) {
   };
 }
 
+// Tarjeta de contacto de la clienta, para que la dueña la guarde en la agenda
+// con el nombre que la propia clienta dio. Solo la primera vez que reserva.
+function tarjetaContacto(config, clienta, turno) {
+  if (config.contactos && config.contactos.habilitado === false) return [];
+  if (qTurnos.contarDeClienta(clienta.id) > 1) return []; // ya se la mandamos
+  try {
+    const adjunto = contactos.archivoDeClienta(config, clienta, { servicio: turno?.servicio });
+    return [{
+      para: config.numero_duena,
+      adjunto,
+      texto: `👤 *${clienta.nombre || clienta.telefono}* es clienta nueva. Tocá el archivo para guardarla en tu agenda.`,
+      demora: 2500, // después del turno y del calendario
+    }];
+  } catch (e) {
+    console.error('No pude generar el .vcf:', e.message);
+    return [];
+  }
+}
+
 module.exports = {
   turnoSenado, senaARevisar, senaVencida, turnoConfirmado,
   cancelacion, derivacion, agendaDiaria, resumenSemanal, linea,
-  invitacionCalendario,
+  invitacionCalendario, tarjetaContacto,
 };

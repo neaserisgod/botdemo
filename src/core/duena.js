@@ -7,6 +7,7 @@ const qClientas = require('../db/consultas/clientas');
 const fechas = require('./fechas');
 const notif = require('./notificaciones');
 const nluDuena = require('./nlu-duena');
+const contactos = require('./contactos');
 
 // Acción destructiva esperando un "sí". En memoria a propósito: si el bot se
 // reinicia, la confirmación se pierde y la dueña la repite (más seguro que
@@ -184,6 +185,20 @@ function ejecutar(config, accion, id, r) {
       ];
     }
 
+    case 'contactos': {
+      const lista = clientasParaAviso(config).filter((c) => c.nombre);
+      if (!lista.length) return responder('Todavía no tengo clientas con nombre guardado.');
+      try {
+        const adjunto = contactos.archivoDeTodas(config, lista);
+        return [{
+          para: config.numero_duena, adjunto,
+          texto: `👥 Ahí van las *${lista.length} clientas* que tengo, con el nombre que dio cada una.\nTocá el archivo y elegí importar para agregarlas a tu agenda.`,
+        }];
+      } catch (e) {
+        return responder(`No pude armar el archivo de contactos: ${e.message}`);
+      }
+    }
+
     case 'ayuda': default:
       return responder(ayuda());
   }
@@ -199,7 +214,8 @@ function ayuda() {
     `🗑️ *"anulá el turno 3"* — cancelar un turno\n` +
     `💰 *"precios"* — ver la lista\n` +
     `✏️ *"el kapping ahora sale 30000"* — cambiar un precio\n` +
-    `📣 *"aviso mañana no abrimos por el feriado"* — mensaje a TODAS las clientas\n\n` +
+    `📣 *"aviso mañana no abrimos por el feriado"* — mensaje a TODAS las clientas\n` +
+    `👥 *"pasame los contactos"* — todas las clientas para tu agenda\n\n` +
     `También andan los atajos: !hoy !semana !turno N !ok N !no N !anular N !precio`;
 }
 

@@ -372,7 +372,8 @@ function confirmando(ctx) {
     return responder(ctx, 'inicio',
       `¡Turno confirmado! 🎉\n📅 ${fechas.diaLindo(ctx.datos.dia || turno.inicio.slice(0, 10))} a las ${turno.inicio.slice(11)}\n💅 ${s.nombre}\n\nTe mandamos un recordatorio un día antes. ¡Te esperamos!`,
       [notif.turnoConfirmado(ctx.config, turno),
-       ...notif.invitacionCalendario(ctx.config, turno)]);
+       ...notif.invitacionCalendario(ctx.config, turno),
+       ...notif.tarjetaContacto(ctx.config, ctx.clienta, turno)]);
   }
 
   const venceEn = fechas.aTexto(new Date(Date.now() + ctx.config.senas.vencimiento_horas * 3600000));

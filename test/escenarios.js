@@ -228,6 +228,32 @@ sinCal.calendario = { habilitado: false };
 chequear('se puede desactivar por config',
   require('../src/core/notificaciones').invitacionCalendario(sinCal, turnoCal).length === 0);
 
+console.log('— E5. Contacto de la clienta a la agenda (.vcf) —');
+const CV = '5492944000130';
+decir(CV, 'hola'); decir(CV, '1'); decir(CV, '4');
+decir(CV, '1'); decir(CV, '1'); decir(CV, 'Sofía Gutiérrez');
+r = decir(CV, '1');
+const vcf = r.find((s) => s.adjunto && s.adjunto.mime === 'text/vcard');
+chequear('clienta nueva: manda el .vcf a la dueña', !!vcf && vcf.para === DUENA);
+const textoVcf = fs.readFileSync(vcf.adjunto.ruta, 'utf8');
+chequear('usa el nombre que dio la clienta', textoVcf.includes('Sofía Gutiérrez'));
+chequear('lleva el teléfono con +', textoVcf.includes('TEL;TYPE=CELL:+' + CV));
+chequear('vCard bien formada', textoVcf.startsWith('BEGIN:VCARD') && textoVcf.includes('END:VCARD'));
+chequear('el nombre del archivo conserva tildes', vcf.adjunto.nombre.includes('í'));
+// Segundo turno de la misma: no repite
+decir(CV, 'hola'); decir(CV, '1'); decir(CV, '4'); decir(CV, '1'); decir(CV, '2');
+r = decir(CV, '1');
+chequear('NO repite el contacto en el segundo turno',
+  !r.some((s) => s.adjunto && s.adjunto.mime === 'text/vcard'));
+// Exportar todas
+r = decir(DUENA, 'pasame los contactos');
+chequear('exporta todas las clientas', r[0].adjunto && r[0].adjunto.nombre === 'clientas.vcf');
+const todas = fs.readFileSync(r[0].adjunto.ruta, 'utf8');
+chequear('el archivo tiene varias tarjetas',
+  (todas.match(/BEGIN:VCARD/g) || []).length > 1 && todas.includes('Sofía Gutiérrez'));
+chequear('no incluye a la dueña ni a soporte',
+  !todas.includes(DUENA) && !todas.includes(config.numero_soporte));
+
 console.log('— F. FAQ y saludos con typos —');
 const C = '5492944000108';
 r = decir(C, 'presios porfa?');

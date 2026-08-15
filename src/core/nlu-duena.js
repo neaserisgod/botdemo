@@ -25,6 +25,9 @@ const CLAVES = {
               'esta semana', 'la semana'],
   precio:    ['precio', 'precios', 'tarifa', 'tarifas', 'valores', 'cobro', 'cobrar',
               'sale', 'cuesta', 'lista'],
+  contactos: ['contacto', 'contactos', 'agenda de contactos', 'telefonos', 'teléfonos',
+              'numeros de las clientas', 'pasame las clientas', 'exportar clientas',
+              'lista de clientas'],
   ayuda:     ['ayuda', 'comandos', 'que puedo hacer', 'qué puedo hacer', 'opciones',
               'menu', 'menú', 'como funciona', 'cómo funciona', 'help'],
 };

@@ -51,6 +51,7 @@ function procesarComprobante(config, clienta, turnoId, msj) {
     });
     salientes.push(notif.turnoSenado(config, turno, datos, msj.rutaImagen));
     salientes.push(...notif.invitacionCalendario(config, qTurnos.porId(turnoId)));
+    salientes.push(...notif.tarjetaContacto(config, clienta, turno));
   } else {
     salientes.push({
       para: clienta.telefono,

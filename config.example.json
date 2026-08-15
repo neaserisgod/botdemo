@@ -67,6 +67,11 @@
     "habilitado": true
   },
 
+  "contactos": {
+    "habilitado": true,
+    "prefijo": "💅 "
+  },
+
   "latido": {
     "hora": "09:00"
   }

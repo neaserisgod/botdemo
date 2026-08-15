@@ -65,6 +65,14 @@ function entreFechas(desde, hasta) {
   `).all(desde, hasta);
 }
 
+// Cuántos turnos tuvo (para saber si es clienta nueva y mandarle el contacto
+// a la dueña una sola vez).
+function contarDeClienta(clientaId) {
+  return obtener().prepare(
+    `SELECT COUNT(*) AS n FROM turnos WHERE clienta_id = ? AND estado IN ${OCUPAN}`
+  ).get(clientaId).n;
+}
+
 function proximoDeClienta(clientaId, desdeFecha) {
   return obtener().prepare(`
     SELECT t.*, s.nombre AS servicio FROM turnos t
@@ -99,6 +107,6 @@ function guardarRespuestaRecordatorio(id, respuesta) {
 
 module.exports = {
   crear, porId, cambiarEstado, haySolapamiento, ocupadosDelDia, delDia,
-  entreFechas, proximoDeClienta, pendientesDeRecordatorio,
+  entreFechas, proximoDeClienta, contarDeClienta, pendientesDeRecordatorio,
   marcarRecordatorioEnviado, guardarRespuestaRecordatorio,
 };
