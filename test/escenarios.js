@@ -105,6 +105,15 @@ console.log('— D. Recordatorio → cancelar → horario libre —');
 // G todavía debe la seña; la pagamos para poder recordar y cancelar
 r = decir('5492944000107', null, { ...foto('Transferencia $ 5.000 Para Maria Ejemplo operación 333333') });
 chequear('seña de G verificada', qSenas.existeOperacion('333333'));
+// Acercamos el turno a dentro de 12 hs: si el próximo día abierto está a más
+// de 24 hs (sábado a la tarde, domingo cerrado), no habría recordatorio y el
+// test fallaría por la agenda, no por un bug.
+const en12 = fechas.aTexto(new Date(Date.now() + 12 * 3600000));
+db.obtener().prepare(`
+  UPDATE turnos SET inicio = ?, fin = ? WHERE id IN
+    (SELECT t.id FROM turnos t JOIN clientas c ON c.id = t.clienta_id
+      WHERE c.telefono = ? AND t.estado = 'confirmado')
+`).run(en12, fechas.sumarMinutos(en12, 60), '5492944000107');
 const enviados = recordatorios.tick(config);
 chequear('recordatorio sale para turnos de mañana', enviados.some((s) => s.para === '5492944000107'));
 r = decir('5492944000107', 'no voy a poder ir, cancelame');

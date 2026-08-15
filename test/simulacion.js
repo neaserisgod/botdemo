@@ -93,6 +93,14 @@ r = decir(DUENA, '!precio 1 20000');
 chequear('!precio cambia precio', textoPara(r, DUENA).includes('20000'));
 
 console.log('\n— 5. Recordatorios (catch-up) —');
+// Acercamos los turnos a dentro de 12 hs para que caigan en la ventana del
+// recordatorio. Si dependiéramos de la agenda real, el test fallaría cuando
+// el próximo día abierto está a más de 24 hs (ej: sábado a la tarde).
+const fechasR = require('../src/core/fechas');
+const en12hs = fechasR.aTexto(new Date(Date.now() + 12 * 3600000));
+db.obtener().prepare(
+  "UPDATE turnos SET inicio = ?, fin = ? WHERE estado = 'confirmado'"
+).run(en12hs, fechasR.sumarMinutos(en12hs, 60));
 const enviados = recordatorios.tick(config);
 chequear('manda recordatorios de turnos < 24 hs', enviados.length >= 1);
 chequear('no los repite', recordatorios.tick(config).length === 0);
