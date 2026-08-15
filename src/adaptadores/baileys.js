@@ -19,6 +19,7 @@ function crearAdaptador(config, hooks) {
   const logger = pino({ level: 'silent' }); // el ruido de baileys no nos sirve
   let sock = null;
   let cerrando = false;
+  let reconectando = false;
 
   // Chats nuevos con @lid: guardamos a qué JID responderle a cada número.
   const jidPorNumero = new Map();
@@ -89,9 +90,16 @@ function crearAdaptador(config, hooks) {
           console.error('Sesión cerrada desde el teléfono. Borrá data/sesion-baileys y re-escaneá el QR.');
           return;
         }
-        if (!cerrando) {
+        // Un solo reintento a la vez: sin esta guarda, varios eventos "close"
+        // seguidos programan varios timers y terminás con conexiones paralelas
+        // peleando por la misma sesión.
+        if (!cerrando && !reconectando) {
+          reconectando = true;
           console.log('Reconectando en 5 s...');
-          setTimeout(() => conectar().catch((e) => console.error('Reconexión falló:', e.message)), 5000);
+          setTimeout(() => {
+            reconectando = false;
+            conectar().catch((e) => console.error('Reconexión falló:', e.message));
+          }, 5000);
         }
       }
     });
@@ -160,7 +168,10 @@ function crearAdaptador(config, hooks) {
 
   const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  // Devuelve los mensajes que SÍ salieron, para que el llamador sepa qué se
+  // envió de verdad (lo usan los recordatorios antes de marcarlos).
   async function enviarTodos(salientes) {
+    const enviados = [];
     for (const s of salientes || []) {
       try {
         // demora: los envíos masivos van espaciados para no disparar el
@@ -180,10 +191,12 @@ function crearAdaptador(config, hooks) {
         } else {
           await sock.sendMessage(jid, { text: s.texto });
         }
+        enviados.push(s);
       } catch (e) {
         console.error(`No pude enviar a ${s.para}:`, e.message);
       }
     }
+    return enviados;
   }
 
   return {

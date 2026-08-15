@@ -21,6 +21,7 @@ function crearAdaptador(config, hooks) {
       const espera = s.demora ? ` (espera ${s.demora / 1000}s)` : '';
       console.log(`\n┌─ Bot → ${quien}${extra}${espera}\n${s.texto.split('\n').map((l) => '│ ' + l).join('\n')}\n└─`);
     }
+    return salientes || []; // en consola siempre "se envía" todo
   }
 
   function iniciar() {

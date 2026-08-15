@@ -63,7 +63,7 @@ Un **adaptador** traduce entre eso y la librería de turno. Hay tres:
 
 Se elige al arrancar: `node src/index.js --adaptador=baileys`.
 
-Esto es lo que permitió, entre otras cosas, migrar de whatsapp-web.js a Baileys sin tocar una línea de lógica de negocio, y tener 167 tests que corren sin WhatsApp.
+Esto es lo que permitió, entre otras cosas, migrar de whatsapp-web.js a Baileys sin tocar una línea de lógica de negocio, y tener 169 tests que corren sin WhatsApp.
 
 ---
 
@@ -276,7 +276,7 @@ Al arrancar, `src/config.js` lo valida y, si algo está mal, **no arranca** y ex
 
 ## 12. Tests
 
-Tres suites, 167 chequeos, corren sin WhatsApp con `npm test`:
+Tres suites, 169 chequeos, corren sin WhatsApp con `npm test`:
 
 - **`simulacion.js`** — el flujo completo: reservar, señar, recordar, cancelar, comandos, FAQ, catálogo, lenguaje natural.
 - **`escenarios.js`** — lo que sale mal: comprobantes con monto corto, destinatario ajeno o duplicados; carreras por el mismo horario; comandos mal usados; 40 clientas reservando en cadena; fuzzing con inyección SQL, textos de 5.000 caracteres y bytes nulos.

@@ -57,6 +57,7 @@ function crearAdaptador(config, hooks) {
   const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
   async function enviarTodos(salientes) {
+    const enviados = [];
     for (const s of salientes || []) {
       try {
         if (s.demora) await dormir(s.demora); // envíos masivos espaciados
@@ -70,10 +71,12 @@ function crearAdaptador(config, hooks) {
         } else {
           await client.sendMessage(jid, s.texto);
         }
+        enviados.push(s);
       } catch (e) {
         console.error(`No pude enviar a ${s.para}:`, e.message);
       }
     }
+    return enviados;
   }
 
   return {

@@ -13,12 +13,17 @@ function tick(config) {
   const hasta = fechas.sumarMinutos(ahora, config.recordatorios.horas_antes * 60);
 
   // 1) Recordatorios pendientes (incluye los que quedaron colgados por una caída)
+  //
+  // OJO: NO marcamos "enviado" acá. El turno se marca recién cuando el
+  // adaptador confirma que el mensaje salió (ver src/index.js). Si marcáramos
+  // ahora y el envío fallara, la clienta nunca recibiría el recordatorio y el
+  // bot creería que sí. Mientras no se confirme, el próximo tick lo reintenta.
   for (const t of qTurnos.pendientesDeRecordatorio(ahora, hasta)) {
     salientes.push({
       para: t.telefono,
+      turnoId: t.id, // ← el que confirma el envío usa esto para marcarlo
       texto: `¡Hola ${t.clienta_nombre || ''}! 👋 Te recordamos tu turno de mañana:\n\n💅 ${t.servicio}\n📅 ${fechas.diaLindo(t.inicio.slice(0, 10))} a las ${t.inicio.slice(11)}\n\nRespondé *CONFIRMO* para confirmar o *CANCELAR* si no llegás (así liberamos el horario).`,
     });
-    qTurnos.marcarRecordatorioEnviado(t.id);
   }
 
   // 2) Señas vencidas → liberar horario y avisar

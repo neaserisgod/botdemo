@@ -103,7 +103,16 @@ db.obtener().prepare(
 ).run(en12hs, fechasR.sumarMinutos(en12hs, 60));
 const enviados = recordatorios.tick(config);
 chequear('manda recordatorios de turnos < 24 hs', enviados.length >= 1);
-chequear('no los repite', recordatorios.tick(config).length === 0);
+
+// Si el envío NO se confirma (bot sin señal, WhatsApp que rechaza), el turno
+// queda sin marcar y el próximo tick lo reintenta: la clienta no se queda sin
+// recordatorio por una falla de red.
+chequear('si no se confirmó el envío, lo reintenta',
+  recordatorios.tick(config).some((s) => s.turnoId));
+
+// Así lo hace src/index.js: marca recién cuando el adaptador confirma
+enviados.filter((s) => s.turnoId).forEach((s) => qTurnos.marcarRecordatorioEnviado(s.turnoId));
+chequear('confirmado el envío, no lo repite', recordatorios.tick(config).length === 0);
 r = decir(CLIENTA, 'confirmo');
 chequear('registra CONFIRMO', textoPara(r, CLIENTA).toLowerCase().includes('confirmar'));
 

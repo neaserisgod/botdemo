@@ -69,8 +69,17 @@ ${eventos.map((ev) => `<tr><td>${ev.creado_en}</td><td>${ev.tipo}</td><td>${ev.d
   // Por defecto solo localhost. Si querés que la dueña se suscriba al
   // calendario desde su celu (misma WiFi), poné panel.escuchar_en_red: true.
   const host = config.panel.escuchar_en_red ? '0.0.0.0' : '127.0.0.1';
-  app.listen(config.panel.puerto, host, () => {
+  const servidor = app.listen(config.panel.puerto, host, () => {
     console.log(`Panel: http://localhost:${config.panel.puerto}`);
+  });
+
+  // Si el puerto está ocupado (quedó otra instancia colgada), el panel no
+  // arranca pero el bot tiene que seguir atendiendo igual: es accesorio.
+  servidor.on('error', (e) => {
+    console.error(`Panel no disponible (${e.code}): el bot sigue funcionando.`);
+    if (e.code === 'EADDRINUSE') {
+      console.error(`  El puerto ${config.panel.puerto} está ocupado. Probá: pm2 kill && pm2 start ecosystem.config.js`);
+    }
   });
 }
 

@@ -21,7 +21,7 @@ Escaneás el QR (o usás código, ver abajo) y ya está funcionando. `config.jso
 | `npm run baileys` | Producción y pruebas reales (sin Chromium, anda en el celu) |
 | `npm run consola` | Probar el flujo entero sin WhatsApp |
 | `npm run demo` | whatsapp-web.js (alternativa en PC, usa Chromium) |
-| `npm test` | Las 3 suites de tests (167 chequeos) |
+| `npm test` | Las 3 suites de tests (169 chequeos) |
 
 En modo consola: `/soy <numero>` cambia de remitente (usá el `numero_duena` del config para probar los comandos `!`), `/foto <texto>` simula un comprobante, `/producto <id>` simula el catálogo.
 
@@ -118,7 +118,24 @@ Nunca se pierde una seña: lo que el OCR no entiende va a revisión manual, no s
 
 ## Tests
 
-`npm test` corre tres suites (167 chequeos): flujo completo, escenarios hostiles (señas falsas, carreras por el mismo horario, comandos mal usados, fuzzing) y límites (bordes de agenda, persistencia, configuración cambiada a mitad de flujo).
+`npm test` corre tres suites (169 chequeos): flujo completo, escenarios hostiles (señas falsas, carreras por el mismo horario, comandos mal usados, fuzzing) y límites (bordes de agenda, persistencia, configuración cambiada a mitad de flujo).
+
+## Prender, apagar y reiniciar (en el celu)
+
+Todo con `bot.sh`, que hace apagado **total** (no reinicio caliente): baja el proceso, mata el daemon de PM2 y liquida cualquier node suelto antes de levantar de nuevo.
+
+```bash
+cd ~/bot-turnos
+bash bot.sh prender      # arranca de cero
+bash bot.sh apagar       # lo baja del todo (no vuelve ni al reiniciar el celu)
+bash bot.sh reiniciar    # apagado total + arranque limpio
+bash bot.sh estado       # ¿está vivo? memoria y uptime
+bash bot.sh logs         # ver qué pasa en vivo (Ctrl+C para salir)
+bash bot.sh revisar      # chequeo de salud completo
+bash bot.sh vincular     # re-vincular WhatsApp (código nuevo)
+```
+
+`bash bot.sh revisar` es lo primero que conviene correr cuando algo anda raro: chequea versión de Node, SQLite, Tesseract y el idioma español, validez de la config, si la sesión de WhatsApp está vinculada, tamaño de la base, turnos activos, espacio libre, wake-lock y arranque automático.
 
 ## Operación
 
