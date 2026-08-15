@@ -63,6 +63,11 @@
     "escuchar_en_red": false
   },
 
+  "conexion": {
+    "minutos_sin_senal": 10,
+    "intentos_antes_de_reiniciar": 3
+  },
+
   "calendario": {
     "habilitado": true
   },

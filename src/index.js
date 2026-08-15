@@ -21,6 +21,40 @@ const recordatorios = require('./core/recordatorios');
 const salud = require('./salud');
 const { iniciarPanel } = require('./panel/server');
 
+// --- Una sola instancia a la vez ---
+// Dos procesos con la misma sesión de WhatsApp se desconectan mutuamente en
+// loop: el bot parece "online" en PM2 pero no contesta. Es la causa típica de
+// que un `pm2 restart` no alcance y haya que borrar y recrear el proceso.
+const fsLock = require('fs');
+const pathLock = require('path');
+const RUTA_PID = pathLock.join(__dirname, '..', 'data', 'bot.pid');
+
+function tomarLock() {
+  fsLock.mkdirSync(pathLock.dirname(RUTA_PID), { recursive: true });
+  if (fsLock.existsSync(RUTA_PID)) {
+    const otro = parseInt(fsLock.readFileSync(RUTA_PID, 'utf8').trim(), 10);
+    if (otro && otro !== process.pid) {
+      let vivo = false;
+      try { process.kill(otro, 0); vivo = true; } catch { vivo = false; }
+      if (vivo) {
+        console.error('');
+        console.error('❌ Ya hay otro bot corriendo (PID ' + otro + ').');
+        console.error('   Dos instancias con la misma sesión de WhatsApp se rompen entre sí.');
+        console.error('   Arreglalo con:   bash bot.sh reiniciar');
+        console.error('');
+        process.exit(1);
+      }
+      console.log(`(Había un PID viejo de un proceso muerto, lo piso)`);
+    }
+  }
+  fsLock.writeFileSync(RUTA_PID, String(process.pid));
+  const soltar = () => { try { fsLock.unlinkSync(RUTA_PID); } catch { /* ya no está */ } };
+  process.on('exit', soltar);
+  process.on('SIGINT', () => { soltar(); process.exit(0); });
+  process.on('SIGTERM', () => { soltar(); process.exit(0); });
+}
+tomarLock();
+
 // --- DB + servicios sembrados desde config ---
 db.abrir(process.env.RUTA_DB);
 db.sembrarServicios(config.servicios);

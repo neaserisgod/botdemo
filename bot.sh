@@ -116,6 +116,15 @@ case "$ACCION" in
     echo -n "Arranque al boot:"; [ -f ~/.termux/boot/arrancar-bot.sh ] && echo " configurado" || echo " NO configurado"
     echo -n "Batería Termux:   "; echo "revisá a mano: Ajustes > Apps > Termux > Batería = Sin restricciones"
     echo ""
+    echo "--- Últimas caídas y reconexiones ---"
+    node -e "
+      process.env.RUTA_DB='./data/turnos.db';
+      const db=require('./src/db'); db.abrir('./data/turnos.db');
+      const ev=db.obtener().prepare(\"SELECT tipo,detalle,creado_en FROM eventos_conectividad WHERE tipo IN ('caida','reconexion','arranque') ORDER BY id DESC LIMIT 8\").all();
+      if(!ev.length) console.log('  (sin eventos registrados)');
+      ev.forEach(e=>console.log('  '+e.creado_en+'  '+e.tipo+(e.detalle?'  '+e.detalle:'')));
+    " 2>/dev/null || echo "  (no pude leer la base)"
+    echo ""
     pm2 status
     ;;
 

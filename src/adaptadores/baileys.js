@@ -21,6 +21,46 @@ function crearAdaptador(config, hooks) {
   let cerrando = false;
   let reconectando = false;
 
+  // --- Watchdog de conexión zombi ---
+  // El problema real en un celu: la conexión TCP muere sin avisar (cambio de
+  // WiFi a datos, el router cierra la sesión inactiva, Android suspende la
+  // red). Baileys no dispara 'close', el socket queda abierto pero muerto y el
+  // bot deja de responder aunque PM2 lo vea "online". La única forma de
+  // detectarlo es medir el silencio: si no llega NADA (ni mensajes, ni
+  // presencias, ni keep-alives) durante mucho rato, damos la conexión por
+  // muerta y forzamos una reconexión.
+  let ultimaActividad = Date.now();
+  let intentosFallidos = 0;
+  const MINUTOS_SIN_SENAL = config.conexion?.minutos_sin_senal ?? 10;
+  const INTENTOS_ANTES_DE_REINICIAR = config.conexion?.intentos_antes_de_reiniciar ?? 3;
+
+  const marcarActividad = () => { ultimaActividad = Date.now(); intentosFallidos = 0; };
+
+  setInterval(() => {
+    if (cerrando || reconectando) return;
+    const minutos = (Date.now() - ultimaActividad) / 60000;
+    if (minutos < MINUTOS_SIN_SENAL) return;
+
+    intentosFallidos++;
+    console.error(`⚠️  ${Math.round(minutos)} min sin señal de WhatsApp (intento ${intentosFallidos}/${INTENTOS_ANTES_DE_REINICIAR}). Reconectando...`);
+    hooks.alDesconectar(`sin señal ${Math.round(minutos)} min (conexión zombi)`);
+
+    if (intentosFallidos >= INTENTOS_ANTES_DE_REINICIAR) {
+      // Reconectar dentro del mismo proceso no alcanzó: salimos para que PM2
+      // levante todo limpio. Es lo mismo que hacer "bot.sh reiniciar" pero solo.
+      console.error('❌ No se pudo recuperar la conexión. Reinicio el proceso (PM2 lo levanta).');
+      process.exit(1);
+    }
+
+    ultimaActividad = Date.now(); // no reintentar en el próximo tick
+    try { sock?.end?.(new Error('watchdog: conexión zombi')); } catch { /* ya estaba muerto */ }
+    reconectando = true;
+    setTimeout(() => {
+      reconectando = false;
+      conectar().catch((e) => console.error('Reconexión falló:', e.message));
+    }, 3000);
+  }, 60000).unref?.();
+
   // Chats nuevos con @lid: guardamos a qué JID responderle a cada número.
   const jidPorNumero = new Map();
   const jidDe = (numero) => jidPorNumero.get(numero) || `${numero}@s.whatsapp.net`;
@@ -52,9 +92,20 @@ function crearAdaptador(config, hooks) {
       logger,
       markOnlineOnConnect: false, // no pisar las notificaciones del celu de la dueña
       syncFullHistory: false,     // celus de 2-3 GB: nada de bajar historial
+      // Latido cada 25 s: mantiene viva la conexión a través del NAT del router
+      // y de la red móvil, y le da señal al watchdog de que seguimos vivos.
+      keepAliveIntervalMs: 25000,
+      connectTimeoutMs: 60000,
+      retryRequestDelayMs: 3000,
     });
 
-    sock.ev.on('creds.update', saveCreds);
+    marcarActividad();
+    sock.ev.on('creds.update', () => { marcarActividad(); return saveCreds(); });
+    // Cualquier señal de vida cuenta: presencias, recibos, historial, lo que sea.
+    for (const evento of ['messages.upsert', 'messages.update', 'presence.update',
+      'chats.update', 'contacts.update', 'message-receipt.update', 'connection.update']) {
+      sock.ev.on(evento, marcarActividad);
+    }
 
     // Emparejamiento por CÓDIGO (para el celu: no podés escanear el QR de tu
     // propia pantalla). Corré con --pareo y meté el código en el WhatsApp del
@@ -81,7 +132,7 @@ function crearAdaptador(config, hooks) {
         console.log('Escaneá este QR desde WhatsApp > Dispositivos vinculados:');
         qrcode.generate(qr, { small: true });
       }
-      if (connection === 'open') hooks.alConectar();
+      if (connection === 'open') { marcarActividad(); intentosFallidos = 0; hooks.alConectar(); }
       if (connection === 'close') {
         const codigo = lastDisconnect?.error?.output?.statusCode;
         const deslogueado = codigo === DisconnectReason.loggedOut;
