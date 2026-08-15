@@ -27,9 +27,23 @@ En modo consola: `/soy <numero>` cambia de remitente (usá el `numero_duena` del
 
 ## Configuración
 
-Todo se maneja desde `config.json`. Al arrancar se valida y, si algo está mal, el bot lo dice en castellano y no arranca (número sin `549`, seña mayor al precio, horario invertido, día faltante, etc.).
+Hay dos archivos y la diferencia importa:
 
-Lo que se toca por cliente: `negocio`, `numero_duena` (recibe avisos y comandos), `numero_soporte` (tuyo, recibe el latido diario), `numero_actual` (el chip del bot), `horarios`, `servicios` (duración, precio, seña) y `senas` (alias y titular de MP).
+- **`config.json`** — la base, versionada en el repo. Sirve de plantilla para todos los clientes.
+- **`config.local.json`** — lo propio de *esta* instalación. **No está en el repo**, así que `git pull` nunca lo pisa ni genera conflictos. Lo que ponés acá pisa a `config.json`, campo por campo.
+
+En cada celu, entonces, solo se edita `config.local.json`:
+
+```json
+{
+  "numero_duena": "5492944123456",
+  "numero_actual": "5492944654321",
+  "negocio": { "nombre": "Uñas de Vicky", "direccion": "Mitre 500" },
+  "senas": { "alias_mp": "vicky.unas", "titular": "Victoria Pérez" }
+}
+```
+
+Todo lo que no menciones (servicios, horarios, textos) se toma de `config.json`. Al arrancar se valida el resultado y, si algo está mal, el bot lo dice en castellano y no arranca: número sin `549`, seña mayor al precio, horario invertido, día faltante.
 
 ## Cómo está armado
 

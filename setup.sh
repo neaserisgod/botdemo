@@ -54,11 +54,22 @@ node -e "require('node:sqlite')" 2>/dev/null || {
   exit 1
 }
 
-echo "== [4/7] config.json =="
+echo "== [4/7] Configuración =="
 if [ ! -f config.json ]; then
   cp config.example.json config.json
 fi
-echo ">>> Revisá config.json con los datos del cliente: nano config.json"
+# Los datos de ESTE cliente van en config.local.json (fuera del repo), así el
+# git pull nunca los pisa ni genera conflictos.
+if [ ! -f config.local.json ]; then
+  cat > config.local.json <<'EOF'
+{
+  "numero_duena": "5490000000000",
+  "numero_actual": "5490000000000"
+}
+EOF
+  echo ">>> Cargá los datos del cliente:  nano config.local.json"
+fi
+echo ">>> Config propia de este equipo: config.local.json"
 
 echo "== [5/7] Vincular WhatsApp =="
 npm install -g pm2

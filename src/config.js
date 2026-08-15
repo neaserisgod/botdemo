@@ -5,9 +5,31 @@ const path = require('path');
 
 const RAIZ = path.join(__dirname, '..');
 
+function leerJson(ruta) {
+  try {
+    return JSON.parse(fs.readFileSync(ruta, 'utf8'));
+  } catch (e) {
+    throw new Error(`${path.basename(ruta)} tiene un error de formato JSON: ${e.message}`);
+  }
+}
+
+// Mezcla profunda: lo de config.local.json pisa lo de config.json, campo por
+// campo (no reemplaza objetos enteros). Los arrays sí se reemplazan completos,
+// que es lo que se espera al redefinir "servicios".
+function mezclar(base, encima) {
+  const r = { ...base };
+  for (const [k, v] of Object.entries(encima || {})) {
+    r[k] = (v && typeof v === 'object' && !Array.isArray(v) && typeof base[k] === 'object' && !Array.isArray(base[k]))
+      ? mezclar(base[k], v)
+      : v;
+  }
+  return r;
+}
+
 function cargar() {
   const propio = path.join(RAIZ, 'config.json');
   const ejemplo = path.join(RAIZ, 'config.example.json');
+  const local = path.join(RAIZ, 'config.local.json');
 
   let ruta = propio;
   if (!fs.existsSync(propio)) {
@@ -19,11 +41,13 @@ function cargar() {
     console.log('   Para un cliente real: copiá config.example.json a config.json y editalo.\n');
   }
 
-  let config;
-  try {
-    config = JSON.parse(fs.readFileSync(ruta, 'utf8'));
-  } catch (e) {
-    throw new Error(`config.json tiene un error de formato JSON: ${e.message}`);
+  let config = leerJson(ruta);
+
+  // config.local.json: lo propio de ESTA instalación. No está en el repo, así
+  // que un "git pull" nunca pisa los datos del cliente ni da conflictos.
+  if (fs.existsSync(local)) {
+    config = mezclar(config, leerJson(local));
+    console.log('Configuración local aplicada desde config.local.json');
   }
 
   const problemas = validar(config);

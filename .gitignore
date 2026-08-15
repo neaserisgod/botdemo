@@ -4,4 +4,7 @@ data/
 
 # config.json SÍ va al repo: así clonás y arranca configurado.
 # Ojo: tiene el número de la dueña. Mantené el repo PRIVADO.
-# Para un cliente nuevo, editás config.json y listo.
+
+# Lo propio de CADA instalación va acá: números, nombre del negocio, precios
+# del cliente. Al no estar versionado, "git pull" nunca lo pisa ni da conflicto.
+config.local.json
