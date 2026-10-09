@@ -6,9 +6,17 @@ const fs = require('fs');
 const path = require('path');
 
 function crearAdaptador(config, hooks) {
-  const baileys = require('@whiskeysockets/baileys');
-  const makeWASocket = baileys.default || baileys.makeWASocket;
-  const { useMultiFileAuthState, DisconnectReason, downloadMediaMessage, fetchLatestBaileysVersion } = baileys;
+  // Baileys 7 (2026-10-09): con la 6 (ya "legacy") ningún mensaje entrante se podía descifrar ("Bad MAC") desde que
+  // WhatsApp pasó a los chats @lid. La 7 es un módulo ES: se carga con import() al conectar, que anda en cualquier
+  // Node 20+ (require() de un módulo ES recién viene sin bandera desde Node 22.12).
+  let baileys = null;
+  const cargarBaileys = async () => {
+    if (!baileys) {
+      const m = await import('@whiskeysockets/baileys');
+      baileys = { ...m, makeWASocket: m.makeWASocket || m.default };
+    }
+    return baileys;
+  };
   const qrcode = require('qrcode-terminal');
   const pino = require('pino'); // viene como dependencia de baileys
 
@@ -81,14 +89,19 @@ function crearAdaptador(config, hooks) {
   }
 
   async function conectar() {
+    const { makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore, fetchLatestBaileysVersion } = await cargarBaileys();
     const { state, saveCreds } = await useMultiFileAuthState(dirSesion);
     // Versión de protocolo actual: evita el clásico "connection closed" por versión vieja
     let version;
     try { ({ version } = await fetchLatestBaileysVersion()); } catch { /* usa la default */ }
 
     sock = makeWASocket({
-      auth: state,
+      // Las claves de cifrado por chat, con caché en memoria (lo que recomienda Baileys): sin esto, dos mensajes que
+      // llegan juntos leen y escriben el mismo archivo de sesión a la vez y la sesión queda rota ("Bad MAC").
+      auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, logger) },
       version,
+      // Cuando el otro celular no pudo descifrar algo que mandó el bot, pide que se lo reenvíe: hay que tenerlo a mano.
+      getMessage: async (key) => enviadosRecientes.get(key.id),
       logger,
       markOnlineOnConnect: false, // no pisar las notificaciones del celu de la dueña
       syncFullHistory: false,     // celus de 2-3 GB: nada de bajar historial
@@ -135,7 +148,7 @@ function crearAdaptador(config, hooks) {
       if (connection === 'open') { marcarActividad(); intentosFallidos = 0; hooks.alConectar(); }
       if (connection === 'close') {
         const codigo = lastDisconnect?.error?.output?.statusCode;
-        const deslogueado = codigo === DisconnectReason.loggedOut;
+        const deslogueado = codigo === baileys.DisconnectReason.loggedOut;
         hooks.alDesconectar(`baileys close (código ${codigo ?? '?'})`);
         if (deslogueado) {
           console.error('Sesión cerrada desde el teléfono. Borrá data/sesion-baileys y re-escaneá el QR.');
@@ -173,11 +186,17 @@ function crearAdaptador(config, hooks) {
   // Ids de lo que mandó el bot, para distinguirlo de lo que el dueño escribe a mano con el mismo número. Acotado:
   // alcanza con los últimos, porque lo propio vuelve enseguida.
   const enviadosPorBot = new Set();
+  // Lo último que mandó el bot, por id, para reenviarlo si el destinatario lo pide (getMessage).
+  const enviadosRecientes = new Map();
   function recordarEnviado(r) {
     const id = r?.key?.id;
     if (!id) return;
     enviadosPorBot.add(id);
     if (enviadosPorBot.size > 500) enviadosPorBot.delete(enviadosPorBot.values().next().value);
+    if (r.message) {
+      enviadosRecientes.set(id, r.message);
+      if (enviadosRecientes.size > 200) enviadosRecientes.delete(enviadosRecientes.keys().next().value);
+    }
   }
 
   // Un mensaje del propio número que no mandó el bot: el dueño contestó a mano desde su celular. El bot se calla en
@@ -198,7 +217,8 @@ function crearAdaptador(config, hooks) {
     let jidNumero = remoteJid;
     if (remoteJid.endsWith('@lid')) {
       const lid = remoteJid.split('@')[0].split(':')[0];
-      const pnDelMsj = msg.key.senderPn || msg.key.participantPn || msg.key.remoteJidAlt;
+      // Baileys 7 trae el número en remoteJidAlt/participantAlt; los otros dos son de la 6.
+      const pnDelMsj = msg.key.remoteJidAlt || msg.key.participantAlt || msg.key.senderPn || msg.key.participantPn;
       if (pnDelMsj) {
         jidNumero = pnDelMsj;
         recordarLid(lid, pnDelMsj.split('@')[0].split(':')[0]);
@@ -232,7 +252,7 @@ function crearAdaptador(config, hooks) {
     // Foto (comprobante): bajar a disco para el OCR con tesseract
     let rutaImagen = null;
     if (m.imageMessage) {
-      const buffer = await downloadMediaMessage(msg, 'buffer', {}, {
+      const buffer = await baileys.downloadMediaMessage(msg, 'buffer', {}, {
         logger, reuploadRequest: sock.updateMediaMessage,
       });
       rutaImagen = path.join(dirMedia, `${de}_${Date.now()}.jpg`);
