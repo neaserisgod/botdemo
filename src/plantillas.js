@@ -15,7 +15,7 @@
 // el dueño como valor por defecto, 2026-10-09).
 //
 // Las claves de rubro se guardan en config.json: no se renombran nunca. Son las mismas que usa Nodo Sur
-// (`PlantillaRubro` en la app: almacen, kiosco, fiambreria, otro), así el rubro que el negocio eligió en la app
+// (`PlantillaRubro` en la app: almacen, kiosco, fiambreria, barberia, unas, servicio, otro), así el rubro que el negocio eligió en la app
 // llega tal cual al bot.
 //
 // `forma` dice qué hace el bot: `turnos` (uñas, barbería: agenda, seña, recordatorio) o `productos` (un comercio:
@@ -76,6 +76,30 @@ const PLANTILLAS = {
       { id: 4, nombre: 'Perfilado de barba', duracion_min: 30, precio: 7000, sena: 0 },
       { id: 5, nombre: 'Afeitado con navaja', duracion_min: 30, precio: 9000, sena: 0, alias: ['afeitado'] },
       { id: 6, nombre: 'Platinado', duracion_min: 120, precio: 38000, sena: 11500 },
+    ],
+  },
+  // Un servicio que no es uñas ni barbería (peluquería, estética, masajes, tatuajes): textos neutros y un solo servicio
+  // de ejemplo, para que la config pase la validación (forma turnos pide al menos uno) hasta que el negocio cargue los suyos.
+  servicio: {
+    nombre: 'Otro servicio',
+    forma: 'turnos',
+    textos: {
+      emoji: '📅',
+      cliente: 'cliente',
+      clientes: 'clientes',
+      cliente_mayuscula: 'Cliente',
+      el_cliente: 'el cliente',
+      cliente_nuevo: 'es cliente nuevo. Tocá el archivo para guardarlo en tu agenda.',
+      algun_cliente: 'algún cliente',
+      ningun_cliente: 'ningún cliente registrado',
+      a_todos: 'a TODOS los clientes',
+      todos: 'todos los clientes',
+      quien_atiende: 'el local',
+      ejemplo_servicio: 'servicio',
+      ejemplo_precio: '20000',
+    },
+    servicios: [
+      { id: 1, nombre: 'Servicio', duracion_min: 60, precio: 20000, sena: 0 },
     ],
   },
   // Comercios (forma productos). No traen servicios: lo que venden sale del catálogo de Nodo Sur. Los textos de

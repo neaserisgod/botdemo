@@ -85,13 +85,16 @@ Al arrancar se valida el resultado y, si algo está mal, el bot lo dice en caste
 
 Cada rubro tiene una plantilla en `src/plantillas.js`: cómo habla el bot y con qué servicios de ejemplo arranca un negocio nuevo. `negocio.rubro` en `config.json` elige cuál.
 
-| | `unas` (Uñas y belleza) | `barberia` (Barbería) |
-|---|---|---|
-| Emoji | 💅 | 💈 |
-| Quien recibe el turno | clienta / clientas | cliente / clientes |
-| Quien atiende | la dueña | el barbero |
-| Ejemplo para la dueña o el dueño | "el kapping ahora sale 30000" | "el corte ahora sale 13000" |
-| Servicios de ejemplo | 7 (semipermanente, esculpidas, kapping, retiro, pies, cejas, lifting) | 6 (corte, fade, corte + barba, barba, afeitado, platinado) |
+| | `unas` (Uñas y belleza) | `barberia` (Barbería) | `servicio` (Otro servicio) |
+|---|---|---|---|
+| Emoji | 💅 | 💈 | 📅 |
+| Quien recibe el turno | clienta / clientas | cliente / clientes | cliente / clientes |
+| Quien atiende | la dueña | el barbero | el local |
+| Ejemplo para la dueña o el dueño | "el kapping ahora sale 30000" | "el corte ahora sale 13000" | "el servicio ahora sale 20000" |
+| Servicios de ejemplo | 7 (semipermanente, esculpidas, kapping, retiro, pies, cejas, lifting) | 6 (corte, fade, corte + barba, barba, afeitado, platinado) | 1 (servicio), para cambiar por los propios |
+
+`servicio` es para peluquería, estética, masajes, tatuajes y cualquier negocio con turnos que no sea uñas ni barbería: es el
+mismo rubro "Otro servicio" que se elige en Nodo Sur.
 
 Los servicios de ejemplo son los del mock de servicios de Nodo Sur; la seña es el 30 % del precio (redondeado a $500) en los que la piden. Cada servicio puede tener `alias` (otros nombres: "un fade", "kapping") para que el bot lo encuentre aunque no se diga el nombre entero.
 
