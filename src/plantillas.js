@@ -15,10 +15,11 @@
 // el dueño como valor por defecto, 2026-10-09).
 //
 // Las claves de rubro se guardan en config.json: no se renombran nunca. Son las mismas que usa Nodo Sur
-// (`PlantillaRubro` en la app: almacen, kiosco, fiambreria, barberia, unas, servicio, otro), así el rubro que el negocio eligió en la app
+// (`PlantillaRubro` en la app: almacen, kiosco, fiambreria, barberia, unas,
+// peluqueria, estetica, servicio, otro), así el rubro que el negocio eligió en la app
 // llega tal cual al bot.
 //
-// `forma` dice qué hace el bot: `turnos` (uñas, barbería: agenda, seña, recordatorio) o `productos` (un comercio:
+// `forma` dice qué hace el bot: `turnos` (uñas, barbería, peluquería, estética: agenda, seña, recordatorio) o `productos` (un comercio:
 // precio y si hay, sacado del catálogo de Nodo Sur, y pedidos para retirar en el local; `core/comercio.js`).
 
 const PLANTILLAS = {
@@ -78,7 +79,66 @@ const PLANTILLAS = {
       { id: 6, nombre: 'Platinado', duracion_min: 120, precio: 38000, sena: 11500 },
     ],
   },
-  // Un servicio que no es uñas ni barbería (peluquería, estética, masajes, tatuajes): textos neutros y un solo servicio
+  peluqueria: {
+    nombre: 'Peluquería',
+    forma: 'turnos',
+    textos: {
+      emoji: '💇',
+      cliente: 'cliente',
+      clientes: 'clientes',
+      cliente_mayuscula: 'Cliente',
+      el_cliente: 'el cliente',
+      cliente_nuevo: 'es cliente nuevo. Tocá el archivo para guardarlo en tu agenda.',
+      algun_cliente: 'algún cliente',
+      ningun_cliente: 'ningún cliente registrado',
+      a_todos: 'a TODOS los clientes',
+      todos: 'todos los clientes',
+      quien_atiende: 'la peluquería',
+      ejemplo_servicio: 'brushing',
+      ejemplo_precio: '13000',
+    },
+    // "Corte" solo no es alias de ninguno a propósito: "quiero un corte" pregunta dama o caballero, como "semi" en uñas.
+    servicios: [
+      { id: 1, nombre: 'Corte de dama', duracion_min: 45, precio: 18000, sena: 0 },
+      { id: 2, nombre: 'Corte de caballero', duracion_min: 30, precio: 12000, sena: 0 },
+      { id: 3, nombre: 'Brushing', duracion_min: 45, precio: 12000, sena: 0, alias: ['planchita'] },
+      { id: 4, nombre: 'Color', duracion_min: 90, precio: 30000, sena: 9000, alias: ['tintura', 'tinte'] },
+      { id: 5, nombre: 'Mechas / balayage', duracion_min: 180, precio: 60000, sena: 18000, alias: ['mechas', 'balayage'] },
+      { id: 6, nombre: 'Alisado con keratina', duracion_min: 150, precio: 55000, sena: 16500, alias: ['alisado', 'keratina'] },
+      { id: 7, nombre: 'Nutrición capilar', duracion_min: 45, precio: 15000, sena: 0, alias: ['nutricion'] },
+    ],
+  },
+
+  estetica: {
+    nombre: 'Estética',
+    forma: 'turnos',
+    textos: {
+      emoji: '🌸',
+      cliente: 'cliente',
+      clientes: 'clientes',
+      cliente_mayuscula: 'Cliente',
+      el_cliente: 'el cliente',
+      cliente_nuevo: 'es cliente nuevo. Tocá el archivo para guardarlo en tu agenda.',
+      algun_cliente: 'algún cliente',
+      ningun_cliente: 'ningún cliente registrado',
+      a_todos: 'a TODOS los clientes',
+      todos: 'todos los clientes',
+      quien_atiende: 'el centro',
+      ejemplo_servicio: 'peeling',
+      ejemplo_precio: '32000',
+    },
+    // "Depilación" sola pregunta cuál zona: cada una es un servicio con su duración.
+    servicios: [
+      { id: 1, nombre: 'Limpieza facial profunda', duracion_min: 60, precio: 25000, sena: 0, alias: ['limpieza facial', 'limpieza de cutis'] },
+      { id: 2, nombre: 'Peeling', duracion_min: 60, precio: 30000, sena: 9000 },
+      { id: 3, nombre: 'Depilación piernas', duracion_min: 45, precio: 16000, sena: 0 },
+      { id: 4, nombre: 'Depilación cavado', duracion_min: 20, precio: 9000, sena: 0, alias: ['cavado'] },
+      { id: 5, nombre: 'Depilación rostro', duracion_min: 15, precio: 5000, sena: 0, alias: ['bozo'] },
+      { id: 6, nombre: 'Masaje descontracturante', duracion_min: 60, precio: 22000, sena: 0 },
+      { id: 7, nombre: 'Drenaje linfático', duracion_min: 60, precio: 25000, sena: 7500, alias: ['drenaje'] },
+    ],
+  },
+  // Un servicio que no es uñas, barbería, peluquería ni estética (masajes, tatuajes, depilación sola…): textos neutros y un solo servicio
   // de ejemplo, para que la config pase la validación (forma turnos pide al menos uno) hasta que el negocio cargue los suyos.
   servicio: {
     nombre: 'Otro servicio',

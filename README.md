@@ -1,6 +1,6 @@
 # bot-turnos
 
-Bot de WhatsApp para negocios chicos. Según el rubro: **turnos** (barberías, uñas: agenda, seña, recordatorio) o **comercio** (almacén, kiosco, fiambrería: precio y si hay, sacados de Nodo Sur, y pedidos para retirar en el local). Corre en un celu Android con Termux — sin VPS, sin servicios pagos. Se puede vincular a [Nodo Sur](https://horsepos.com) para configurarlo desde la app y que los pedidos lleguen a Encargues.
+Bot de WhatsApp para negocios chicos. Según el rubro: **turnos** (barberías, uñas, peluquerías, estéticas: agenda, seña, recordatorio) o **comercio** (almacén, kiosco, fiambrería: precio y si hay, sacados de Nodo Sur, y pedidos para retirar en el local). Corre en un celu Android con Termux — sin VPS, sin servicios pagos. Se puede vincular a [Nodo Sur](https://horsepos.com) para configurarlo desde la app y que los pedidos lleguen a Encargues.
 
 ## Instalar en el celu, con un comando
 
@@ -98,16 +98,21 @@ Al arrancar se valida el resultado y, si algo está mal, el bot lo dice en caste
 
 Cada rubro tiene una plantilla en `src/plantillas.js`: cómo habla el bot y con qué servicios de ejemplo arranca un negocio nuevo. `negocio.rubro` en `config.json` elige cuál.
 
-| | `unas` (Uñas y belleza) | `barberia` (Barbería) | `servicio` (Otro servicio) |
-|---|---|---|---|
-| Emoji | 💅 | 💈 | 📅 |
-| Quien recibe el turno | clienta / clientas | cliente / clientes | cliente / clientes |
-| Quien atiende | la dueña | el barbero | el local |
-| Ejemplo para la dueña o el dueño | "el kapping ahora sale 30000" | "el corte ahora sale 13000" | "el servicio ahora sale 20000" |
-| Servicios de ejemplo | 7 (semipermanente, esculpidas, kapping, retiro, pies, cejas, lifting) | 6 (corte, fade, corte + barba, barba, afeitado, platinado) | 1 (servicio), para cambiar por los propios |
+| | `unas` (Uñas y belleza) | `barberia` (Barbería) | `peluqueria` (Peluquería) | `estetica` (Estética) | `servicio` (Otro servicio) |
+|---|---|---|---|---|---|
+| Emoji | 💅 | 💈 | 💇 | 🌸 | 📅 |
+| Quien recibe el turno | clienta / clientas | cliente / clientes | cliente / clientes | cliente / clientes | cliente / clientes |
+| Quien atiende | la dueña | el barbero | la peluquería | el centro | el local |
+| Ejemplo para la dueña o el dueño | "el kapping ahora sale 30000" | "el corte ahora sale 13000" | "el brushing ahora sale 13000" | "el peeling ahora sale 32000" | "el servicio ahora sale 20000" |
+| Servicios de ejemplo | 7 (semipermanente, esculpidas, kapping, retiro, pies, cejas, lifting) | 6 (corte, fade, corte + barba, barba, afeitado, platinado) | 7 (corte de dama, de caballero, brushing, color, mechas, alisado, nutrición) | 7 (limpieza facial, peeling, depilación de piernas, cavado y rostro, masaje, drenaje) | 1 (servicio), para cambiar por los propios |
 
-`servicio` es para peluquería, estética, masajes, tatuajes y cualquier negocio con turnos que no sea uñas ni barbería: es el
-mismo rubro "Otro servicio" que se elige en Nodo Sur.
+`servicio` es para masajes, tatuajes y cualquier negocio con turnos que no entre en los otros cuatro: es el mismo rubro
+"Otro servicio" que se elige en Nodo Sur. "Quiero un corte" en una peluquería y "quiero depilarme" en una estética preguntan
+cuál (dama o caballero; qué zona), como "semi" en uñas.
+
+**Si `config.json` es de un rubro con turnos y Nodo Sur manda uno de comercio, se queda con el de `config.json`** y lo avisa
+en el registro (`rubroEntreCapas`, `src/config.js`). Pasaba con un salón vinculado antes de que la app tuviera rubros de
+servicios: al guardar la configuración del bot desde la app, el bot dejaba de dar turnos.
 
 Los servicios de ejemplo son los del mock de servicios de Nodo Sur; la seña es el 30 % del precio (redondeado a $500) en los que la piden. Cada servicio puede tener `alias` (otros nombres: "un fade", "kapping") para que el bot lo encuentre aunque no se diga el nombre entero.
 

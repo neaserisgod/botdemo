@@ -6,7 +6,7 @@
 process.env.TZ = 'America/Argentina/Buenos_Aires';
 const { spawnSync } = require('child_process');
 
-const RUBROS = ['unas', 'barberia', 'almacen', 'kiosco', 'fiambreria'];
+const RUBROS = ['unas', 'barberia', 'peluqueria', 'estetica', 'almacen', 'kiosco', 'fiambreria'];
 const rubro = process.argv[2];
 
 if (!rubro) {
@@ -262,6 +262,48 @@ const PRUEBAS = {
     caso('"afeitada con navaja"', 'afeitada con navaja', { incluye: 'Afeitado con navaja' });
     caso(`"quiero un corte el ${D1.nombre} a las 5": 17:00 (no las 5 de la mañana)`, `quiero un corte el ${nombreDia(D1)} a las 5`, { incluye: '17:00' });
     caso(`"un corte el ${D1.nombre} tipo 4 y media": 16:30`, `un corte el ${nombreDia(D1)} tipo 4 y media`, { incluye: '16:30' });
+  },
+
+  peluqueria() {
+    COMUNES();
+    CLIENTE_DIFICIL();
+    TURNOS_DIFICIL();
+    TURNOS_COMUNES();
+    TURNOS_EN_PASO();
+    console.log('\n— Peluquería —');
+    caso('"quiero un corte": pregunta dama o caballero', 'quiero un corte', { incluye: ['Corte de dama', 'Corte de caballero'], no: 'Brushing' });
+    caso('"quiero cortarme el pelo": pregunta cuál', 'quiero cortarme el pelo', { incluye: ['Corte de dama', 'Corte de caballero'] });
+    caso('"corte de mujer"', 'corte de mujer', { incluye: ['Corte de dama', '¿Qué día'] });
+    caso('"corte para mi marido"', 'corte para mi marido', { incluye: ['Corte de caballero', '¿Qué día'] });
+    caso('"cortarme las puntas": pregunta cuál', 'quiero cortarme las puntas', { incluye: 'Corte de dama' });
+    caso('"me queres teñir las raices?": color', 'me queres teñir las raices?', { incluye: 'Color' });
+    caso('"tapar las canas cuanto sale?": precio del color', 'tapar las canas cuanto sale?', { incluye: ['Color', '$30000'] });
+    caso('"hacen balayage?"', 'hacen balayage?', { incluye: 'Mechas / balayage' });
+    caso('"unos reflejos"', 'quiero unos reflejos', { incluye: 'Mechas / balayage' });
+    caso('"queratina" con q', 'cuanto sale la queratina?', { incluye: ['Alisado con keratina', '$55000'] });
+    caso('"un alisado progresivo"', 'quiero un alisado progresivo', { incluye: 'Alisado con keratina' });
+    caso('"un peinado para un casamiento": brushing', 'necesito un peinado para un casamiento', { incluye: 'Brushing' });
+    caso('"botox capilar": nutrición', 'hacen botox capilar?', { incluye: 'Nutrición capilar' });
+    caso('"el color pide seña"', ['quiero color', '1', '1', 'Sofi', 'si'], { incluye: 'seña' });
+  },
+
+  estetica() {
+    COMUNES();
+    CLIENTE_DIFICIL();
+    TURNOS_DIFICIL();
+    TURNOS_COMUNES();
+    TURNOS_EN_PASO();
+    console.log('\n— Estética —');
+    caso('"quiero depilarme": pregunta qué zona', 'quiero depilarme', { incluye: ['Depilación piernas', 'Depilación cavado', 'Depilación rostro'] });
+    caso('"cera en las piernas"', 'cera en las piernas', { incluye: ['Depilación piernas', '¿Qué día'] });
+    caso('"cuanto el cavado?": ese precio', 'cuanto el cavado?', { incluye: ['Depilación cavado', '$9000'], no: 'piernas' });
+    caso('"me sacas el bigote?": rostro', 'me sacas el bigote?', { incluye: 'Depilación rostro' });
+    caso('"limpieza de cutis"', 'quiero una limpieza de cutis', { incluye: 'Limpieza facial profunda' });
+    caso('"tengo puntos negros"', 'tengo muchos puntos negros, que me recomendas?', { incluye: 'Limpieza facial profunda' });
+    caso('"peling" mal escrito', 'cuanto sale el peling?', { incluye: ['Peeling', '$30000'] });
+    caso('"tengo la espalda contracturada": masaje', 'tengo la espalda contracturada', { incluye: 'Masaje descontracturante' });
+    caso('"drenaje linfatico"', 'quiero drenaje linfatico', { incluye: 'Drenaje linfático' });
+    caso('"piernas hinchadas": drenaje', 'tengo las piernas hinchadas', { incluye: 'Drenaje linfático' });
   },
 
   almacen() {

@@ -81,7 +81,7 @@ else
   echo "Unos datos del negocio (después se cambian desde la app de Nodo Sur, o con: nano config.json)."
   RUBRO="${RUBRO:-}"
   while ! node -e "process.exit(require('./src/plantillas').plantillaDe(process.argv[1]) ? 0 : 1)" "$RUBRO" 2>/dev/null; do
-    RUBRO=$(pregunta "Rubro (almacen, kiosco, fiambreria, otro, unas, barberia, servicio): ")
+    RUBRO=$(pregunta "Rubro (almacen, kiosco, fiambreria, otro, unas, barberia, peluqueria, estetica, servicio): ")
   done
   NOMBRE=$(pregunta "Nombre del negocio: ")
   DIRECCION=$(pregunta "Dirección (para \"¿dónde están?\"): ")

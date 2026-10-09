@@ -7,18 +7,11 @@ Argentina; en UTC falla `test/simulacion.js` 12 ("servicio + día + hora"), tamb
 **Regla del producto (el dueño):** el cliente escribe mal, apurado, enojado, todo junto y manda audios. El bot tiene que
 entenderlo igual y, si no puede, pasarlo a una persona. Cada caso nuevo va a `test/frases.js`.
 
-## 1. Un salón con turnos no puede volverse comercio por Nodo Sur (cambio chico en este repo)
+## 1. Un salón con turnos no puede volverse comercio por Nodo Sur — hecho (2026-10-09)
 
-La app de Nodo Sur solo conoce rubros de comercio (`kiosco`, `almacen`, `fiambreria`, `otro`, en
-`Nodo-Sur-Pos/lib/domain/plantillas_rubro.dart`). Si una peluquería o un salón de uñas vinculado a Nodo Sur guarda la
-configuración del bot desde la app (*Más › Bot de WhatsApp*), llega `negocio.rubro` de comercio. Como la capa de Nodo
-Sur pisa a `config.json` (ver `src/config.js`, `construir`), **el bot deja de dar turnos y pasa a tomar pedidos.**
-
-Hacer: en `src/config.js` (`construir` o `aplicarPlantilla`), si `config.json` es de un rubro de turnos (`unas`,
-`barberia`) y Nodo Sur manda uno de comercio, quedarse con el rubro de `config.json` y avisarlo en el log. Test en
-`test/nube.js` (sección 2, configuración desde la app).
-
-A futuro, lo de fondo: sumar los rubros con turnos a `PlantillaRubro` en la app (Nodo-Sur-Pos).
+`rubroEntreCapas` (`src/config.js`): si `config.json` es de un rubro con turnos y Nodo Sur manda uno de comercio, se queda
+con el de `config.json` y lo avisa en el registro. Tests en `test/nube.js` (sección 2). Lo de fondo (los rubros con turnos
+en la app) está en la rama de servicios de Nodo-Sur-Pos; el bot suma además `peluqueria` y `estetica`.
 
 ## 2. Corrector contra el vocabulario del negocio + conjugaciones de acá (este repo)
 
