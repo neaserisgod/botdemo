@@ -35,6 +35,39 @@ const SERVICIOS = {
     mechitas: 'platinado', mechas: 'platinado', reflejos: 'platinado', decoloracion: 'platinado', decolorar: 'platinado',
     decolorado: 'platinado', platinar: 'platinado', rubio: 'platinado', tenir: 'platinado', tintura: 'platinado',
   },
+  // "corte" solo no lleva a ninguno: pregunta dama o caballero.
+  peluqueria: {
+    pelo: 'corte', cabello: 'corte', cortarme: 'corte', cortar: 'corte', 'corte de pelo': 'corte', puntas: 'corte',
+    'cortar las puntas': 'corte', 'cortarme las puntas': 'corte', recorte: 'corte',
+    mujer: 'corte dama', senora: 'corte dama', chica: 'corte dama', nena: 'corte dama', femenino: 'corte dama',
+    hombre: 'corte caballero', varon: 'corte caballero', masculino: 'corte caballero', nene: 'corte caballero',
+    marido: 'corte caballero', nino: 'corte caballero',
+    peinado: 'brushing', peinar: 'brushing', peinarme: 'brushing', planchado: 'brushing', secado: 'brushing', brushin: 'brushing',
+    bruching: 'brushing', ondas: 'brushing',
+    tenir: 'color', tenirme: 'color', tenido: 'color', tintura: 'color', tinte: 'color', raices: 'color', raiz: 'color',
+    canas: 'color', 'tapar las canas': 'color', colorear: 'color', coloracion: 'color',
+    reflejos: 'mechas', mechitas: 'mechas', iluminacion: 'mechas', iluminar: 'mechas', balayage: 'mechas', balayash: 'mechas',
+    balayague: 'mechas', babylights: 'mechas', rubio: 'mechas', decoloracion: 'mechas', decolorar: 'mechas',
+    keratina: 'alisado', queratina: 'alisado', alisar: 'alisado', alisarme: 'alisado', 'alisado definitivo': 'alisado',
+    'pelo lacio': 'alisado', progresivo: 'alisado', 'alisado progresivo': 'alisado',
+    botox: 'nutricion', 'botox capilar': 'nutricion', hidratacion: 'nutricion', tratamiento: 'nutricion',
+    'pelo seco': 'nutricion', 'pelo danado': 'nutricion', ampolla: 'nutricion',
+  },
+  // "depilacion" sola no lleva a ninguno: pregunta qué zona.
+  estetica: {
+    facial: 'limpieza facial', cutis: 'limpieza facial', 'limpieza de cara': 'limpieza facial', puntos: 'limpieza facial',
+    'puntos negros': 'limpieza facial', limpieza: 'limpieza facial',
+    pelin: 'peeling', peling: 'peeling', pelling: 'peeling', manchas: 'peeling',
+    depilar: 'depilacion', depilarme: 'depilacion', cera: 'depilacion', depi: 'depilacion',
+    'media pierna': 'depilacion piernas', 'pierna entera': 'depilacion piernas',
+    tiro: 'depilacion cavado', cavado: 'depilacion cavado', bikini: 'depilacion cavado', 'cavado profundo': 'depilacion cavado',
+    'cavado completo': 'depilacion cavado', rostro: 'depilacion rostro', cara: 'depilacion rostro',
+    bozo: 'depilacion rostro', bigote: 'depilacion rostro', 'el bigote': 'depilacion rostro',
+    masajes: 'masaje', masajito: 'masaje', contractura: 'masaje', descontracturante: 'masaje', espalda: 'masaje',
+    relajante: 'masaje', contracturada: 'masaje', contracturado: 'masaje',
+    linfatico: 'drenaje linfatico', retencion: 'drenaje linfatico', 'retencion de liquidos': 'drenaje linfatico',
+    'piernas hinchadas': 'drenaje linfatico',
+  },
 };
 
 // Para todos los comercios (almacén, kiosco, fiambrería, otro): un almacén también vende puchos y un kiosco gaseosas.

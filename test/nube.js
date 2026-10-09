@@ -131,6 +131,16 @@ const ITEMS = [
   await sinc.alAviso(JSON.stringify({ bot: { config: 3 } }));
   chequear('un aviso en vivo trae la configuración nueva', config.pausa_minutos === 60);
 
+  // Un salón con turnos en config.json no se vuelve comercio porque Nodo Sur mande un rubro de comercio.
+  const { rubroEntreCapas } = configuracion;
+  const salon = rubroEntreCapas('unas', 'almacen');
+  chequear('salón con turnos + rubro de comercio de Nodo Sur: sigue dando turnos, y lo avisa', salon.rubro === 'unas' && /turnos/.test(salon.aviso));
+  chequear('una instalación vieja ("salon_de_unas") también se protege', rubroEntreCapas('salon_de_unas', 'otro').rubro === 'unas');
+  chequear('Nodo Sur con otro rubro de turnos: gana Nodo Sur', rubroEntreCapas('unas', 'barberia').rubro === 'barberia' && !rubroEntreCapas('unas', 'barberia').aviso);
+  chequear('comercio en config.json: gana Nodo Sur (también si pasa a turnos)', rubroEntreCapas('almacen', 'kiosco').rubro === 'kiosco' && rubroEntreCapas('almacen', 'unas').rubro === 'unas');
+  chequear('sin config.json (vinculado desde el arranque): gana Nodo Sur', rubroEntreCapas(null, 'almacen').rubro === 'almacen');
+  chequear('Nodo Sur sin rubro: queda el de config.json', rubroEntreCapas('barberia', undefined).rubro === 'barberia');
+
   console.log('\n— 3. Catálogo —');
   sitio.catalogo = { items: ITEMS, actualizado: 1700000000 };
   await sinc.traerCatalogo();

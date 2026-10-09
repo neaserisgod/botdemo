@@ -153,7 +153,7 @@ En un comercio (`diccionario/numeros.js`), las cantidades como se piden (*"dos c
 - **dos mensajes seguidos sin entender**: una persona, no el menú dos veces;
 - un **audio**: se le pide que lo escriba (callarse es lo peor).
 
-Todo eso está en `test/frases.js` (sección "El cliente difícil"), para los cinco rubros.
+Todo eso está en `test/frases.js` (sección "El cliente difícil"), para los siete rubros.
 
 **Cómo se mantiene**: cada frase real va a `test/frases.js` con lo que el bot tiene que hacer, por rubro, y corre con `npm test`. Lo que el bot no entiende queda anotado (tabla `no_entendidos`) y la dueña lo ve con *"qué no entendiste"*: esa lista es lo que se suma al diccionario después de cada chat real.
 

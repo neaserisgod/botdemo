@@ -58,21 +58,45 @@ function construir() {
 
   let config = fs.existsSync(ejemplo) ? leerJson(ejemplo) : {};
   const capas = [];
+  let rubroPropio = null;
 
   if (fs.existsSync(propio)) {
-    config = mezclar(config, leerJson(propio));
+    const p = leerJson(propio);
+    rubroPropio = p.negocio?.rubro || null;
+    config = mezclar(config, p);
     capas.push('config.json');
   }
   const nube = configNube();
   if (nube) {
     config = mezclar(config, nube.config);
     capas.push(`Nodo Sur (versión ${nube.version})`);
+    const rubro = rubroEntreCapas(rubroPropio, nube.config.negocio?.rubro);
+    if (rubro.aviso) console.warn(`⚠️  ${rubro.aviso}`);
+    if (rubro.rubro && config.negocio) config.negocio.rubro = rubro.rubro;
   }
   if (fs.existsSync(local)) {
     config = mezclar(config, leerJson(local));
     capas.push('config.local.json');
   }
   return { config: aplicarPlantilla(config), capas };
+}
+
+// Qué rubro vale cuando config.json y Nodo Sur no coinciden. Nodo Sur gana en todo lo demás, pero un salón con turnos
+// no puede volverse comercio porque la app le mandó un rubro de comercio: hasta que la app tuvo rubros de servicios, un
+// salón vinculado que guardaba la configuración del bot desde la app le mandaba "almacen" u "otro", y el bot dejaba de
+// dar turnos sin que nadie lo notara. Al revés (comercio en config.json, salón en Nodo Sur) no se protege: pasar a dar
+// turnos necesita cargar servicios, y eso no pasa sin querer.
+function rubroEntreCapas(propio, deNube) {
+  if (!deNube) return { rubro: propio };
+  const p = plantillaDe(propio);
+  const n = plantillaDe(deNube);
+  if (p && n && p.forma === 'turnos' && n.forma !== 'turnos') {
+    return {
+      rubro: claveDeRubro(propio),
+      aviso: `Nodo Sur manda el rubro "${deNube}" (de comercio), pero config.json es "${propio}" (con turnos): sigo dando turnos. Elegí el rubro de servicios en la app (Configuración › Tu negocio).`,
+    };
+  }
+  return { rubro: deNube };
 }
 
 // La configuración que bajó de Nodo Sur ({ version, config }), o null si no hay o está rota (se ignora, no corta).
@@ -225,4 +249,4 @@ function validar(c) {
   return malos;
 }
 
-module.exports = { cargar, recargar, construir, validar, armar, ejemplo, mezclar, rutaNube, configNube };
+module.exports = { cargar, recargar, construir, validar, armar, ejemplo, mezclar, rutaNube, configNube, rubroEntreCapas };

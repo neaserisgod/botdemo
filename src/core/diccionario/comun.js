@@ -90,8 +90,10 @@ const TEMAS = {
     'envio', 'envios', 'envian', 'delivery', 'domicilio', 'a domicilio', 'me lo traen', 'me lo llevan', 'lo traen', 'lo llevan',
     'reparto', 'repartidor', 'pedidosya', 'pedidos ya', 'rappi', 'hacen entregas', 'entregan',
   ],
+  // "cierra" va como expresión y no como palabra suelta: por sonido y con una letra de diferencia calzaba con "cera"
+  // ("cera en las piernas" contestaba los horarios en una estética). Igual acepta "sierra", que es cómo suena.
   horarios: [
-    'abierto', 'abiertos', 'abierta', 'abiertas', 'abren', 'cierran', 'cierra', 'abre', 'estan atendiendo', 'atienden hoy',
+    /\b[cs]ierr(?:a|an|en)\b/, 'abierto', 'abiertos', 'abierta', 'abiertas', 'abren', 'abre', 'estan atendiendo', 'atienden hoy',
     'hasta que hora', 'a que hora', 'horario', 'horarios', 'cuando abren', 'feriado', 'feriados',
   ],
   ubicacion: [
