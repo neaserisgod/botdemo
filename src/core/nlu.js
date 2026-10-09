@@ -43,7 +43,7 @@ const INTENCIONES = [
                  'no voy', 'no llego', 'no puedo ir', 'no vamos a poder']],
   ['confirmar', ['confirmo', 'confirmar', 'confirmado', 'ahi estoy', 'ahi estare',
                  'si voy', 'voy a ir', 'nos vemos manana']],
-  ['humano',    ['persona', 'humano', 'alguien', 'duena', 'encargada', 'urgente',
+  ['humano',    ['persona', 'humano', 'alguien', 'duena', 'dueno', 'barbero', 'encargada', 'encargado', 'urgente',
                  'hablar con', 'atiende alguien', 'me pueden llamar', 'no es lo que pregunte']],
   ['reservar',  ['turno', 'turnos', 'reservar', 'reserva', 'agendar', 'cita',
                  'sacar turno', 'pedir hora', 'tenes lugar', 'tienen lugar', 'hay lugar',
@@ -54,16 +54,24 @@ const INTENCIONES = [
 
 // Servicio mencionado por nombre: matchea si TODAS las palabras del nombre
 // aparecen en el texto (con tolerancia a typos). "quiero soft gel" → Soft gel.
+// También por sus alias (columna `alias`, separados por coma): "Fade / degradé"
+// pide las dos palabras, pero en la barbería se dice "un fade" a secas.
 function servicioPorNombre(texto, servicios) {
   const textoNorm = normalizar(texto);
   const tokens = textoNorm.split(' ');
   let mejor = null;
+  let mejorLargo = 0;
   for (const s of servicios) {
-    const palabras = normalizar(s.nombre).split(' ').filter((p) => p.length >= 3);
-    if (!palabras.length) continue;
-    if (palabras.every((p) => contiene(textoNorm, tokens, p))) {
-      // Ante empate ("retiro de esmaltado" vs otro), gana el nombre más largo
-      if (!mejor || palabras.length > normalizar(mejor.nombre).split(' ').length) mejor = s;
+    const nombres = [s.nombre, ...String(s.alias || '').split(',')].filter((n) => n.trim());
+    for (const nombre of nombres) {
+      const palabras = normalizar(nombre).split(' ').filter((p) => p.length >= 3);
+      if (!palabras.length) continue;
+      // Ante empate ("corte + barba" contra el alias "corte"), gana el que
+      // calza con más palabras: es el más específico.
+      if (palabras.every((p) => contiene(textoNorm, tokens, p)) && palabras.length > mejorLargo) {
+        mejor = s;
+        mejorLargo = palabras.length;
+      }
     }
   }
   return mejor;

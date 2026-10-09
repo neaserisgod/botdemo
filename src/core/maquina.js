@@ -20,6 +20,7 @@ const senasFlujo = require('./flujos/senas');
 const faq = require('./flujos/faq');
 const nlu = require('./nlu');
 const notif = require('./notificaciones');
+const { aQuienAtiende } = require('../plantillas');
 
 const HORAS_DERIVACION = 12;
 
@@ -39,7 +40,7 @@ const VOLVER_AL_MENU = [
 const CORTESIA = [
   'gracias', 'muchas gracias', 'mil gracias', 'genial', 'perfecto', 'dale',
   'listo', 'buenisimo', 'buenísimo', 'ok', 'oka', 'okey', 'joya', 'barbaro',
-  'bárbaro', 'nos vemos', 'besos', 'de nada', 'igualmente', '👍', '❤️', '🙌', '😊', '💅',
+  'bárbaro', 'nos vemos', 'besos', 'de nada', 'igualmente', '👍', '❤️', '🙌', '😊', '💅', '💈', '✂️',
 ];
 
 // ---------- entrada principal ----------
@@ -102,7 +103,7 @@ function noEntendi(ctx, ayuda) {
   if (n >= 2) {
     qClientas.derivar(ctx.clienta.id, HORAS_DERIVACION);
     return [
-      { para: ctx.clienta.telefono, texto: 'Disculpá, no te estoy entendiendo 😅 Ya le aviso a la dueña para que te responda personalmente en un ratito.' },
+      { para: ctx.clienta.telefono, texto: `Disculpá, no te estoy entendiendo 😅 Ya le aviso ${aQuienAtiende(ctx.config.textos)} para que te responda personalmente en un ratito.` },
       notif.derivacion(ctx.config, ctx.clienta, ctx.msj.texto || '(sin texto)'),
     ];
   }
@@ -112,7 +113,7 @@ function noEntendi(ctx, ayuda) {
 function menu(ctx, saludo) {
   const encabezado = saludo ? `${saludo}\n\n` : '';
   return responder(ctx, 'inicio',
-    `${encabezado}¿Qué necesitás?\n\n*1* — Reservar un turno 💅\n*2* — Ver precios\n*3* — Ubicación y horarios\n*4* — Hablar con una persona\n\nRespondé con el número.`);
+    `${encabezado}¿Qué necesitás?\n\n*1* — Reservar un turno ${ctx.config.textos.emoji}\n*2* — Ver precios\n*3* — Ubicación y horarios\n*4* — Hablar con una persona\n\nRespondé con el número.`);
 }
 
 function listaServicios(config) {
@@ -155,7 +156,7 @@ function inicio(ctx) {
     const turno = qTurnos.proximoDeClienta(ctx.clienta.id, fechas.aTexto(fechas.ahora()));
     if (turno) {
       qTurnos.guardarRespuestaRecordatorio(turno.id, 'confirmo');
-      return responder(ctx, 'inicio', `¡Gracias por confirmar! Te esperamos el ${fechas.diaLindo(turno.inicio.slice(0, 10))} a las ${turno.inicio.slice(11)} 💅`);
+      return responder(ctx, 'inicio', `¡Gracias por confirmar! Te esperamos el ${fechas.diaLindo(turno.inicio.slice(0, 10))} a las ${turno.inicio.slice(11)} ${ctx.config.textos.emoji}`);
     }
   }
   if (inter.intencion === 'cancelar') {
@@ -188,7 +189,7 @@ function inicio(ctx) {
 function derivarAHumano(ctx, textoCitado) {
   qClientas.derivar(ctx.clienta.id, HORAS_DERIVACION);
   return [
-    { para: ctx.clienta.telefono, texto: 'Dale, le aviso a la dueña y te responde personalmente en un ratito 🙌' },
+    { para: ctx.clienta.telefono, texto: `Dale, le aviso ${aQuienAtiende(ctx.config.textos)} y te responde personalmente en un ratito 🙌` },
     notif.derivacion(ctx.config, ctx.clienta, textoCitado || '(sin texto)'),
   ];
 }
@@ -200,11 +201,11 @@ function cancelando(ctx) {
     ctx.datos = {};
     return responder(ctx, 'inicio',
       'Listo, tu turno quedó cancelado. ¡Gracias por avisar! Cuando quieras otro, escribí *hola* 😊',
-      [notif.cancelacion(ctx.config, turno, 'canceló la clienta')]);
+      [notif.cancelacion(ctx.config, turno, `canceló ${ctx.config.textos.el_cliente}`)]);
   }
   if (ctx.texto === '2') {
     ctx.datos = {};
-    return responder(ctx, 'inicio', '¡Perfecto, tu turno sigue en pie! Te esperamos 💅');
+    return responder(ctx, 'inicio', `¡Perfecto, tu turno sigue en pie! Te esperamos ${ctx.config.textos.emoji}`);
   }
   return noEntendi(ctx, 'Respondé *1* para cancelar o *2* para mantener el turno.');
 }
@@ -239,7 +240,7 @@ function elegirServicio(ctx, servicio, fh) {
 
   const dias = agenda.diasDisponibles(ctx.config, servicio);
   if (!dias.length) {
-    return responder(ctx, 'inicio', 'Uy, no tengo horarios libres en los próximos días 😔 Escribí *4* si querés coordinar directo con la dueña.');
+    return responder(ctx, 'inicio', `Uy, no tengo horarios libres en los próximos días 😔 Escribí *4* si querés coordinar directo con ${ctx.config.textos.quien_atiende}.`);
   }
   ctx.datos.dias = dias;
   const listaDias = dias.map((d, i) => `*${i + 1}* — ${fechas.diaLindo(d)}`).join('\n');
@@ -366,7 +367,7 @@ function resumenParaConfirmar(ctx) {
   const senaTxt = (ctx.config.senas.habilitadas && s.sena > 0)
     ? `\n💸 Seña para reservar: $${s.sena}` : '';
   return responder(ctx, 'confirmando',
-    `Perfecto ${ctx.clienta.nombre}, repasemos:\n\n💅 ${s.nombre}\n📅 ${fechas.diaLindo(ctx.datos.dia)} a las ${ctx.datos.hora}\n💰 $${s.precio}${senaTxt}\n\n*1* — Confirmar\n*2* — Cambiar\n*0* — Cancelar`);
+    `Perfecto ${ctx.clienta.nombre}, repasemos:\n\n${ctx.config.textos.emoji} ${s.nombre}\n📅 ${fechas.diaLindo(ctx.datos.dia)} a las ${ctx.datos.hora}\n💰 $${s.precio}${senaTxt}\n\n*1* — Confirmar\n*2* — Cambiar\n*0* — Cancelar`);
 }
 
 function confirmando(ctx) {
@@ -391,7 +392,7 @@ function confirmando(ctx) {
     ctx.datos = {};
     const turno = qTurnos.porId(turnoId);
     return responder(ctx, 'inicio',
-      `¡Turno confirmado! 🎉\n📅 ${fechas.diaLindo(ctx.datos.dia || turno.inicio.slice(0, 10))} a las ${turno.inicio.slice(11)}\n💅 ${s.nombre}\n\nTe mandamos un recordatorio un día antes. ¡Te esperamos!`,
+      `¡Turno confirmado! 🎉\n📅 ${fechas.diaLindo(ctx.datos.dia || turno.inicio.slice(0, 10))} a las ${turno.inicio.slice(11)}\n${ctx.config.textos.emoji} ${s.nombre}\n\nTe mandamos un recordatorio un día antes. ¡Te esperamos!`,
       [notif.turnoConfirmado(ctx.config, turno),
        ...notif.invitacionCalendario(ctx.config, turno),
        ...notif.tarjetaContacto(ctx.config, ctx.clienta, turno)]);
@@ -413,7 +414,7 @@ function esperando_comprobante(ctx) {
       if (sena) qSenas.cambiarEstado(sena.id, 'vencido', 'clienta');
       ctx.datos = {};
       return responder(ctx, 'inicio', 'Listo, cancelé la reserva y el horario quedó libre. Cuando quieras escribí *hola* 😊',
-        [notif.cancelacion(ctx.config, turno, 'canceló la clienta antes de señar')]);
+        [notif.cancelacion(ctx.config, turno, `canceló ${ctx.config.textos.el_cliente} antes de señar`)]);
     }
     return responder(ctx, 'esperando_comprobante',
       `Te espero con la *foto del comprobante* 📸 (alias: *${ctx.config.senas.alias_mp}*).\nSi te arrepentiste, escribí *0* y libero el horario.`);

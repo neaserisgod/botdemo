@@ -47,7 +47,7 @@ function procesarComprobante(config, clienta, turnoId, msj) {
     qTurnos.cambiarEstado(turnoId, 'confirmado');
     salientes.push({
       para: clienta.telefono,
-      texto: `¡Listo! Seña recibida ✅\nTu turno quedó confirmado:\n📅 ${fechas.diaLindo(turno.inicio.slice(0, 10))} a las ${turno.inicio.slice(11)}\n💅 ${turno.servicio}\n\nTe mandamos un recordatorio un día antes. ¡Te esperamos!`,
+      texto: `¡Listo! Seña recibida ✅\nTu turno quedó confirmado:\n📅 ${fechas.diaLindo(turno.inicio.slice(0, 10))} a las ${turno.inicio.slice(11)}\n${config.textos.emoji} ${turno.servicio}\n\nTe mandamos un recordatorio un día antes. ¡Te esperamos!`,
     });
     salientes.push(notif.turnoSenado(config, turno, datos, msj.rutaImagen));
     salientes.push(...notif.invitacionCalendario(config, qTurnos.porId(turnoId)));

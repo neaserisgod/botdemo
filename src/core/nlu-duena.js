@@ -27,7 +27,8 @@ const CLAVES = {
               'sale', 'cuesta', 'lista'],
   contactos: ['contacto', 'contactos', 'agenda de contactos', 'telefonos', 'teléfonos',
               'numeros de las clientas', 'pasame las clientas', 'exportar clientas',
-              'lista de clientas'],
+              'lista de clientas', 'numeros de los clientes', 'pasame los clientes',
+              'exportar clientes', 'lista de clientes'],
   ayuda:     ['ayuda', 'comandos', 'que puedo hacer', 'qué puedo hacer', 'opciones',
               'menu', 'menú', 'como funciona', 'cómo funciona', 'help'],
 };
@@ -56,7 +57,7 @@ function interpretar(texto, servicios) {
   // Aviso masivo: "aviso <mensaje>" / "avisale a todas que <mensaje>".
   // Se busca primero porque el mensaje puede contener cualquier palabra
   // ("aviso que mañana no atiendo" no tiene que interpretarse como bloqueo).
-  const av = crudo.match(/^!?(?:aviso|avisar|avisale(?: a todas)?|comunicado)\b[:,]?\s*(?:a todas\s*)?(?:que\s+)?([\s\S]+)/i);
+  const av = crudo.match(/^!?(?:aviso|avisar|avisale(?: a tod[ao]s)?|comunicado)\b[:,]?\s*(?:a tod[ao]s\s*)?(?:que\s+)?([\s\S]+)/i);
   if (av && av[1].trim().length >= 3) {
     return { accion: 'aviso', mensaje: av[1].trim(), natural: !crudo.startsWith('!') };
   }

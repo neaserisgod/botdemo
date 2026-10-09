@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS servicios (
   precio       INTEGER NOT NULL,
   sena         INTEGER NOT NULL DEFAULT 0,      -- 0 = sin seña, confirma directo
   catalogo_id  TEXT NOT NULL DEFAULT '',        -- id del ítem en el catálogo de WhatsApp Business
+  alias        TEXT NOT NULL DEFAULT '',        -- otros nombres, separados por coma ("fade,degrade")
   activo       INTEGER NOT NULL DEFAULT 1
 );
 

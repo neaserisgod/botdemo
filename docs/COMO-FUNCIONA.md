@@ -37,7 +37,7 @@ Lo que **no** usa, a propósito: sin IA ni APIs pagas (el lenguaje natural es un
 1. **better-sqlite3** si está instalado (en la PC). Es más rápido y más probado.
 2. **`node:sqlite`**, el SQLite que viene *dentro* de Node 22.5+, si el primero no está.
 
-Existe porque better-sqlite3 es C++ y hay que compilarlo, y en Termux la compilación falla: node-gyp no encuentra el NDK de Android (`Undefined variable android_ndk_path`). En vez de pelear con eso en cada celu que instalemos, en el celu no se instala y se usa el motor incorporado. Las tres suites de tests pasan con los dos motores, así que son intercambiables.
+Existe porque better-sqlite3 es C++ y hay que compilarlo, y en Termux la compilación falla: node-gyp no encuentra el NDK de Android (`Undefined variable android_ndk_path`). En vez de pelear con eso en cada celu que instalemos, en el celu no se instala y se usa el motor incorporado. Las cuatro suites de tests pasan con los dos motores, así que son intercambiables.
 
 ---
 
@@ -63,7 +63,7 @@ Un **adaptador** traduce entre eso y la librería de turno. Hay tres:
 
 Se elige al arrancar: `node src/index.js --adaptador=baileys`.
 
-Esto es lo que permitió, entre otras cosas, migrar de whatsapp-web.js a Baileys sin tocar una línea de lógica de negocio, y tener 169 tests que corren sin WhatsApp.
+Esto es lo que permitió, entre otras cosas, migrar de whatsapp-web.js a Baileys sin tocar una línea de lógica de negocio, y tener 201 tests que corren sin WhatsApp.
 
 ---
 
@@ -276,11 +276,12 @@ Al arrancar, `src/config.js` lo valida y, si algo está mal, **no arranca** y ex
 
 ## 12. Tests
 
-Tres suites, 169 chequeos, corren sin WhatsApp con `npm test`:
+Cuatro suites, 201 chequeos, corren sin WhatsApp con `npm test` (con la configuración de ejemplo: no hace falta `config.json`):
 
 - **`simulacion.js`** — el flujo completo: reservar, señar, recordar, cancelar, comandos, FAQ, catálogo, lenguaje natural.
 - **`escenarios.js`** — lo que sale mal: comprobantes con monto corto, destinatario ajeno o duplicados; carreras por el mismo horario; comandos mal usados; 40 clientas reservando en cadena; fuzzing con inyección SQL, textos de 5.000 caracteres y bytes nulos.
 - **`limites.js`** — los bordes: domingo cerrado, último turno del día, anticipación mínima, reinicio a mitad de conversación, `datos_conv` corrupto, servicio desactivado mientras alguien lo elige, derivación que expira, recordatorios que **no** deben salir.
+- **`plantillas.js`** — los rubros: una charla entera de barbería (cliente y dueño) sin un solo 💅, "clienta" ni "la dueña"; alias de servicios; textos propios de un negocio; la base de un celu instalado antes de los alias.
 
 Que corran sin WhatsApp es consecuencia directa de tener el núcleo desacoplado: se le pasan mensajes planos al motor y se mira qué devuelve.
 
@@ -291,6 +292,8 @@ Que corran sin WhatsApp es consecuencia directa de tener el núcleo desacoplado:
 | Quiero... | Toco |
 |---|---|
 | Un servicio nuevo | `config.json` → `servicios` |
+| Un rubro nuevo | `src/plantillas.js` (textos y servicios de ejemplo) y la pregunta de `setup.sh` |
+| Cambiar cómo habla el bot en un negocio | `config.json` → `textos` |
 | Que entienda otra forma de decir algo | `core/nlu.js` → el diccionario de intenciones |
 | Otra pregunta frecuente | `config.json` → `faq` y `core/flujos/faq.js` |
 | Un comando nuevo para la dueña | `core/duena.js` → el `switch` |

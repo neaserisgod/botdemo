@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const { PLANTILLAS, plantillaDe, claveDeRubro } = require('./plantillas');
+
 const RAIZ = path.join(__dirname, '..');
 
 function leerJson(ruta) {
@@ -65,6 +67,7 @@ function cargar() {
     console.log('   Para un cliente real: cp config.example.json config.json && nano config.json\n');
   }
 
+  config = aplicarPlantilla(config);
   const problemas = validar(config);
   if (problemas.length) {
     console.error('❌ Revisá config.json:\n' + problemas.map((p) => `   • ${p}`).join('\n') + '\n');
@@ -73,9 +76,37 @@ function cargar() {
   return config;
 }
 
+// Los textos del rubro van DEBAJO de lo que haya en config.json: la plantilla
+// da cómo habla el bot en una barbería o un salón de uñas, y cada negocio
+// puede pisar cualquier texto en "textos" (ej. "quien_atiende": "Juli").
+function aplicarPlantilla(config) {
+  const plantilla = plantillaDe(config.negocio?.rubro);
+  if (!plantilla) return config; // validar() lo informa
+  return {
+    ...config,
+    negocio: { ...config.negocio, rubro: claveDeRubro(config.negocio.rubro) },
+    textos: mezclar(plantilla.textos, config.textos || {}),
+  };
+}
+
+// Arma la configuración a partir de objetos ya leídos (en orden de prioridad),
+// sin tocar archivos ni cortar el proceso. Para los tests y los scripts.
+function armar(...capas) {
+  let config = {};
+  for (const capa of capas) config = mezclar(config, capa);
+  return aplicarPlantilla(config);
+}
+
+function ejemplo() {
+  return leerJson(path.join(RAIZ, 'config.example.json'));
+}
+
 // Errores de configuración típicos al dar de alta un cliente nuevo.
 function validar(c) {
   const malos = [];
+  if (!plantillaDe(c.negocio?.rubro)) {
+    malos.push(`negocio.rubro: tiene que ser uno de ${Object.keys(PLANTILLAS).join(', ')} (está: "${c.negocio?.rubro}")`);
+  }
   const esNumero = (v) => typeof v === 'string' && /^\d{11,15}$/.test(v);
 
   for (const campo of ['numero_duena', 'numero_soporte', 'numero_actual']) {
@@ -139,4 +170,4 @@ function validar(c) {
   return malos;
 }
 
-module.exports = { cargar, validar };
+module.exports = { cargar, validar, armar, ejemplo, mezclar };

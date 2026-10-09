@@ -7,12 +7,11 @@ Bot de WhatsApp para gestión de turnos: independientes y negocios chicos (barbe
 ```bash
 git clone <este-repo> bot-turnos
 cd bot-turnos && npm install
+node scripts/config-de-rubro.js barberia   # o: unas
 npm run baileys
 ```
 
-Escaneás el QR (o usás código, ver abajo) y ya está funcionando. `config.json` viene en el repo con una configuración lista; para un cliente nuevo lo editás y listo.
-
-> ⚠️ El repo incluye `config.json` con el número de la dueña: **mantenelo privado**.
+Escaneás el QR (o usás código, ver abajo) y ya está funcionando. `config.json` no está en el repo: lo arma el script con la plantilla del rubro y después se completa con los datos del negocio (ver "Rubros").
 
 ### Comandos
 
@@ -21,7 +20,7 @@ Escaneás el QR (o usás código, ver abajo) y ya está funcionando. `config.jso
 | `npm run baileys` | Producción y pruebas reales (sin Chromium, anda en el celu) |
 | `npm run consola` | Probar el flujo entero sin WhatsApp |
 | `npm run demo` | whatsapp-web.js (alternativa en PC, usa Chromium) |
-| `npm test` | Las 3 suites de tests (169 chequeos) |
+| `npm test` | Las 4 suites de tests (201 chequeos) |
 
 En modo consola: `/soy <numero>` cambia de remitente (usá el `numero_duena` del config para probar los comandos `!`), `/foto <texto>` simula un comprobante, `/producto <id>` simula el catálogo.
 
@@ -40,11 +39,33 @@ Que los dos últimos estén fuera del repo es lo que hace que **`git pull` nunca
 En cada celu, entonces:
 
 ```bash
-cp config.example.json config.json   # solo la primera vez
-nano config.json                     # números, negocio, servicios, horarios
+node scripts/config-de-rubro.js barberia   # solo la primera vez (o: unas). setup.sh lo pregunta solo
+nano config.json                           # números, negocio, servicios, horarios
 ```
 
-Al arrancar se valida el resultado y, si algo está mal, el bot lo dice en castellano y no arranca: número sin `549`, seña mayor al precio, horario invertido, día faltante.
+Al arrancar se valida el resultado y, si algo está mal, el bot lo dice en castellano y no arranca: rubro desconocido, número sin `549`, seña mayor al precio, horario invertido, día faltante.
+
+## Rubros
+
+Cada rubro tiene una plantilla en `src/plantillas.js`: cómo habla el bot y con qué servicios de ejemplo arranca un negocio nuevo. `negocio.rubro` en `config.json` elige cuál.
+
+| | `unas` (Uñas y belleza) | `barberia` (Barbería) |
+|---|---|---|
+| Emoji | 💅 | 💈 |
+| Quien recibe el turno | clienta / clientas | cliente / clientes |
+| Quien atiende | la dueña | el barbero |
+| Ejemplo para la dueña o el dueño | "el kapping ahora sale 30000" | "el corte ahora sale 13000" |
+| Servicios de ejemplo | 7 (semipermanente, esculpidas, kapping, retiro, pies, cejas, lifting) | 6 (corte, fade, corte + barba, barba, afeitado, platinado) |
+
+Los servicios de ejemplo son los del mock de servicios de Nodo Sur; la seña es el 30 % del precio (redondeado a $500) en los que la piden. Cada servicio puede tener `alias` (otros nombres: "un fade", "kapping") para que el bot lo encuentre aunque no se diga el nombre entero.
+
+Cualquier texto de la plantilla se pisa en `config.json`, sección `textos`. Por ejemplo, para que diga el nombre de quien atiende:
+
+```json
+"textos": { "quien_atiende": "Nico" }
+```
+
+El bot arma solo "le aviso a Nico", "al barbero" o "a la dueña". `config.json` con `"rubro": "salon_de_unas"` (instalaciones viejas) sigue andando como `unas`.
 
 ## Cómo está armado
 
@@ -119,7 +140,7 @@ Nunca se pierde una seña: lo que el OCR no entiende va a revisión manual, no s
 
 ## Tests
 
-`npm test` corre tres suites (169 chequeos): flujo completo, escenarios hostiles (señas falsas, carreras por el mismo horario, comandos mal usados, fuzzing) y límites (bordes de agenda, persistencia, configuración cambiada a mitad de flujo).
+`npm test` corre cuatro suites (201 chequeos): flujo completo, escenarios hostiles (señas falsas, carreras por el mismo horario, comandos mal usados, fuzzing), límites (bordes de agenda, persistencia, configuración cambiada a mitad de flujo) y plantillas (una charla entera de barbería sin nada del salón de uñas, textos propios, la base de un celu instalado antes). Corren con la configuración de ejemplo, sin `config.json`, y con los dos motores de SQLite.
 
 ## Prender, apagar y reiniciar (en el celu)
 

@@ -22,7 +22,7 @@ function tick(config) {
     salientes.push({
       para: t.telefono,
       turnoId: t.id, // ← el que confirma el envío usa esto para marcarlo
-      texto: `¡Hola ${t.clienta_nombre || ''}! 👋 Te recordamos tu turno de mañana:\n\n💅 ${t.servicio}\n📅 ${fechas.diaLindo(t.inicio.slice(0, 10))} a las ${t.inicio.slice(11)}\n\nRespondé *CONFIRMO* para confirmar o *CANCELAR* si no llegás (así liberamos el horario).`,
+      texto: `¡Hola ${t.clienta_nombre || ''}! 👋 Te recordamos tu turno de mañana:\n\n${config.textos.emoji} ${t.servicio}\n📅 ${fechas.diaLindo(t.inicio.slice(0, 10))} a las ${t.inicio.slice(11)}\n\nRespondé *CONFIRMO* para confirmar o *CANCELAR* si no llegás (así liberamos el horario).`,
     });
   }
 

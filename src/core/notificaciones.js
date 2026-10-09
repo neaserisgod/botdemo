@@ -34,7 +34,7 @@ function turnoSenado(config, turno, datos, rutaImagen) {
   return {
     para: config.numero_duena,
     imagenRuta: rutaImagen,
-    texto: `💰 *Turno señado* #${turno.id}\n${fechas.diaLindo(turno.inicio.slice(0, 10))} ${turno.inicio.slice(11)} — ${turno.servicio}\nClienta: ${turno.clienta_nombre || turno.telefono}\nSeña: $${datos.monto} (op. ${datos.nroOperacion})`,
+    texto: `💰 *Turno señado* #${turno.id}\n${fechas.diaLindo(turno.inicio.slice(0, 10))} ${turno.inicio.slice(11)} — ${turno.servicio}\n${config.textos.cliente_mayuscula}: ${turno.clienta_nombre || turno.telefono}\nSeña: $${datos.monto} (op. ${datos.nroOperacion})`,
   };
 }
 
@@ -42,7 +42,7 @@ function senaARevisar(config, turno, motivo, rutaImagen) {
   return {
     para: config.numero_duena,
     imagenRuta: rutaImagen,
-    texto: `⚠️ *Seña a revisar* — turno #${turno.id}\n${fechas.diaLindo(turno.inicio.slice(0, 10))} ${turno.inicio.slice(11)} — ${turno.servicio}\nClienta: ${turno.clienta_nombre || turno.telefono}\nMotivo: ${motivo}\n\nRespondé *!ok ${turno.id}* para aprobar o *!no ${turno.id}* para rechazar.`,
+    texto: `⚠️ *Seña a revisar* — turno #${turno.id}\n${fechas.diaLindo(turno.inicio.slice(0, 10))} ${turno.inicio.slice(11)} — ${turno.servicio}\n${config.textos.cliente_mayuscula}: ${turno.clienta_nombre || turno.telefono}\nMotivo: ${motivo}\n\nRespondé *!ok ${turno.id}* para aprobar o *!no ${turno.id}* para rechazar.`,
   };
 }
 
@@ -56,21 +56,21 @@ function senaVencida(config, turno) {
 function turnoConfirmado(config, turno) {
   return {
     para: config.numero_duena,
-    texto: `✅ *Turno nuevo* #${turno.id}\n${fechas.diaLindo(turno.inicio.slice(0, 10))} ${turno.inicio.slice(11)} — ${turno.servicio}\nClienta: ${turno.clienta_nombre || turno.telefono}`,
+    texto: `✅ *Turno nuevo* #${turno.id}\n${fechas.diaLindo(turno.inicio.slice(0, 10))} ${turno.inicio.slice(11)} — ${turno.servicio}\n${config.textos.cliente_mayuscula}: ${turno.clienta_nombre || turno.telefono}`,
   };
 }
 
 function cancelacion(config, turno, origen) {
   return {
     para: config.numero_duena,
-    texto: `❌ *Cancelación* — turno #${turno.id}\n${fechas.diaLindo(turno.inicio.slice(0, 10))} ${turno.inicio.slice(11)} — ${turno.servicio}\nClienta: ${turno.clienta_nombre || turno.telefono}\n(${origen}) El horario quedó libre.`,
+    texto: `❌ *Cancelación* — turno #${turno.id}\n${fechas.diaLindo(turno.inicio.slice(0, 10))} ${turno.inicio.slice(11)} — ${turno.servicio}\n${config.textos.cliente_mayuscula}: ${turno.clienta_nombre || turno.telefono}\n(${origen}) El horario quedó libre.`,
   };
 }
 
 function derivacion(config, clienta, textoCitado) {
   return {
     para: config.numero_duena,
-    texto: `🙋 *Necesita atención humana*\nClienta: ${clienta.nombre || clienta.telefono} (${clienta.telefono})\nÚltimo mensaje:\n> ${textoCitado}\n\nEl bot deja de responderle por 12 hs; contestale directo desde este número.`,
+    texto: `🙋 *Necesita atención humana*\n${config.textos.cliente_mayuscula}: ${clienta.nombre || clienta.telefono} (${clienta.telefono})\nÚltimo mensaje:\n> ${textoCitado}\n\nEl bot deja de responderle por 12 hs; contestale directo desde este número.`,
   };
 }
 
@@ -109,7 +109,7 @@ function tarjetaContacto(config, clienta, turno) {
     return [{
       para: config.numero_duena,
       adjunto,
-      texto: `👤 *${clienta.nombre || clienta.telefono}* es clienta nueva. Tocá el archivo para guardarla en tu agenda.`,
+      texto: `👤 *${clienta.nombre || clienta.telefono}* ${config.textos.cliente_nuevo}`,
       demora: 2500, // después del turno y del calendario
     }];
   } catch (e) {

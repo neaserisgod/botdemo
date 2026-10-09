@@ -22,7 +22,7 @@ function alReconectar(config) {
   if (ultimaReconexion && ultimaCaida.creado_en > ultimaReconexion.creado_en) return [];
   return [{
     para: config.numero_duena,
-    texto: `📶 El bot se reconectó. Estuvo sin conexión desde ${ultimaCaida.creado_en}. Si alguna clienta escribió en ese rato, ya le está respondiendo.`,
+    texto: `📶 El bot se reconectó. Estuvo sin conexión desde ${ultimaCaida.creado_en}. Si ${config.textos.algun_cliente} escribió en ese rato, ya le está respondiendo.`,
   }];
 }
 

@@ -56,9 +56,13 @@ node -e "require('node:sqlite')" 2>/dev/null || {
 
 echo "== [4/7] Configuración =="
 # config.json es de ESTE equipo y está fuera del repo: los git pull nunca lo
-# tocan. La plantilla versionada es config.example.json.
+# tocan. Se arma desde la plantilla del rubro (textos y servicios de ejemplo).
 if [ ! -f config.json ]; then
-  cp config.example.json config.json
+  RUBRO="${RUBRO:-}"
+  while [ "$RUBRO" != "unas" ] && [ "$RUBRO" != "barberia" ]; do
+    read -r -p "Rubro del negocio (unas / barberia): " RUBRO
+  done
+  node scripts/config-de-rubro.js "$RUBRO" || exit 1
   echo ">>> Cargá los datos del cliente:  nano config.json"
 else
   echo "config.json ya existe, lo dejo como está."

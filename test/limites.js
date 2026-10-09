@@ -7,7 +7,8 @@ const path = require('path');
 const RUTA_DB = path.join(os.tmpdir(), `test_lim_${Date.now()}.db`);
 process.env.RUTA_DB = RUTA_DB;
 
-const config = JSON.parse(JSON.stringify(require('../config.json')));
+const { armar, ejemplo } = require('../src/config');
+const config = armar(ejemplo());
 const db = require('../src/db');
 db.abrir(RUTA_DB);
 db.sembrarServicios(config.servicios);
