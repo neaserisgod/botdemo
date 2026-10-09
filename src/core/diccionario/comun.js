@@ -105,4 +105,23 @@ const SI = new Set(['si', 'dale', 'ok', 'oka', 'okey', 'bueno', 'obvio', 'claro'
 const NO = new Set(['no', 'nop', 'nope', 'nah', 'nono', 'no no', 'mejor no', 'dejalo', 'dejala', 'no gracias', 'para nada',
   'ni ahi', 'no quiero', 'no dale', 'no porfa', 'no por favor']);
 
-module.exports = { INTENCIONES, VOLVER_AL_MENU, CORTESIA_PRINCIPALES, CORTESIA_RELLENO, EMOJIS_CORTESIA, TEMAS, SI, NO };
+// Insultos y bronca. "Boludo" no: en Argentina es de todos los días. Solo cuentan si no pidió otra cosa en el mismo
+// mensaje ("dame un turno la puta madre" es un turno).
+const INSULTOS = [
+  'mierda', 'puta', 'puto', 'putos', 'concha', 'forro', 'forra', 'forros', 'pelotudo', 'pelotuda', 'choto', 'garca',
+  'inutil', 'inutiles', 'idiota', 'estupido', 'estupida', 'imbecil', 'tarado', 'tarada', 'pajero', 'sorete', 'verga', 'gil',
+  'hdp', 'lpm', 'lpqtp', 'ctm', 'hijo de puta', 'la concha', 'andate', 'chupame', 'cagar', 'cagada', 'basura', 'porqueria',
+  'malparido', 'trolo', 'tonto', 'tonta', 'bobo', 'boba', 'no servis', 'no sirve para nada', 'no servis para nada', 'que mal servicio',
+  'pesimo', 'pesima', 'horrible', 'vergonzoso', 'una verguenza', 'chanta', 'chantas',
+];
+const EMOJIS_ENOJO = /[😡🤬😠😤🖕💩]/u;
+
+// Apuro: lo escribe el que siente que no le contestan.
+const APURO = [
+  'hola', 'holaa', 'alo', 'aloo', 'hay alguien', 'estas', 'estan', 'contesta', 'contestame', 'contesten', 'responde',
+  'respondeme', 'respondan', 'atendeme', 'atiendan', 'y', 'y entonces', 'entonces', 'dale contesta', 'sigo esperando',
+  'estoy esperando', 'me contestas', 'me responden', 'me contestan', 'que paso', 'hello', 'oia',
+  'me atienden', 'me atienden o que', 'me van a contestar', 'para cuando',
+];
+
+module.exports = { INSULTOS, EMOJIS_ENOJO, APURO, INTENCIONES, VOLVER_AL_MENU, CORTESIA_PRINCIPALES, CORTESIA_RELLENO, EMOJIS_CORTESIA, TEMAS, SI, NO };

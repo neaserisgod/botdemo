@@ -143,6 +143,18 @@ En un comercio (`diccionario/numeros.js`), las cantidades como se piden (*"dos c
 - **Lo que viene en paquete no se fracciona**: *"2 kg de yerba"* son 2 paquetes de 1 kg; *"medio kilo de yerba"* busca el paquete de 500 g y, si no hay, dice que viene en paquete.
 - **A Nodo Sur** lo pesado viaja en gramos (`{ gid, nombre, gramos, precioCentavos }`, precio por kilo). El sitio de hoy solo acepta cantidades enteras (que para un pesable la app toma como kilos): si rechaza los gramos, los kilos enteros van como cantidad y un pedido con gramos sueltos (250 g) le llega **entero al local por WhatsApp** (estado `a_mano`), en vez de quedar trabado. Para que vaya a Encargues hace falta que el sitio (`pedidoDesdeBot`) y la app (`apartadosDePedido`) acepten `gramos`.
 
+**La regla del cliente difícil** (el dueño, 2026-10-09): hay que suponer que quien escribe lo hace mal, apurado, enojado, todo junto, manda audios y no lee lo que se le contesta. Por eso:
+
+- se compara también **por cómo suena** (`kansela` = cancela, `reserbar` = reservar, `kiero` = quiero), con **letras dadas vuelta** (`tunro`) y **palabras pegadas** (`quierounturno`);
+- las opciones del menú valen **como se escriban**: `1.`, `el 1`, `opción 2`, `uno`, `la primera`;
+- a mitad de un paso, **cambiar de tema no es no entender**: un "gracias", una pregunta de precio o de horarios se contestan sin perder el paso;
+- **apuro** (`??`, `hola???`, `contestá`) después del menú: una respuesta corta, no el menú otra vez; a la segunda, una persona;
+- **enojo** (insultos, 😡) sin otro pedido: perdón y una persona, sin discutir. Con un pedido ("dame un turno la puta madre"), se atiende el pedido. "Boludo" no cuenta;
+- **dos mensajes seguidos sin entender**: una persona, no el menú dos veces;
+- un **audio**: se le pide que lo escriba (callarse es lo peor).
+
+Todo eso está en `test/frases.js` (sección "El cliente difícil"), para los cinco rubros.
+
 **Cómo se mantiene**: cada frase real va a `test/frases.js` con lo que el bot tiene que hacer, por rubro, y corre con `npm test`. Lo que el bot no entiende queda anotado (tabla `no_entendidos`) y la dueña lo ve con *"qué no entendiste"*: esa lista es lo que se suma al diccionario después de cada chat real.
 
 Un detalle que costó: hay que borrar `"de la mañana"` del texto antes de buscar el día, o *"a las 9 de la **mañana** el lunes"* agenda para mañana en vez del lunes.

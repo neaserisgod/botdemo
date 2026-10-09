@@ -70,7 +70,7 @@ function caso(nombre, mensajes, espera, prep) {
   const de = `54911660${String(++n).padStart(5, '0')}`;
   if (prep) prep(de);
   let r = [];
-  for (const m of [].concat(mensajes)) r = motor.procesarMensaje({ de, texto: m });
+  for (const m of [].concat(mensajes)) r = motor.procesarMensaje(typeof m === 'string' ? { de, texto: m } : { de, ...m });
   const texto = r.filter((s) => s.para === de).map((s) => s.texto).join('\n');
   const aviso = r.some((s) => s.para === config.numero_duena);
   const problemas = [];
@@ -83,7 +83,7 @@ function caso(nombre, mensajes, espera, prep) {
   if (espera.y && !espera.y(de)) problemas.push('lo de después no da');
   if (problemas.length) {
     fallas++;
-    console.log(`  ✘ FALLÓ: ${nombre}  [${[].concat(mensajes).join(' | ')}]\n      ${problemas.join('; ')}\n      → ${texto.replace(/\n+/g, ' ⏎ ').slice(0, 260)}`);
+    console.log(`  ✘ FALLÓ: ${nombre}  [${[].concat(mensajes).map((m) => (typeof m === 'string' ? m : `(${m.tipo})`)).join(' | ')}]\n      ${problemas.join('; ')}\n      → ${texto.replace(/\n+/g, ' ⏎ ').slice(0, 260)}`);
   } else console.log(`  ✔ ${nombre}`);
 }
 
@@ -114,6 +114,44 @@ const COMUNES = () => {
   caso('"sos un bot?" pasa a una persona', 'sos un bot?', { aviso: true });
   caso('"menuu" vuelve al menú', ['hola', 'menuu'], { incluye: 'Volvamos al principio' });
   caso('una pregunta que cargó el negocio ("tienen wifi?")', 'tienen wifi?', { incluye: 'hay wifi' });
+};
+
+// La regla (el dueño, 2026-10-09): el cliente escribe mal, apurado, enojado, todo junto, manda audios y no lee. El bot
+// tiene que entenderlo igual, y si no puede, pasarlo a una persona antes de que se enoje más.
+const CLIENTE_DIFICIL = () => {
+  console.log('\n— El cliente difícil: escribe mal, apurado, enojado —');
+  caso('"1." es la opción 1', '1.', { no: '¿Qué necesitás?' });
+  caso('"el 1" es la opción 1', 'el 1', { no: '¿Qué necesitás?' });
+  caso('"opcion 3": ubicación y horarios', 'opcion 3', { incluye: 'Horarios' });
+  caso('"tres" (en letras): ubicación y horarios', 'tres', { incluye: 'Horarios' });
+  caso('"la cuarta": una persona', 'la cuarta', { aviso: true });
+  caso('"??" después del menú: corto, no el menú otra vez', ['hola', '??'], { incluye: 'Acá estoy', no: '¿Qué necesitás?' });
+  caso('"hola???" y "contestá": a la segunda, una persona', ['hola', 'hola???', 'contesta'], { aviso: true, incluye: 'Perdón la demora' });
+  caso('"hola" de alguien que recién llega es un saludo (no apuro)', 'hola', { incluye: '¿Qué necesitás?' });
+  caso('"bot de mierda": perdón y una persona, sin discutir', 'bot de mierda', { aviso: true, incluye: 'Perdón por la molestia', no: '¿Qué necesitás?' });
+  caso('"la concha de tu madre contestá"', 'la concha de tu madre contestá', { aviso: true, incluye: 'Perdón' });
+  caso('"sos un inútil"', 'sos un inútil', { aviso: true });
+  caso('"😡😡"', '😡😡', { aviso: true });
+  caso('"che boludo" no es un insulto (acá es de todos los días)', 'che boludo', { sinAviso: true });
+  caso('dos cosas sin sentido seguidas: una persona (no el menú dos veces)', ['asdkjh', 'qwerty'], { aviso: true, incluye: 'no te estoy entendiendo' });
+  caso('una sola: el menú, y queda anotado', 'asdkjh', { incluye: '¿Qué necesitás?', sinAviso: true });
+  caso('un audio: le pide que lo escriba (no silencio)', [{ texto: '', tipo: 'audio' }], { incluye: ['no puedo escuchar audios', 'hablar con alguien'] });
+  caso('un audio a mitad de algo no le hace perder el paso', ['hola', '3', { texto: '', tipo: 'audio' }], { incluye: 'audios', estado: 'inicio' });
+  caso('"MENU" en mayúsculas', ['hola', 'MENU'], { incluye: 'Volvamos al principio' });
+};
+
+const TURNOS_DIFICIL = () => {
+  console.log('\n— Turnos: el cliente difícil —');
+  caso('"kiero un tunro" (dos errores)', 'kiero un tunro', { incluye: '¿Qué servicio querés?' });
+  caso('"qiero reserbar"', 'qiero reserbar', { incluye: '¿Qué servicio querés?' });
+  caso('"quierounturno" (todo pegado)', 'quierounturno', { incluye: '¿Qué servicio querés?' });
+  caso('"kansela el turno" (como suena)', 'kansela el turno', { incluye: '¿Cancelo tu turno' }, conTurno(1));
+  caso('"cnacelar" (letras dadas vuelta)', 'cnacelar', { incluye: '¿Cancelo tu turno' }, conTurno(1));
+  caso('"KUANTO SALE" en mayúsculas y con k', `KUANTO SALE EL ${config.textos.ejemplo_servicio.toUpperCase()}`, { incluye: '$' });
+  caso('"nesesito turno alas 5"', `nesesito turno alas 5`, { incluye: '¿Qué servicio querés?' });
+  caso('"dame un turno la puta madre": el turno (el insulto no tapa el pedido)', 'dame un turno la puta madre', { incluye: '¿Qué servicio querés?', sinAviso: true });
+  caso('"??" a mitad de la reserva: le repite lo que estaba eligiendo', [`quiero ${config.servicios[0].nombre.toLowerCase()}`, '??'], { incluye: ['Acá estoy', 'día'], estado: 'eligiendo_dia' });
+  caso('insulto a mitad de la reserva: una persona', [`quiero ${config.servicios[0].nombre.toLowerCase()}`, 'sos un inutil'], { aviso: true });
 };
 
 const TURNOS_COMUNES = () => {
@@ -182,6 +220,8 @@ const COMERCIO_EN_PASO = () => {
 const PRUEBAS = {
   unas() {
     COMUNES();
+    CLIENTE_DIFICIL();
+    TURNOS_DIFICIL();
     TURNOS_COMUNES();
     TURNOS_EN_PASO();
     console.log('\n— Uñas —');
@@ -203,6 +243,8 @@ const PRUEBAS = {
 
   barberia() {
     COMUNES();
+    CLIENTE_DIFICIL();
+    TURNOS_DIFICIL();
     TURNOS_COMUNES();
     TURNOS_EN_PASO();
     console.log('\n— Barbería —');
@@ -224,6 +266,7 @@ const PRUEBAS = {
 
   almacen() {
     COMUNES();
+    CLIENTE_DIFICIL();
     COMERCIO();
     COMERCIO_EN_PASO();
     console.log('\n— Almacén: pedidos —');
@@ -244,6 +287,7 @@ const PRUEBAS = {
 
   kiosco() {
     COMUNES();
+    CLIENTE_DIFICIL();
     COMERCIO();
     console.log('\n— Kiosco —');
     caso('"cuanto los marlboro"', 'cuanto los marlboro', { incluye: 'Cigarrillos Marlboro' });
@@ -253,6 +297,7 @@ const PRUEBAS = {
 
   fiambreria() {
     COMUNES();
+    CLIENTE_DIFICIL();
     COMERCIO();
     console.log('\n— Fiambrería: lo que se pesa —');
     caso('"cuanto esta el jamon?": el precio por kilo', 'cuanto esta el jamon?', { incluye: 'Jamón cocido Paladini — $15.000 el kilo' });
@@ -308,6 +353,9 @@ function COMERCIO() {
   caso('"tienen puchos?"', 'tienen puchos?', { incluye: 'Cigarrillos Marlboro' });
   caso('"dos cocas" (sin decir pedido): las cocas', 'dos cocas', { incluye: 'Coca Cola' });
   caso('"papel higienico"', 'tenes papel higienico?', { incluye: 'Higienol' });
+  caso('"tenes yerva?" (con v)', 'tenes yerva?', { incluye: 'Yerba Playadito' });
+  caso('"jamon kosido" (como suena)', 'precio del jamon kosido', { incluye: 'Jamón cocido Paladini' });
+  caso('"TENES COCA" en mayúsculas', 'TENES COCA', { incluye: 'Coca Cola' });
   caso('"hay coca de 1,5?": la de 1,5 L', 'hay coca de 1,5?', { incluye: 'Coca Cola Zero 1,5 L', no: '2,25' });
   caso('"tenes queso? alguien me atiende": el queso y la opción de una persona', 'tenes queso? alguien me atiende', { incluye: ['Queso cremoso', 'escribí *4*'], sinAviso: true });
   caso('pedido "jamon y queso" (se pesan): cuánto jamón primero, después cuál queso', ['pedido', 'jamon y queso', '1/4'], { incluye: ['250 g de Jamón cocido', '¿Cuál de estos', 'Queso cremoso'] });

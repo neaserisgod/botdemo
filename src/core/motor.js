@@ -2,7 +2,7 @@
 // mensajes "planos" y recibe una lista de mensajes salientes. El núcleo no
 // sabe nada de whatsapp-web.js ni de Baileys.
 //
-// Mensaje entrante:  { de, texto, rutaImagen?, productoId? }
+// Mensaje entrante:  { de, texto, rutaImagen?, productoId?, tipo? }   (tipo 'audio': una nota de voz)
 // Mensaje saliente:  { para, texto, imagenRuta? }
 const qClientas = require('../db/consultas/clientas');
 const maquina = require('./maquina');
@@ -22,6 +22,13 @@ function crearMotor(config) {
 
     // Derivada a humano: el bot calla mientras la dueña atiende a mano.
     if (qClientas.estaDerivada(clienta)) return [];
+
+    // Un audio: el bot no lo puede escuchar. Callarse es lo peor (el cliente cree que lo ignoran): se le pide que lo
+    // escriba, sin perder el paso en el que estaba.
+    if (msj.tipo === 'audio') {
+      return [{ para: clienta.telefono,
+        texto: `🎤 Perdón, no puedo escuchar audios. ¿Me lo escribís? Si preferís hablar con ${config.textos.quien_atiende}, escribí *hablar con alguien*.` }];
+    }
 
     // Un comercio (almacén, kiosco…) atiende consultas y pedidos; una barbería o un salón de uñas, turnos. Se lee cada
     // vez: la configuración se puede recargar desde Nodo Sur sin reiniciar.

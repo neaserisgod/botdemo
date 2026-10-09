@@ -36,9 +36,25 @@ function desestirar(palabra) {
 function expandir(texto) {
   return texto.split(' ').map((p) => {
     if (!p) return p;
+    if (ABREVIATURAS[p] !== undefined) return ABREVIATURAS[p]; // antes de desestirar: "mnn" (mñn) no es "mn"
     const d = /^[a-z]+$/.test(p) ? desestirar(p) : p;
     return ABREVIATURAS[d] ?? d;
   }).join(' ');
+}
+
+// Cómo SUENA una palabra, para que "kansela", "reserbar", "nesesito", "kiero" y "ola" sean "cancela", "reservar",
+// "necesito", "quiero" y "hola": se escribe como se escucha. qu/k/c(a,o,u) → k; c(e,i)/z → s; v → b; ll/y → y; g(e,i) → j;
+// sin h (salvo ch); sin letras dobles.
+function sonido(palabra) {
+  return palabra
+    .replace(/ch/g, 'X')
+    .replace(/h/g, '')
+    .replace(/qu(?=[ei])/g, 'k').replace(/q/g, 'k')
+    .replace(/c(?=[ei])/g, 's').replace(/c/g, 'k')
+    .replace(/z/g, 's').replace(/v/g, 'b').replace(/w/g, 'u')
+    .replace(/ll/g, 'y').replace(/g(?=[ei])/g, 'j')
+    .replace(/([a-z])\1+/g, '$1')
+    .replace(/X/g, 'ch');
 }
 
 // Los tonos de piel y la marca de "emoji en color": "👍🏻" es "👍".
@@ -53,4 +69,4 @@ function esRisa(textoNorm, crudo) {
   return !t && /^[\s😂🤣😅😆😁😄]+$/u.test(sinModificadores(crudo)) && /[😂🤣😅😆😁😄]/u.test(crudo);
 }
 
-module.exports = { expandir, desestirar, sinModificadores, esRisa, ABREVIATURAS };
+module.exports = { expandir, desestirar, sonido, sinModificadores, esRisa, ABREVIATURAS };

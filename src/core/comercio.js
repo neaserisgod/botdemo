@@ -16,7 +16,8 @@ const faq = require('./flujos/faq');
 const nlu = require('./nlu');
 const numeros = require('./diccionario/numeros');
 const rubros = require('./diccionario/rubros');
-const { responder, noEntendi, anotarNoEntendido, derivarAHumano, responderTema, numerosDe } = require('./maquina');
+const { responder, noEntendi, anotarNoEntendido, derivarAHumano, responderTema, numerosDe, apuro, enojo, menuVisto } = require('./maquina');
+const { aQuienAtiende } = require('../plantillas');
 
 // Los sinónimos de productos del rubro (diccionario/rubros.js): "birra" → cerveza, "puchos" → cigarrillos.
 const sinonimos = (ctx) => rubros.productosDe(ctx.config.negocio.rubro);
@@ -45,6 +46,7 @@ function procesar(config, clienta, msj) {
 
 function menu(ctx, saludo) {
   const encabezado = saludo ? `${saludo}\n\n` : '';
+  menuVisto(ctx);
   return responder(ctx, 'inicio',
     `${encabezado}¿Qué necesitás?\n\n*1* — Consultar precios ${ctx.config.textos.emoji}\n*2* — Hacer un pedido para retirar\n*3* — Ubicación y horarios\n*4* — Hablar con una persona\n\nRespondé con el número, o escribime directo qué buscás.`);
 }
@@ -64,9 +66,16 @@ const PIDE_PRECIO = ['precio', 'precios', 'cuanto', 'sale', 'cuesta', 'vale', 'h
 const consultando = (ctx) => inicio(ctx, 'consultando');
 
 function inicio(ctx, estado = 'inicio') {
-  const t = ctx.texto;
+  let t = ctx.texto;
+  const sinEntender = ctx.datos.sinEntender || 0;
+  delete ctx.datos.sinEntender;
   if (!t || nlu.esRisa(t)) return [];
   if (nlu.esCortesia(t)) return responder(ctx, 'inicio', '¡Gracias a vos! 😊 Cualquier cosa escribime *hola*.');
+  const apurado = apuro(ctx);
+  if (apurado) return apurado;
+  // Las opciones del menú como las escriba ("1.", "el 1", "opción 2", "uno")
+  const op = nlu.opcionMenu(t);
+  if (op && op <= 4) t = String(op);
 
   if (t === '1') return responder(ctx, 'consultando', `Decime qué producto buscás y te paso el precio y si hay ${ctx.config.textos.emoji}\n(por ejemplo: *coca*, *pan lactal*)`);
   if (t === '2') return empezarPedido(ctx);
@@ -114,11 +123,18 @@ function inicio(ctx, estado = 'inicio') {
       return responder(ctx, estado, 'No encontré ese producto 🤔 Probá con otro nombre, o escribí *4* para preguntarle a una persona.');
     }
   }
-  if (inter.intencion === 'saludo' || !pregunta) {
-    if (inter.intencion !== 'saludo') anotarNoEntendido(ctx);
-    return menu(ctx, `¡Hola! 👋 Soy el asistente de *${ctx.config.negocio.nombre}*.`);
+  // Enojo sin otro pedido: perdón, y una persona.
+  const enojado = enojo(ctx);
+  if (enojado) return enojado;
+  if (inter.intencion === 'saludo') return menu(ctx, `¡Hola! 👋 Soy el asistente de *${ctx.config.negocio.nombre}*.`);
+  // Lo que no se entendió queda anotado; a la segunda seguida, una persona en vez del menú otra vez.
+  anotarNoEntendido(ctx);
+  if (sinEntender >= 1) {
+    return derivarAHumano(ctx, ctx.msj.texto, `Perdón, no te estoy entendiendo 😅 Ya le aviso ${aQuienAtiende(ctx.config.textos)} para que te responda personalmente.`);
   }
-  return noEntendi(ctx, 'No te entendí bien 🤔 Decime qué producto buscás, o escribí *menú* para ver las opciones.');
+  ctx.datos.sinEntender = sinEntender + 1;
+  if (!pregunta) return menu(ctx, `¡Hola! 👋 Soy el asistente de *${ctx.config.negocio.nombre}*.`);
+  return responder(ctx, estado, 'No te entendí bien 🤔 Decime qué producto buscás, o escribí *menú* para ver las opciones.');
 }
 
 // El peso que se nombra en cualquier lugar del mensaje ("¿cuánto sale 1/4 de jamón?") y lo que sale, si es un pesable.
@@ -451,6 +467,8 @@ function entenderEnPaso(ctx, ayuda) {
   if (estado === 'inicio' || estado === 'consultando') return null;
   if (!t || nlu.esRisa(t)) return [];
   if (nlu.esCortesia(t)) return responder(ctx, estado, `😊 ${ayuda}`);
+  const apurado = apuro(ctx, ayuda);
+  if (apurado) return apurado;
   const tm = nlu.tema(ctx.config, t);
   if (tm) {
     const r = responderTema(ctx, tm, POR_DEFECTO, estado);
@@ -458,7 +476,7 @@ function entenderEnPaso(ctx, ayuda) {
     return r;
   }
   if (nlu.interpretar(t).intencion === 'humano') return derivarAHumano(ctx, ctx.msj.texto);
-  return null;
+  return enojo(ctx);
 }
 
 // El mensaje para el cliente cuando el local resolvió su pedido en la app.

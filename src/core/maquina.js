@@ -122,6 +122,7 @@ function noEntendi(ctx, ayuda) {
 
 function menu(ctx, saludo) {
   const encabezado = saludo ? `${saludo}\n\n` : '';
+  ctx.datos.menuVisto = Date.now();
   return responder(ctx, 'inicio',
     `${encabezado}¿Qué necesitás?\n\n*1* — Reservar un turno ${ctx.config.textos.emoji}\n*2* — Ver precios\n*3* — Ubicación y horarios\n*4* — Hablar con una persona\n\nRespondé con el número.`);
 }
@@ -152,10 +153,14 @@ const esPreguntaDePrecio = (ctx, t) => {
 
 // ---------- estados ----------
 function inicio(ctx) {
-  const t = ctx.texto;
+  let t = ctx.texto;
   // Lo que se ofreció en el mensaje anterior ("¿Querés reservarlo? Respondé sí"): vale solo para este mensaje.
   const ofrecido = ctx.datos.ofrecido;
   delete ctx.datos.ofrecido;
+
+  // Cuántas veces seguidas no se entendió en el menú (vale hasta que entienda algo).
+  const sinEntender = ctx.datos.sinEntender || 0;
+  delete ctx.datos.sinEntender;
 
   // Sin texto (sticker, audio, foto suelta) o una risa: silencio, nada de menú.
   if (!t || nlu.esRisa(t)) return [];
@@ -165,12 +170,17 @@ function inicio(ctx) {
     if (s && s.activo) return elegirServicio(ctx, s);
   }
 
+  const apurado = apuro(ctx);
+  if (apurado) return apurado;
+
   // "gracias", "genial", un emoji: respuesta corta y listo.
   if (nlu.esCortesia(t)) {
     return responder(ctx, 'inicio', '¡Gracias a vos! 😊 Cualquier cosa escribime *hola* y te ayudo.');
   }
 
-  // Opciones numéricas del menú
+  // Opciones numéricas del menú, como las escriba ("1.", "el 1", "opción 2", "uno")
+  const op = nlu.opcionMenu(t);
+  if (op && op <= 4) t = String(op);
   if (t === '1') {
     ctx.datos = {};
     return responder(ctx, 'eligiendo_servicio',
@@ -180,9 +190,15 @@ function inicio(ctx) {
   if (t === '3') return responder(ctx, 'inicio', faq.ubicacionYHorarios(ctx.config));
   if (t === '4') return derivarAHumano(ctx, '(pidió hablar con una persona)');
 
-  return entender(ctx) || (() => {
-    // Saludo o cualquier otra cosa → menú de bienvenida. Lo que no era un saludo queda anotado.
-    if (nlu.interpretar(t).intencion !== 'saludo') anotarNoEntendido(ctx);
+  return entender(ctx) || enojo(ctx) || (() => {
+    // Saludo → menú de bienvenida. Otra cosa: queda anotada, y si es la segunda seguida que no se entiende, mejor una
+    // persona que mostrarle el menú otra vez a alguien que ya se está cansando.
+    if (nlu.interpretar(t).intencion === 'saludo') return menu(ctx, `¡Hola! 👋 Soy el asistente de *${ctx.config.negocio.nombre}*.`);
+    anotarNoEntendido(ctx);
+    if (sinEntender >= 1) {
+      return derivarAHumano(ctx, ctx.msj.texto, `Perdón, no te estoy entendiendo 😅 Ya le aviso ${aQuienAtiende(ctx.config.textos)} para que te responda personalmente.`);
+    }
+    ctx.datos.sinEntender = sinEntender + 1;
     return menu(ctx, `¡Hola! 👋 Soy el asistente de *${ctx.config.negocio.nombre}*.`);
   })();
 }
@@ -277,6 +293,26 @@ function entender(ctx, paso = null) {
   return null;
 }
 
+// Apuro ("??", "hola???", "contestá", "hay alguien?") después de haber visto el menú hace poco: contestar corto, no el
+// menú de nuevo. A la segunda, una persona. `ayuda`: la pregunta del paso en el que está (a mitad de una reserva).
+function apuro(ctx, ayuda) {
+  if (!nlu.esApuro(ctx.msj.texto)) return null;
+  const reciente = ctx.datos.menuVisto && Date.now() - ctx.datos.menuVisto < 30 * 60000;
+  if (!ayuda && !reciente) return null; // un "hola" de alguien que recién llega es un saludo
+  const veces = (ctx.datos.apuros || 0) + 1;
+  if (veces >= 2) return derivarAHumano(ctx, ctx.msj.texto, `Perdón la demora 🙏 Ya le aviso ${aQuienAtiende(ctx.config.textos)} para que te responda personalmente.`);
+  ctx.datos.apuros = veces;
+  return responder(ctx, ctx.clienta.estado_conv || 'inicio', ayuda
+    ? `Acá estoy 🙂 ${ayuda}`
+    : `Acá estoy 🙂 Escribime lo que necesitás, como te salga: un turno, precios, horarios… o *4* para hablar con ${ctx.config.textos.quien_atiende}.`);
+}
+
+// Enojo (insultos, 😡) sin otro pedido en el mensaje: no se discute ni se manda el menú. Perdón, y una persona.
+function enojo(ctx) {
+  if (!nlu.esInsulto(ctx.msj.texto)) return null;
+  return derivarAHumano(ctx, ctx.msj.texto, `Perdón por la molestia 🙏 Ya le aviso ${aQuienAtiende(ctx.config.textos)} para que te atienda personalmente.`);
+}
+
 // A mitad de un paso, lo que se contestó (un precio, cómo se paga) sigue con la pregunta del paso: no se pierde dónde
 // estaba la reserva.
 function seguirEnPaso(ctx, paso, r) {
@@ -292,7 +328,7 @@ function entenderEnPaso(ctx, ayuda) {
   const estado = ctx.clienta.estado_conv;
   if (estado === 'inicio') return null;
   if (nlu.esCortesia(t)) return responder(ctx, estado, `😊 ${ayuda}`);
-  return entender(ctx, { estado, ayuda });
+  return apuro(ctx, ayuda) || entender(ctx, { estado, ayuda }) || enojo(ctx);
 }
 
 // "no puedo ir el viernes, ¿me lo pasás para el sábado?": el mismo turno, en otro día u hora. Lo que propone está
@@ -310,10 +346,10 @@ function reprogramar(ctx, turno) {
   return r;
 }
 
-function derivarAHumano(ctx, textoCitado) {
+function derivarAHumano(ctx, textoCitado, texto) {
   qClientas.derivar(ctx.clienta.id, ctx.config.pausa_minutos);
   return [
-    { para: ctx.clienta.telefono, texto: `Dale, le aviso ${aQuienAtiende(ctx.config.textos)} y te responde personalmente en un ratito 🙌` },
+    { para: ctx.clienta.telefono, texto: texto || `Dale, le aviso ${aQuienAtiende(ctx.config.textos)} y te responde personalmente en un ratito 🙌` },
     notif.derivacion(ctx.config, ctx.clienta, textoCitado || '(sin texto)'),
   ];
 }
@@ -630,4 +666,4 @@ function esperando_comprobante(ctx) {
 
 // Lo común con la conversación de un comercio (`comercio.js`): una sola forma de responder, de "no entendí" y de pasarle
 // la charla a una persona.
-module.exports = { procesar, responder, noEntendi, anotarNoEntendido, derivarAHumano, responderTema, numerosDe };
+module.exports = { procesar, responder, noEntendi, anotarNoEntendido, derivarAHumano, responderTema, numerosDe, apuro, enojo, menuVisto: (ctx) => { ctx.datos.menuVisto = Date.now(); } };
