@@ -76,6 +76,9 @@ function inicio(ctx, estado = 'inicio') {
   const norm = nlu.normalizar(t);
   const tokens = norm.split(' ');
   const inter = nlu.interpretar(t);
+  // "hola, ¿me podés cortar 200 de jamón, 1/4 de queso y 100 de salame?": el pedido entero en el primer mensaje.
+  const enMensaje = pedidoEnElMensaje(ctx);
+  if (enMensaje) return enMensaje;
   if (PIDE_PEDIDO.some((k) => nlu.contiene(norm, tokens, k))) return empezarPedido(ctx);
 
   // Lo que pregunta en el mismo mensaje va antes que pasarlo a una persona: "¿alguien me atiende? quiero saber si tienen
@@ -86,6 +89,10 @@ function inicio(ctx, estado = 'inicio') {
   // Envíos, cómo se paga, horarios, ubicación y las preguntas que cargó el negocio.
   const tm = nlu.tema(ctx.config, t);
   if (tm) return responderTema(ctx, tm, POR_DEFECTO, estado === 'consultando' ? 'consultando' : 'inicio');
+
+  // "¿cuánto sale 1/4 de jamón?": lo que sale ese peso.
+  const conPeso = precioDePeso(ctx, estado);
+  if (conPeso) return conPeso;
 
   const pregunta = PIDE_PRECIO.some((k) => tokens.includes(k)) || t.includes('?');
   if (catalogo.palabrasClave(t).length) {
@@ -114,7 +121,56 @@ function inicio(ctx, estado = 'inicio') {
   return noEntendi(ctx, 'No te entendí bien 🤔 Decime qué producto buscás, o escribí *menú* para ver las opciones.');
 }
 
+// El peso que se nombra en cualquier lugar del mensaje ("¿cuánto sale 1/4 de jamón?") y lo que sale, si es un pesable.
+function precioDePeso(ctx, estado) {
+  if (!catalogo.cargado()) return null;
+  const palabras = (ctx.msj.texto || '').replace(/[¿?!¡]/g, ' ').trim().split(/\s+/);
+  for (let i = 0; i < palabras.length; i++) {
+    const p = numeros.pesoInicial(palabras.slice(i).join(' '));
+    if (!p) continue;
+    const pesables = catalogo.buscar(p.resto, 5, sinonimos(ctx)).resultados.filter(catalogo.esPesable);
+    if (!pesables.length) return null;
+    const lineas = pesables.map((x) => `• ${numeros.textoPeso(p.gramos)} de ${catalogo.nombreCorto(x)} — ${catalogo.plata(catalogo.precioDeGramos(x.precioCentavos, p.gramos))} (a ${catalogo.plata(x.precioCentavos)} el kilo)${x.hay ? '' : ' ❌ sin stock'}`);
+    return responder(ctx, estado, `${lineas.join('\n')}\n\n${AVISO_PRECIO}\nPara pedir, escribí *pedido*.`);
+  }
+  return null;
+}
+
 // ---------- pedido ----------
+// Verbos de pedido de mostrador: "cortame", "¿me podés cortar…?", "preparame", "separame", "dame", "quiero", "me llevo".
+const VERBO_PEDIDO = '(?:me )?(?:podes |podrias |puedes |vas a )?(?:cortar|cortame|cortas|preparar|preparame|preparas|separar|separame|separas|guardar|guardame|guardas|anotar|anotame|anotas|dar|dame|das|mandar|mandame|quiero|quisiera|queria|necesito|me llevo|llevo|encargar|encargo|pedir|pido|traeme|me traes)';
+const SALUDO_INICIAL = /^(?:(?:hola|holis|buenas|buen dia|buenos dias|buenas tardes|buenas noches|che|como va|que tal|disculpa|perdon)[\s,!.¡¿?]*)+/;
+const RELLENO_FINAL = /[\s,.!?¿¡]*(?:(?:porfa|por favor|gracias|plis|please|dale)[\s,.!?¿¡]*)*$/;
+
+// Si el mensaje es un pedido ("hola, ¿me podés cortar 200 de jamón y 1/4 de queso?", "quiero 2 cocas y 1/4 de jamón"),
+// arranca el pedido con todo anotado. Hace falta un verbo de pedido o que algún renglón traiga cantidad o peso, y que
+// algún producto exista; "¿cuánto sale el 1/4 de jamón?" o "¿tienen coca?" siguen siendo consultas.
+function pedidoEnElMensaje(ctx) {
+  if (!catalogo.cargado()) return null;
+  let t = (ctx.msj.texto || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(SALUDO_INICIAL, '');
+  const norm = nlu.normalizar(t);
+  if (/\b(?:cuanto|cuanta|precio|precios|sale|salen|cuesta|cuestan|vale|valen)\b/.test(norm)) return null;
+  const conVerbo = new RegExp(`^${VERBO_PEDIDO}\\b\\s*`);
+  const verbo = conVerbo.test(t);
+  t = t.replace(conVerbo, '').replace(RELLENO_FINAL, '');
+  let lineas = separarLineas(t);
+  if (!lineas.length) return null;
+  const esProducto = ({ r }) => ['anotar', 'elegir', 'pesar', 'paquete'].includes(r.tipo);
+  let leidas = lineas.map((l) => ({ l, r: leerLinea(ctx, l) }));
+  // "¿me cortás jamón y queso?": si así no hay producto, la "y" separa dos.
+  if (!leidas.some(esProducto) && /\s+y\s+/.test(t)) {
+    lineas = lineas.flatMap((l) => l.split(/\s+y\s+/)).filter(Boolean);
+    leidas = lineas.map((l) => ({ l, r: leerLinea(ctx, l) }));
+  }
+  const productos = leidas.filter(esProducto);
+  const conCantidad = leidas.some(({ l }) => numeros.pesoInicial(l) || numeros.cantidadInicial(l));
+  if (!productos.length || !(verbo || conCantidad)) return null;
+  ctx.datos = { items: [] };
+  const r = anotarVarias(ctx, lineas, []);
+  r[0].texto = `¡Dale! ${ctx.config.textos.emoji} Lo preparamos para que lo *retires en el local*.\n\n${r[0].texto}`;
+  return r;
+}
+
 function empezarPedido(ctx) {
   if (!catalogo.cargado()) return sinCatalogo(ctx);
   ctx.datos = { items: [] };
@@ -226,7 +282,7 @@ const textoPaquete = (p) => `*${p.nombre}* viene en paquete, no se vende suelto 
 // Varios productos en un mensaje: uno por renglón, o separados por coma ("2 yerba, 1 coca"). La coma entre dos números
 // es de una medida ("2,25 L") y no separa. También "un fernet y 2 cocas": la "y" separa solo si sigue una cantidad o un
 // peso ("jamón y queso" se prueba aparte, si no hay un producto que se llame así).
-const ANTES_DE_CANTIDAD = new RegExp(`(?<!\\b(?:kilo|kilos|kg))\\s+y\\s+(?=(?:\\d|1/|un cuarto|medio|media|un par|${Object.keys(numeros.PALABRAS).join('|')})\\b)`, 'i');
+const ANTES_DE_CANTIDAD = new RegExp(`(?<!\\b(?:kilo|kilos|kg))\\s+y\\s+(?=\\d|1/|(?:un cuarto|medio|media|un par|${Object.keys(numeros.PALABRAS).join('|')})\\b)`, 'i');
 function separarLineas(texto) {
   return texto.split(/\n|,(?!\d)|(?<!\d),/).flatMap((x) => x.split(ANTES_DE_CANTIDAD)).map((x) => x.trim()).filter(Boolean);
 }

@@ -173,6 +173,8 @@ const COMERCIO_EN_PASO = () => {
   console.log('\n— Comercio: a mitad del pedido —');
   caso('"gracias" a mitad del pedido: sigue, sin "no entiendo"', ['pedido', 'alfajor', 'gracias'], { incluye: 'listo', estado: 'armando_pedido', no: 'no te estoy entendiendo' });
   caso('"¿hacen envíos?" a mitad del pedido: contesta y sigue', ['pedido', 'alfajor', 'hacen envios?'], { incluye: ['retirar en el local', '¿Algo más?'], estado: 'armando_pedido' });
+  caso('"quiero 2 cocas y 2 alfajores" en el primer mensaje: pregunta qué coca y sigue con los alfajores', ['quiero 2 cocas y 2 alfajores', '1'], { incluye: ['2 × Coca Cola 2,25 L', '2 × Alfajor Jorgito'], estado: 'armando_pedido' });
+  caso('"tenés coca?" no arranca un pedido', 'tenes coca?', { estado: 'inicio', incluye: 'Coca Cola' });
   caso('"listo gracias" termina el pedido', ['pedido', 'alfajor', 'listo gracias'], { incluye: '¿A nombre de quién' });
   caso('"si" para confirmar el pedido', ['pedido', 'alfajor', 'listo', 'Sofi', 'si'], { incluye: 'Le pasé tu pedido' });
 };
@@ -280,6 +282,17 @@ const PRUEBAS = {
     caso('al confirmar, lo pesado va en gramos',
       ['pedido', '1/4 de jamon', 'alfajor', 'listo', 'Sofi', '1'], { incluye: 'Le pasé tu pedido',
         y: () => { const p = qPedidos.porEnviar().pop(); return p && p.datos.items.some((x) => x.gid && x.gramos === 250) && p.datos.items.some((x) => x.cantidad === 1); } });
+    console.log('\n— Fiambrería: el pedido entero en el primer mensaje (prueba real, 2026-10-09) —');
+    caso('"hola me podés cortar 200 de jamón, 1/4 de queso barra y 100 de salame?"', 'hola me podés cortar 200 de jamón, 1/4 de queso barra y 100 de salame?',
+      { incluye: ['200 g de Jamón cocido Paladini', '250 g de Queso barra', '100 g de Salame Milán', '¿Algo más?'], estado: 'armando_pedido' });
+    caso('"hola me cortás medio de cremoso y 150 de mortadela porfa"', 'hola me cortás medio de cremoso y 150 de salame porfa',
+      { incluye: ['500 g de Queso cremoso', '150 g de Salame Milán'] });
+    caso('"Buenas! me preparás 300 de jamón cocido, medio de queso y 2 cocas? gracias": anota, pregunta qué queso y sigue',
+      ['Buenas! me preparás 300 de jamón cocido, medio de queso y 2 cocas? gracias', '1', '1', 'listo', 'Sofi'],
+      { incluye: ['300 g de Jamón cocido Paladini', '500 g de Queso barra', '2 × Coca Cola 2,25 L'] });
+    caso('"¿me cortás jamón y queso?" sin cantidades: pregunta cuánto de cada uno', 'me cortás jamón y queso?', { incluye: '¿Cuánto *Jamón cocido Paladini*', estado: 'eligiendo_peso' });
+    caso('"¿cuánto sale 1/4 de jamón?": lo que sale ese peso, sin arrancar un pedido', 'cuanto sale 1/4 de jamon?', { incluye: '250 g de Jamón cocido Paladini — $3.750', estado: 'inicio' });
+    caso('"¿tienen salame?" sigue siendo una consulta', 'tienen salame?', { incluye: 'Salame Milán — $20.000 el kilo', estado: 'inicio' });
     caso('solo cosas pesadas: igual se puede pedir', ['pedido', '1/4 de jamon', 'listo', 'Sofi'], { incluye: ['250 g de Jamón', '*1* — Confirmar'] });
   },
 };
