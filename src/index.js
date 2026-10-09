@@ -90,8 +90,11 @@ const adaptador = crearAdaptador(config, {
     // Modo vinculación: ya quedó la sesión guardada, salimos para que PM2 lo
     // levante como servicio (no tiene sentido dejar esta instancia corriendo).
     if (process.argv.includes('--pareo')) {
-      console.log('\n✅ Vinculado. La sesión quedó guardada en data/sesion-baileys/');
-      setTimeout(() => process.exit(0), 2000); // que termine de escribir las credenciales
+      // No salir enseguida: recién vinculado, WhatsApp le sigue pasando al bot las claves de cifrado de los chats
+      // (pre-keys, estado de la cuenta). Cortar a los 2 s dejaba la sesión a medias y después ningún mensaje se podía
+      // descifrar ("Bad MAC"). Un minuto alcanza de sobra.
+      console.log('\n✅ Vinculado. Termino de sincronizar las claves con WhatsApp (1 minuto, no cierres Termux)...');
+      setTimeout(() => process.exit(0), 60000);
       return;
     }
     // Aviso a la dueña si venimos de una caída
