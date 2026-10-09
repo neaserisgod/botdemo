@@ -1,7 +1,7 @@
 {
   "negocio": {
     "nombre": "Uñas Bariloche (DEMO)",
-    "rubro": "salon_de_unas",
+    "rubro": "unas",
     "direccion": "Mitre 150, San Carlos de Bariloche",
     "ubicacion_maps": "https://maps.app.goo.gl/ejemplo",
     "zona_horaria": "America/Argentina/Buenos_Aires"
@@ -10,6 +10,8 @@
   "numero_duena": "5492944000001",
   "numero_soporte": "5492944000002",
   "numero_actual": "5492944000003",
+
+  "pausa_minutos": 60,
 
   "horarios": {
     "lunes":     { "desde": "09:00", "hasta": "18:00" },
@@ -73,8 +75,7 @@
   },
 
   "contactos": {
-    "habilitado": true,
-    "prefijo": "💅 "
+    "habilitado": true
   },
 
   "latido": {

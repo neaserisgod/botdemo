@@ -13,19 +13,34 @@ function abrir(rutaDb) {
   if (process.env.DEPURAR) console.log(`SQLite: ${db.motor}`);
   const esquema = fs.readFileSync(path.join(__dirname, 'esquema.sql'), 'utf8');
   db.exec(esquema);
+  migrar(db);
   return db;
+}
+
+// CREATE TABLE IF NOT EXISTS no agrega columnas a una base que ya existe (la de
+// un celu instalado antes): cada columna nueva se suma acá, una sola vez.
+function migrar(base) {
+  const columnas = base.prepare('PRAGMA table_info(servicios)').all().map((c) => c.name);
+  if (!columnas.includes('alias')) {
+    base.exec("ALTER TABLE servicios ADD COLUMN alias TEXT NOT NULL DEFAULT ''");
+  }
 }
 
 // config.json es la semilla; en runtime la fuente de verdad de precios es la DB.
 function sembrarServicios(servicios) {
   const up = db.prepare(`
-    INSERT INTO servicios (id, nombre, duracion_min, precio, sena, catalogo_id, activo)
-    VALUES (@id, @nombre, @duracion_min, @precio, @sena, @catalogo_id, 1)
+    INSERT INTO servicios (id, nombre, duracion_min, precio, sena, catalogo_id, alias, activo)
+    VALUES (@id, @nombre, @duracion_min, @precio, @sena, @catalogo_id, @alias, 1)
     ON CONFLICT(id) DO UPDATE SET
       nombre = excluded.nombre, duracion_min = excluded.duracion_min,
-      precio = excluded.precio, sena = excluded.sena, catalogo_id = excluded.catalogo_id
+      precio = excluded.precio, sena = excluded.sena, catalogo_id = excluded.catalogo_id,
+      alias = excluded.alias
   `);
-  const tx = db.transaction((lista) => lista.forEach((s) => up.run(s)));
+  const tx = db.transaction((lista) => lista.forEach((s) => up.run({
+    ...s,
+    catalogo_id: s.catalogo_id ?? '',
+    alias: Array.isArray(s.alias) ? s.alias.join(',') : (s.alias ?? ''),
+  })));
   tx(servicios);
 }
 

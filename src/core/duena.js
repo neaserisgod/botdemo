@@ -48,14 +48,20 @@ function procesar(config, msj) {
 
   const r = nluDuena.interpretar(texto, qServicios.activos());
 
-  if (!r.accion) return responder(ayuda());
+  if (!r.accion) return responder(ayuda(config));
+
+  // En un comercio no hay turnos ni señas, y los precios salen de Nodo Sur: cambiarlos acá dejaría al bot diciendo
+  // un precio distinto del de la caja.
+  if (config.forma === 'productos' && !ACCIONES_COMERCIO.includes(r.accion)) {
+    return responder('Eso es de los negocios con turnos 🙂 Acá los pedidos los ves y los confirmás en la app de Nodo Sur (Encargues), y los precios salen de ahí.\n\n' + ayuda(config));
+  }
 
   // El aviso masivo SIEMPRE se confirma (aunque venga con !): le llega a
   // todas las clientas y no hay forma de despublicarlo.
   if (r.accion === 'aviso') {
     const destinatarias = clientasParaAviso(config);
     if (!destinatarias.length) {
-      return responder('Todavía no tengo ninguna clienta registrada para avisarle.');
+      return responder(`Todavía no tengo ${config.textos.ningun_cliente} para avisarle.`);
     }
     pendiente = {
       accion: 'aviso', vence: Date.now() + MINUTOS_CONFIRMACION * 60000,
@@ -63,7 +69,7 @@ function procesar(config, msj) {
     };
     const minutos = Math.ceil((destinatarias.length * SEGUNDOS_ENTRE_AVISOS) / 60);
     return responder(
-      `📣 Le voy a mandar esto a *${destinatarias.length} clienta${destinatarias.length > 1 ? 's' : ''}*:\n\n` +
+      `📣 Le voy a mandar esto a *${destinatarias.length} ${destinatarias.length > 1 ? config.textos.clientes : config.textos.cliente}*:\n\n` +
       `━━━━━━━━━━\n${r.mensaje}\n━━━━━━━━━━\n\n` +
       `Los mando de a poco para que WhatsApp no lo tome como spam, así que va a tardar unos ${minutos} min.\n\n` +
       `¿Lo mando? Respondé *sí* o *no*.`);
@@ -108,7 +114,7 @@ function ejecutar(config, accion, id, r) {
         ? `\nSeña: ${sena.estado} ($${sena.monto_esperado})${sena.nro_operacion ? ` — op. ${sena.nro_operacion}` : ''}`
         : '';
       return responder(
-        `*Turno #${turno.id}* — ${turno.estado}\n📅 ${fechas.diaLindo(turno.inicio.slice(0, 10))} ${turno.inicio.slice(11)}–${turno.fin.slice(11)}\n💅 ${turno.servicio} ($${turno.precio})\n👤 ${turno.clienta_nombre || 'sin nombre'} — ${turno.telefono}${lineaSena}`);
+        `*Turno #${turno.id}* — ${turno.estado}\n📅 ${fechas.diaLindo(turno.inicio.slice(0, 10))} ${turno.inicio.slice(11)}–${turno.fin.slice(11)}\n${config.textos.emoji} ${turno.servicio} ($${turno.precio})\n👤 ${turno.clienta_nombre || 'sin nombre'} — ${turno.telefono}${lineaSena}`);
     }
 
     case 'aprobar': case 'rechazar': {
@@ -132,7 +138,7 @@ function ejecutar(config, accion, id, r) {
       qTurnos.cambiarEstado(turno.id, 'cancelado');
       return [
         { para: config.numero_duena, texto: `👎 Seña del turno #${turno.id} rechazada. El horario quedó libre y le aviso a la clienta.` },
-        { para: turno.telefono, texto: `Hubo un problema con el comprobante de tu seña y no pudimos confirmar el turno 😕 Escribinos *4* para hablar con la dueña y resolverlo.` },
+        { para: turno.telefono, texto: `Hubo un problema con el comprobante de tu seña y no pudimos confirmar el turno 😕 Escribinos *4* para hablar con ${config.textos.quien_atiende} y resolverlo.` },
       ];
     }
 
@@ -154,14 +160,14 @@ function ejecutar(config, accion, id, r) {
       const lista = qServicios.activos().map(
         (s) => `*${s.id}* — ${s.nombre}: $${s.precio}${s.sena ? ` (seña $${s.sena})` : ''}`
       ).join('\n');
-      return responder(`💰 *Precios actuales:*\n${lista}\n\nPara cambiar uno, escribime algo como:\n_"el kapping ahora sale 30000"_`);
+      return responder(`💰 *Precios actuales:*\n${lista}\n\nPara cambiar uno, escribime algo como:\n_"${ejemploPrecio(config)}"_`);
     }
 
     case 'precio_set': {
       const s = r?.servicio || qServicios.porId(r?.idServicio);
       const monto = r?.monto;
       if (!s || !monto || monto <= 0) {
-        return responder('No entendí qué precio cambiar. Probá: _"el kapping ahora sale 30000"_');
+        return responder(`No entendí qué precio cambiar. Probá: _"${ejemploPrecio(config)}"_`);
       }
       qServicios.cambiarPrecio(s.id, monto);
       return responder(`Listo: *${s.nombre}* ahora sale $${monto}.\n(Acordate de actualizar el catálogo de WhatsApp a mano 😉)`);
@@ -179,20 +185,20 @@ function ejecutar(config, accion, id, r) {
       const minutos = Math.ceil((destinatarias.length * SEGUNDOS_ENTRE_AVISOS) / 60);
       return [
         { para: config.numero_duena,
-          texto: `📣 Mandando el aviso a ${destinatarias.length} clientas. Tarda unos ${minutos} min; te aviso cuando termine.` },
+          texto: `📣 Mandando el aviso a ${destinatarias.length} ${config.textos.clientes}. Tarda unos ${minutos} min; te aviso cuando termine.` },
         ...salientes,
-        { para: config.numero_duena, texto: `✅ Aviso enviado a ${destinatarias.length} clientas.`, demora: 1000 },
+        { para: config.numero_duena, texto: `✅ Aviso enviado a ${destinatarias.length} ${config.textos.clientes}.`, demora: 1000 },
       ];
     }
 
     case 'contactos': {
       const lista = clientasParaAviso(config).filter((c) => c.nombre);
-      if (!lista.length) return responder('Todavía no tengo clientas con nombre guardado.');
+      if (!lista.length) return responder(`Todavía no tengo ${config.textos.clientes} con nombre guardado.`);
       try {
         const adjunto = contactos.archivoDeTodas(config, lista);
         return [{
           para: config.numero_duena, adjunto,
-          texto: `👥 Ahí van las *${lista.length} clientas* que tengo, con el nombre que dio cada una.\nTocá el archivo y elegí importar para agregarlas a tu agenda.`,
+          texto: `👥 Te paso *${lista.length} ${lista.length === 1 ? 'contacto' : 'contactos'}* de ${config.textos.clientes}, con el nombre que me dio cada persona.\nTocá el archivo y elegí importar para sumarlos a tu agenda.`,
         }];
       } catch (e) {
         return responder(`No pude armar el archivo de contactos: ${e.message}`);
@@ -200,11 +206,25 @@ function ejecutar(config, accion, id, r) {
     }
 
     case 'ayuda': default:
-      return responder(ayuda());
+      return responder(ayuda(config));
   }
 }
 
-function ayuda() {
+// "el kapping ahora sale 30000" en un salón de uñas, "el corte ahora sale 13000" en una barbería.
+function ejemploPrecio(config) {
+  return `el ${config.textos.ejemplo_servicio} ahora sale ${config.textos.ejemplo_precio}`;
+}
+
+// Lo que la dueña o el dueño de un comercio le puede pedir al bot.
+const ACCIONES_COMERCIO = ['aviso', 'contactos', 'ayuda'];
+
+function ayuda(config) {
+  if (config.forma === 'productos') {
+    return `Escribime como te salga 😊\n\n` +
+      `📣 *"aviso mañana abrimos a las 10"* — mensaje ${config.textos.a_todos}\n` +
+      `👥 *"pasame los contactos"* — ${config.textos.todos} para tu agenda\n\n` +
+      'Los pedidos que toma el bot los ves y los confirmás en la app de Nodo Sur (Encargues).';
+  }
   return `Escribime como te salga, te entiendo 😊\n\n` +
     `📅 *"qué tengo hoy"* — la agenda del día\n` +
     `🗓️ *"cómo viene la semana"* — próximos 7 días\n` +
@@ -213,9 +233,9 @@ function ayuda() {
     `❌ *"rechazá la 5"* — rechazar una seña\n` +
     `🗑️ *"anulá el turno 3"* — cancelar un turno\n` +
     `💰 *"precios"* — ver la lista\n` +
-    `✏️ *"el kapping ahora sale 30000"* — cambiar un precio\n` +
-    `📣 *"aviso mañana no abrimos por el feriado"* — mensaje a TODAS las clientas\n` +
-    `👥 *"pasame los contactos"* — todas las clientas para tu agenda\n\n` +
+    `✏️ *"${ejemploPrecio(config)}"* — cambiar un precio\n` +
+    `📣 *"aviso mañana no abrimos por el feriado"* — mensaje ${config.textos.a_todos}\n` +
+    `👥 *"pasame los contactos"* — ${config.textos.todos} para tu agenda\n\n` +
     `También andan los atajos: !hoy !semana !turno N !ok N !no N !anular N !precio`;
 }
 

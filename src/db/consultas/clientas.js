@@ -36,13 +36,14 @@ function limpiarNoEntendidos(id) {
   obtener().prepare('UPDATE clientas SET no_entendidos = 0 WHERE id = ?').run(id);
 }
 
-// Derivada a humano: el bot no contesta hasta esta fecha (la dueña atiende a mano).
-function derivar(id, horas) {
+// Derivada a humano: el bot no contesta hasta esta fecha (la dueña atiende a mano). En minutos: la pausa es
+// configurable (config.pausa_minutos, 1 hora por defecto; antes eran 12 hs fijas).
+function derivar(id, minutos) {
   obtener().prepare(`
-    UPDATE clientas SET derivada_hasta = datetime('now', 'localtime', '+' || ? || ' hours'),
+    UPDATE clientas SET derivada_hasta = datetime('now', 'localtime', '+' || ? || ' minutes'),
       no_entendidos = 0, estado_conv = 'inicio', datos_conv = '{}'
     WHERE id = ?
-  `).run(horas, id);
+  `).run(minutos, id);
 }
 
 function estaDerivada(c) {

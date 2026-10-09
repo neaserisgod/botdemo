@@ -156,9 +156,12 @@ function crearAdaptador(config, hooks) {
     });
 
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
-      if (type !== 'notify') return; // solo mensajes nuevos, no historial
       for (const msg of messages) {
         try {
+          // Lo que mandó el propio número desde otro dispositivo: puede llegar como 'notify' o como 'append' según
+          // cómo lo sincronice WhatsApp.
+          if (msg.key?.fromMe) { await procesarPropio(msg); continue; }
+          if (type !== 'notify') continue; // solo mensajes nuevos, no historial
           await procesarEntrante(msg);
         } catch (e) {
           console.error('Error procesando mensaje:', e.message);
@@ -167,11 +170,29 @@ function crearAdaptador(config, hooks) {
     });
   }
 
-  async function procesarEntrante(msg) {
-    if (!msg.message || msg.key.fromMe) return;
+  // Ids de lo que mandó el bot, para distinguirlo de lo que el dueño escribe a mano con el mismo número. Acotado:
+  // alcanza con los últimos, porque lo propio vuelve enseguida.
+  const enviadosPorBot = new Set();
+  function recordarEnviado(r) {
+    const id = r?.key?.id;
+    if (!id) return;
+    enviadosPorBot.add(id);
+    if (enviadosPorBot.size > 500) enviadosPorBot.delete(enviadosPorBot.values().next().value);
+  }
+
+  // Un mensaje del propio número que no mandó el bot: el dueño contestó a mano desde su celular. El bot se calla en
+  // ese chat (config.pausa_minutos).
+  async function procesarPropio(msg) {
+    if (!msg.message || enviadosPorBot.has(msg.key.id)) return;
     const remoteJid = msg.key.remoteJid || '';
     if (remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') return;
+    // Solo lo reciente: al reconectar, WhatsApp puede reenviar mensajes viejos del historial.
+    const segundos = Number(msg.messageTimestamp || 0);
+    if (segundos && Date.now() / 1000 - segundos > 120) return;
+    if (hooks.alResponderDueno) hooks.alResponderDueno(await numeroDe(msg, remoteJid));
+  }
 
+  async function numeroDe(msg, remoteJid) {
     // Chats @lid: buscar el número real en (1) senderPn del mensaje,
     // (2) el mapeo guardado, (3) el resolvedor interno de baileys.
     let jidNumero = remoteJid;
@@ -192,6 +213,14 @@ function crearAdaptador(config, hooks) {
     }
     const de = jidNumero.split('@')[0].split(':')[0];
     jidPorNumero.set(de, remoteJid);
+    return de;
+  }
+
+  async function procesarEntrante(msg) {
+    if (!msg.message || msg.key.fromMe) return;
+    const remoteJid = msg.key.remoteJid || '';
+    if (remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') return;
+    const de = await numeroDe(msg, remoteJid);
 
     const m = msg.message;
     const texto = m.conversation
@@ -231,16 +260,16 @@ function crearAdaptador(config, hooks) {
 
         const jid = jidDe(s.para);
         if (s.imagenRuta && fs.existsSync(s.imagenRuta)) {
-          await sock.sendMessage(jid, { image: fs.readFileSync(s.imagenRuta), caption: s.texto });
+          recordarEnviado(await sock.sendMessage(jid, { image: fs.readFileSync(s.imagenRuta), caption: s.texto }));
         } else if (s.adjunto && fs.existsSync(s.adjunto.ruta)) {
-          await sock.sendMessage(jid, {
+          recordarEnviado(await sock.sendMessage(jid, {
             document: fs.readFileSync(s.adjunto.ruta),
             mimetype: s.adjunto.mime || 'application/octet-stream',
             fileName: s.adjunto.nombre || 'archivo',
             caption: s.texto,
-          });
+          }));
         } else {
-          await sock.sendMessage(jid, { text: s.texto });
+          recordarEnviado(await sock.sendMessage(jid, { text: s.texto }));
         }
         enviados.push(s);
       } catch (e) {

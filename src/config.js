@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const { PLANTILLAS, plantillaDe, claveDeRubro } = require('./plantillas');
+
 const RAIZ = path.join(__dirname, '..');
 
 function leerJson(ruta) {
@@ -26,18 +28,26 @@ function mezclar(base, encima) {
   return r;
 }
 
-// La configuración se arma en tres capas, de menor a mayor prioridad:
+// La configuración se arma en capas, de menor a mayor prioridad:
 //
-//   1. config.example.json  ← versionado. La plantilla con TODOS los campos.
-//                             Al agregarse funciones nuevas, los valores por
-//                             defecto llegan por acá con un simple git pull.
-//   2. config.json          ← NO versionado. Lo del cliente de este equipo.
-//   3. config.local.json    ← NO versionado. Ajustes finos, opcional.
+//   1. config.example.json    ← versionado. La plantilla con TODOS los campos.
+//                               Al agregarse funciones nuevas, los valores por
+//                               defecto llegan por acá con un simple git pull.
+//   2. config.json            ← NO versionado. Lo del cliente de este equipo.
+//   3. data/config-nube.json  ← lo que se configura desde la app de Nodo Sur
+//                               (lo baja `nube/sincronizar.js`). Gana sobre
+//                               config.json: si el negocio lo configura desde
+//                               la app, eso es lo que vale. Queda guardado, así
+//                               que sin internet sigue andando lo último.
+//   4. config.local.json      ← NO versionado. Ajustes finos, opcional.
 //
-// Que las capas 2 y 3 estén fuera del repo es lo que hace que `git pull` nunca
+// Que las capas 2 a 4 estén fuera del repo es lo que hace que `git pull` nunca
 // choque ni pise los datos del cliente. Y que la capa 1 sea la base es lo que
 // hace que una config vieja no se rompa cuando el bot suma opciones nuevas.
-function cargar() {
+const rutaNube = () => path.join(require('./nube/cuenta').dirDatos(), 'config-nube.json');
+
+// Lee las capas que haya y aplica la plantilla del rubro. No valida ni corta el proceso.
+function construir() {
   const ejemplo = path.join(RAIZ, 'config.example.json');
   const propio = path.join(RAIZ, 'config.json');
   const local = path.join(RAIZ, 'config.local.json');
@@ -53,18 +63,34 @@ function cargar() {
     config = mezclar(config, leerJson(propio));
     capas.push('config.json');
   }
+  const nube = configNube();
+  if (nube) {
+    config = mezclar(config, nube.config);
+    capas.push(`Nodo Sur (versión ${nube.version})`);
+  }
   if (fs.existsSync(local)) {
     config = mezclar(config, leerJson(local));
     capas.push('config.local.json');
   }
+  return { config: aplicarPlantilla(config), capas };
+}
 
+// La configuración que bajó de Nodo Sur ({ version, config }), o null si no hay o está rota (se ignora, no corta).
+function configNube() {
+  try {
+    const n = JSON.parse(fs.readFileSync(rutaNube(), 'utf8'));
+    return n && n.config && typeof n.config === 'object' ? n : null;
+  } catch { return null; }
+}
+
+function cargar() {
+  const { config, capas } = construir();
   if (capas.length) {
     console.log(`Configuración: config.example.json + ${capas.join(' + ')}`);
   } else {
     console.log('⚠️  Solo hay config.example.json (datos de demo).');
-    console.log('   Para un cliente real: cp config.example.json config.json && nano config.json\n');
+    console.log('   Para un cliente real: node scripts/config-de-rubro.js <rubro> && nano config.json\n');
   }
-
   const problemas = validar(config);
   if (problemas.length) {
     console.error('❌ Revisá config.json:\n' + problemas.map((p) => `   • ${p}`).join('\n') + '\n');
@@ -73,9 +99,51 @@ function cargar() {
   return config;
 }
 
+// Vuelve a leer las capas (por ejemplo, cuando cambió la configuración en Nodo Sur) y cambia [actual] EN EL LUGAR: el
+// motor, la conversación y las tareas tienen la misma referencia y ven lo nuevo sin reiniciar. Si lo nuevo no pasa la
+// validación, [actual] queda como estaba y se devuelven los problemas.
+function recargar(actual) {
+  const { config } = construir();
+  const problemas = validar(config);
+  if (problemas.length) return problemas;
+  for (const k of Object.keys(actual)) delete actual[k];
+  Object.assign(actual, config);
+  return [];
+}
+
+// Los textos del rubro van DEBAJO de lo que haya en config.json: la plantilla
+// da cómo habla el bot en una barbería o un salón de uñas, y cada negocio
+// puede pisar cualquier texto en "textos" (ej. "quien_atiende": "Juli").
+function aplicarPlantilla(config) {
+  const plantilla = plantillaDe(config.negocio?.rubro);
+  if (!plantilla) return config; // validar() lo informa
+  return {
+    ...config,
+    negocio: { ...config.negocio, rubro: claveDeRubro(config.negocio.rubro) },
+    // Lo decide el rubro, no config.json: un almacén no da turnos y una barbería no toma pedidos de productos.
+    forma: plantilla.forma,
+    textos: mezclar(plantilla.textos, config.textos || {}),
+  };
+}
+
+// Arma la configuración a partir de objetos ya leídos (en orden de prioridad),
+// sin tocar archivos ni cortar el proceso. Para los tests y los scripts.
+function armar(...capas) {
+  let config = {};
+  for (const capa of capas) config = mezclar(config, capa);
+  return aplicarPlantilla(config);
+}
+
+function ejemplo() {
+  return leerJson(path.join(RAIZ, 'config.example.json'));
+}
+
 // Errores de configuración típicos al dar de alta un cliente nuevo.
 function validar(c) {
   const malos = [];
+  if (!plantillaDe(c.negocio?.rubro)) {
+    malos.push(`negocio.rubro: tiene que ser uno de ${Object.keys(PLANTILLAS).join(', ')} (está: "${c.negocio?.rubro}")`);
+  }
   const esNumero = (v) => typeof v === 'string' && /^\d{11,15}$/.test(v);
 
   for (const campo of ['numero_duena', 'numero_soporte', 'numero_actual']) {
@@ -89,7 +157,10 @@ function validar(c) {
     malos.push('numero_duena no puede ser el mismo número del bot: WhatsApp no se escribe a sí mismo');
   }
 
-  if (!Array.isArray(c.servicios) || c.servicios.length === 0) {
+  // Un comercio (forma productos) no tiene servicios: lo que vende sale del catálogo de Nodo Sur.
+  if (c.forma === 'productos') {
+    // nada que revisar en servicios
+  } else if (!Array.isArray(c.servicios) || c.servicios.length === 0) {
     malos.push('servicios: tiene que haber al menos uno');
   } else {
     const ids = new Set();
@@ -124,6 +195,10 @@ function validar(c) {
     if (!(c.senas.vencimiento_horas > 0)) malos.push('senas.vencimiento_horas: tiene que ser mayor a 0');
   }
 
+  if (!(Number.isInteger(c.pausa_minutos) && c.pausa_minutos >= 5 && c.pausa_minutos <= 24 * 60)) {
+    malos.push(`pausa_minutos: cuánto se calla el bot en un chat, entre 5 y 1440 minutos (está: "${c.pausa_minutos}")`);
+  }
+
   if (!(c.turnos?.intervalo_slot_min > 0)) malos.push('turnos.intervalo_slot_min: tiene que ser mayor a 0');
   if (!(c.turnos?.dias_hacia_adelante > 0)) malos.push('turnos.dias_hacia_adelante: tiene que ser mayor a 0');
   if (!(c.panel?.puerto > 0)) malos.push('panel.puerto: falta o es inválido');
@@ -139,4 +214,4 @@ function validar(c) {
   return malos;
 }
 
-module.exports = { cargar, validar };
+module.exports = { cargar, recargar, construir, validar, armar, ejemplo, mezclar, rutaNube, configNube };

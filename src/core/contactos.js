@@ -13,17 +13,18 @@ function escapar(t) {
   return String(t || '').replace(/([,;\\])/g, '\\$1').replace(/\n/g, '\\n');
 }
 
-// El nombre lleva un prefijo configurable para que en la agenda queden todas
-// juntas y se distingan de los contactos personales de la dueña.
+// El nombre lleva un prefijo para que en la agenda queden todas juntas y se
+// distingan de los contactos personales de la dueña. Por defecto, el emoji del
+// rubro ("💅 Sofi", "💈 Lauti"); config.json lo puede cambiar o dejar vacío.
 function nombreParaAgenda(config, clienta) {
-  const prefijo = config.contactos?.prefijo ?? '';
+  const prefijo = config.contactos?.prefijo ?? `${config.textos.emoji} `;
   return `${prefijo}${clienta.nombre || clienta.telefono}`;
 }
 
 function tarjeta(config, clienta, extra = {}) {
   const nombre = nombreParaAgenda(config, clienta);
   const notas = [
-    `Clienta de ${config.negocio.nombre}`,
+    `${config.textos.cliente_mayuscula} de ${config.negocio.nombre}`,
     extra.servicio ? `Último servicio: ${extra.servicio}` : null,
     clienta.creada_en ? `Primer contacto: ${clienta.creada_en.slice(0, 10)}` : null,
   ].filter(Boolean).join('. ');

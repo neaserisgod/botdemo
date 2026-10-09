@@ -8,6 +8,7 @@
 #   estado      ver si está vivo, memoria y uptime
 #   logs        ver qué está pasando en vivo (Ctrl+C para salir)
 #   vincular    volver a vincular WhatsApp (pide código nuevo)
+#   vincular-nodosur  vincular el bot a tu cuenta de Nodo Sur (abre el navegador)
 #   revisar     chequeo de salud: config, sesión, base, espacio
 # ============================================================
 cd "$(dirname "$0")" || exit 1
@@ -92,13 +93,22 @@ case "$ACCION" in
     pm2 status
     ;;
 
+  vincular-nodosur)
+    node scripts/vincular-nodosur.js || exit 1
+    node scripts/nodosur-una-vuelta.js
+    echo "→ Reiniciando el bot para que tome la configuración de Nodo Sur..."
+    apagar_todo
+    pm2 start ecosystem.config.js && pm2 save >/dev/null 2>&1
+    ;;
+
   revisar|check)
     echo "=== CHEQUEO DE SALUD ==="
     echo -n "Node:            "; node -v
     echo -n "SQLite en Node:  "; node -e "require('node:sqlite');console.log('ok')" 2>/dev/null || echo "NO (hace falta Node 22.5+)"
     echo -n "Tesseract:       "; command -v tesseract >/dev/null && tesseract --version 2>/dev/null | head -1 || echo "NO instalado (el OCR usará el texto de la foto)"
     echo -n "Español OCR:     "; tesseract --list-langs 2>/dev/null | grep -q spa && echo "ok" || echo "NO (va a leer en inglés)"
-    echo -n "config.json:     "; node -e "require('./src/config').cargar();console.log('válida')" 2>&1 | tail -1
+    echo -n "Configuración:   "; node -e "require('./src/config').cargar();console.log('válida')" 2>&1 | tail -1
+    echo -n "Nodo Sur:        "; node -e "const c=require('./src/nube/cuenta').leer(); const n=require('./src/config').configNube(); console.log(c ? 'vinculado ('+c.email+')'+(n ? ', configuración versión '+n.version : ', sin configuración del bot en la app todavía') : 'sin vincular (bash bot.sh vincular-nodosur)')" 2>/dev/null || echo "?"
     echo -n "Sesión WhatsApp: "; node -e "const c=require('./data/sesion-baileys/creds.json');console.log(c.registered&&c.me?'vinculada ('+c.me.id.split(':')[0]+')':'INCOMPLETA')" 2>/dev/null || echo "NO vinculada"
     echo -n "Base de datos:   "; [ -f data/turnos.db ] && echo "$(du -h data/turnos.db | cut -f1)" || echo "todavía no existe"
     echo -n "Turnos activos:  "; node -e "process.env.RUTA_DB='./data/turnos.db';const db=require('./src/db');db.abrir('./data/turnos.db');console.log(db.obtener().prepare(\"SELECT COUNT(*) n FROM turnos WHERE estado IN ('pendiente_sena','confirmado')\").get().n)" 2>/dev/null || echo "?"

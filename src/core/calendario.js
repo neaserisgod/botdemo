@@ -31,7 +31,7 @@ function eventoDeTurno(config, turno, { cancelado = false } = {}) {
     `DTSTART:${aFormatoIcs(turno.inicio)}`,
     `DTEND:${aFormatoIcs(turno.fin)}`,
     `SUMMARY:${escapar(`${turno.servicio} — ${quien}`)}`,
-    `DESCRIPTION:${escapar(`Turno #${turno.id}\nClienta: ${quien}\nTeléfono: ${turno.telefono}\nServicio: ${turno.servicio}\nPrecio: $${turno.precio}`)}`,
+    `DESCRIPTION:${escapar(`Turno #${turno.id}\n${config.textos.cliente_mayuscula}: ${quien}\nTeléfono: ${turno.telefono}\nServicio: ${turno.servicio}\nPrecio: $${turno.precio}`)}`,
     `LOCATION:${escapar(config.negocio.direccion)}`,
     cancelado ? 'STATUS:CANCELLED' : 'STATUS:CONFIRMED',
     'BEGIN:VALARM',            // recordatorio 30 min antes, en el celu de ella

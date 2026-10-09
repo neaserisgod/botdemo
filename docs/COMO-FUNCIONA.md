@@ -37,7 +37,7 @@ Lo que **no** usa, a propósito: sin IA ni APIs pagas (el lenguaje natural es un
 1. **better-sqlite3** si está instalado (en la PC). Es más rápido y más probado.
 2. **`node:sqlite`**, el SQLite que viene *dentro* de Node 22.5+, si el primero no está.
 
-Existe porque better-sqlite3 es C++ y hay que compilarlo, y en Termux la compilación falla: node-gyp no encuentra el NDK de Android (`Undefined variable android_ndk_path`). En vez de pelear con eso en cada celu que instalemos, en el celu no se instala y se usa el motor incorporado. Las tres suites de tests pasan con los dos motores, así que son intercambiables.
+Existe porque better-sqlite3 es C++ y hay que compilarlo, y en Termux la compilación falla: node-gyp no encuentra el NDK de Android (`Undefined variable android_ndk_path`). En vez de pelear con eso en cada celu que instalemos, en el celu no se instala y se usa el motor incorporado. Las suites de tests pasan con los dos motores, así que son intercambiables.
 
 ---
 
@@ -63,7 +63,7 @@ Un **adaptador** traduce entre eso y la librería de turno. Hay tres:
 
 Se elige al arrancar: `node src/index.js --adaptador=baileys`.
 
-Esto es lo que permitió, entre otras cosas, migrar de whatsapp-web.js a Baileys sin tocar una línea de lógica de negocio, y tener 169 tests que corren sin WhatsApp.
+Esto es lo que permitió, entre otras cosas, migrar de whatsapp-web.js a Baileys sin tocar una línea de lógica de negocio, y tener 276 tests que corren sin WhatsApp.
 
 ---
 
@@ -268,6 +268,8 @@ El principio detrás de todo esto: **ante la duda, molestar a un humano; nunca p
 
 ## 11. Configuración (`config.json` + `src/config.js`)
 
+Con Nodo Sur, lo que se configura en la app baja a `data/config-nube.json` (`src/nube/sincronizar.js`), una capa que gana sobre `config.json`; se recarga **en el lugar** (`recargar`), así el motor y las tareas ven lo nuevo sin reiniciar, y si no pasa la validación se vuelve a la anterior. El rubro elige la plantilla (`src/plantillas.js`) y con ella la forma de trabajar: turnos (`core/maquina.js`) o comercio (`core/comercio.js`).
+
 Todo lo que cambia entre clientes está en un solo archivo: datos del negocio, números (dueña, soporte, el del bot), horarios por día, servicios (duración, precio, seña), alias y titular de MP, y las palabras clave de la FAQ.
 
 Al arrancar, `src/config.js` lo valida y, si algo está mal, **no arranca** y explica qué en castellano: número sin `549`, seña mayor al precio, horario invertido, día faltante, todos los días cerrados, formato de hora incorrecto. Existe porque el momento de dar de alta un cliente es cuando más fácil es equivocarse, y un error de tipeo silencioso ahí se descubre tres días después con turnos mal agendados.
@@ -276,11 +278,14 @@ Al arrancar, `src/config.js` lo valida y, si algo está mal, **no arranca** y ex
 
 ## 12. Tests
 
-Tres suites, 169 chequeos, corren sin WhatsApp con `npm test`:
+Seis suites, 276 chequeos, corren sin WhatsApp con `npm test` (con la configuración de ejemplo: no hace falta `config.json`):
 
 - **`simulacion.js`** — el flujo completo: reservar, señar, recordar, cancelar, comandos, FAQ, catálogo, lenguaje natural.
 - **`escenarios.js`** — lo que sale mal: comprobantes con monto corto, destinatario ajeno o duplicados; carreras por el mismo horario; comandos mal usados; 40 clientas reservando en cadena; fuzzing con inyección SQL, textos de 5.000 caracteres y bytes nulos.
 - **`limites.js`** — los bordes: domingo cerrado, último turno del día, anticipación mínima, reinicio a mitad de conversación, `datos_conv` corrupto, servicio desactivado mientras alguien lo elige, derivación que expira, recordatorios que **no** deben salir.
+- **`plantillas.js`** — los rubros: una charla entera de barbería (cliente y dueño) sin un solo 💅, "clienta" ni "la dueña"; alias de servicios; textos propios de un negocio; la base de un celu instalado antes de los alias.
+- **`comercio.js`** — un almacén: precio y si hay, lo que no está, ubicación, un pedido de punta a punta (varios parecidos, sin stock, repetidos, nombre, resumen), la bandeja, la pausa y lo que puede pedir el dueño.
+- **`nube.js`** — Nodo Sur, contra un sitio simulado: vincular desde el celular (y que un código ajeno no vincule), configuración que se recarga sin reiniciar (y una que no sirve, que no se aplica), catálogo, un pedido de ida y vuelta (una sola vez, aunque WhatsApp esté caído), token renovado, bot desvinculado y negocio sin plan.
 
 Que corran sin WhatsApp es consecuencia directa de tener el núcleo desacoplado: se le pasan mensajes planos al motor y se mira qué devuelve.
 
@@ -291,6 +296,8 @@ Que corran sin WhatsApp es consecuencia directa de tener el núcleo desacoplado:
 | Quiero... | Toco |
 |---|---|
 | Un servicio nuevo | `config.json` → `servicios` |
+| Un rubro nuevo | `src/plantillas.js` (textos y servicios de ejemplo) y la pregunta de `setup.sh` |
+| Cambiar cómo habla el bot en un negocio | `config.json` → `textos` |
 | Que entienda otra forma de decir algo | `core/nlu.js` → el diccionario de intenciones |
 | Otra pregunta frecuente | `config.json` → `faq` y `core/flujos/faq.js` |
 | Un comando nuevo para la dueña | `core/duena.js` → el `switch` |

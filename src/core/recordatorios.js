@@ -22,7 +22,7 @@ function tick(config) {
     salientes.push({
       para: t.telefono,
       turnoId: t.id, // ← el que confirma el envío usa esto para marcarlo
-      texto: `¡Hola ${t.clienta_nombre || ''}! 👋 Te recordamos tu turno de mañana:\n\n💅 ${t.servicio}\n📅 ${fechas.diaLindo(t.inicio.slice(0, 10))} a las ${t.inicio.slice(11)}\n\nRespondé *CONFIRMO* para confirmar o *CANCELAR* si no llegás (así liberamos el horario).`,
+      texto: `¡Hola ${t.clienta_nombre || ''}! 👋 Te recordamos tu turno de mañana:\n\n${config.textos.emoji} ${t.servicio}\n📅 ${fechas.diaLindo(t.inicio.slice(0, 10))} a las ${t.inicio.slice(11)}\n\nRespondé *CONFIRMO* para confirmar o *CANCELAR* si no llegás (así liberamos el horario).`,
     });
   }
 
@@ -31,11 +31,13 @@ function tick(config) {
 }
 
 function agendaDiaria(config) {
+  if (config.forma === 'productos') return []; // un comercio no tiene agenda de turnos
   const hoy = fechas.hoyYmd();
   return [notif.agendaDiaria(config, qTurnos.delDia(hoy), hoy)];
 }
 
 function resumenSemanal(config) {
+  if (config.forma === 'productos') return [];
   const desde = fechas.aTexto(fechas.ahora());
   const hasta = fechas.sumarMinutos(desde, 7 * 24 * 60);
   return [notif.resumenSemanal(config, qTurnos.entreFechas(desde, hasta))];

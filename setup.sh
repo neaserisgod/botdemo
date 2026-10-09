@@ -54,14 +54,44 @@ node -e "require('node:sqlite')" 2>/dev/null || {
   exit 1
 }
 
-echo "== [4/7] Configuración =="
-# config.json es de ESTE equipo y está fuera del repo: los git pull nunca lo
-# tocan. La plantilla versionada es config.example.json.
-if [ ! -f config.json ]; then
-  cp config.example.json config.json
-  echo ">>> Cargá los datos del cliente:  nano config.json"
+echo "== [4/7] Nodo Sur y configuración =="
+# Con Nodo Sur, la configuración del bot (rubro, nombre, números, horarios) se carga en la app y baja sola. Sin Nodo Sur,
+# o si todavía no se configuró en la app, se preguntan los datos acá y se arma config.json (fuera del repo: los git pull
+# nunca lo tocan). Las preguntas leen de /dev/tty: el instalador puede venir de "curl … | bash".
+pregunta() { local r; read -r -p "$1" r </dev/tty; printf '%s' "$r"; }
+
+CONFIG_NUBE=1
+if [ -f data/nodosur.json ]; then
+  echo "Ya está vinculado a Nodo Sur."
+  node scripts/nodosur-una-vuelta.js && CONFIG_NUBE=0
 else
+  R=$(pregunta "¿Vinculás el bot a tu cuenta de Nodo Sur? Así lo configurás desde la app. [S/n] ")
+  if [ "$R" != "n" ] && [ "$R" != "N" ]; then
+    node scripts/vincular-nodosur.js || echo "No se pudo vincular ahora. Más tarde: bash bot.sh vincular-nodosur"
+    [ -f data/nodosur.json ] && node scripts/nodosur-una-vuelta.js && CONFIG_NUBE=0
+  fi
+fi
+
+if [ "$CONFIG_NUBE" = "0" ]; then
+  echo "La configuración viene de Nodo Sur."
+elif [ -f config.json ]; then
   echo "config.json ya existe, lo dejo como está."
+else
+  echo ""
+  echo "Unos datos del negocio (después se cambian desde la app de Nodo Sur, o con: nano config.json)."
+  RUBRO="${RUBRO:-}"
+  while ! node -e "process.exit(require('./src/plantillas').plantillaDe(process.argv[1]) ? 0 : 1)" "$RUBRO" 2>/dev/null; do
+    RUBRO=$(pregunta "Rubro (almacen, kiosco, fiambreria, otro, unas, barberia): ")
+  done
+  NOMBRE=$(pregunta "Nombre del negocio: ")
+  DIRECCION=$(pregunta "Dirección (para \"¿dónde están?\"): ")
+  NUM_BOT=$(pregunta "Número del WhatsApp que atiende el bot (ej: 2944 123456): ")
+  NUM_DUENA=$(pregunta "Tu número, para los avisos del bot (ej: 2944 654321): ")
+  until node scripts/config-de-rubro.js "$RUBRO" --nombre "$NOMBRE" --direccion "$DIRECCION" --numero-bot "$NUM_BOT" --numero-duena "$NUM_DUENA"; do
+    echo "Probemos de nuevo los números."
+    NUM_BOT=$(pregunta "Número del WhatsApp que atiende el bot: ")
+    NUM_DUENA=$(pregunta "Tu número, para los avisos: ")
+  done
 fi
 
 echo "== [5/7] Vincular WhatsApp =="
@@ -80,18 +110,18 @@ if [ "$SESION_OK" = "0" ]; then
 else
   # Sesión a medias de un intento anterior: la limpiamos para empezar de cero
   rm -rf data/sesion-baileys
-  NUM=$(node -p "require('./config.json').numero_actual" 2>/dev/null)
+  NUM=$(node -e "process.stdout.write(require('./src/config').construir().config.numero_actual || '')" 2>/dev/null)
   echo ""
   echo "  El código se va a pedir para el número: $NUM"
   echo ""
-  echo "  Tiene que ser el número del chip DE ESTE celu:"
-  echo "  549 + característica sin el 0 + número sin el 15."
-  echo "  (ej: Bariloche 2944 123456 → 5492944123456)"
+  echo "  Es el número del WhatsApp que va a atender el bot (puede estar en OTRO celular:"
+  echo "  el código se escribe en el celular que tiene ese WhatsApp)."
+  echo "  549 + característica sin el 0 + número sin el 15 (ej: 2944 123456 → 5492944123456)."
   echo ""
-  read -r -p "  ¿Es ese el número? [s/N] " RESPUESTA
+  RESPUESTA=$(pregunta "  ¿Es ese el número? [s/N] ")
   if [ "$RESPUESTA" != "s" ] && [ "$RESPUESTA" != "S" ]; then
     echo ""
-    echo "  Editalo con:  nano config.json   (campo numero_actual)"
+    echo "  Cambialo en la app de Nodo Sur, o con:  nano config.json   (campo numero_actual)"
     echo "  y volvé a correr: bash setup.sh"
     exit 1
   fi
@@ -140,7 +170,7 @@ echo "============================================"
 echo " ✅ El bot ya está corriendo."
 echo ""
 echo " Verificá con:   pm2 logs bot-turnos"
-echo " Panel:          http://localhost:$(node -p "require('./config.json').panel.puerto" 2>/dev/null || echo 3010)"
+echo " Panel:          http://localhost:$(node -e "process.stdout.write(String(require('./src/config').construir().config.panel.puerto))" 2>/dev/null || echo 3010)"
 echo ""
 echo " Falta hacer a mano (una vez por celu):"
 echo "  1. Ajustes > Apps > Termux > Batería > Sin restricciones"
