@@ -23,6 +23,20 @@ Para instalar una rama que todavía no está en `main` (el instalador también t
 curl -fsSL https://raw.githubusercontent.com/neaserisgod/botdemo/<rama>/instalar.sh | RAMA=<rama> bash
 ```
 
+## Problemas comunes al instalar (primer celular real, 2026-10-09)
+
+- **"curl: command not found"**: Termux recién instalado no lo trae. Primero `pkg install -y curl`.
+- **El comando sale con `^[[200~` y "bash~"**: se pegó con el portapapeles del teclado. Pegar manteniendo apretado en la pantalla
+  de Termux › Paste, o escribirlo a mano.
+- **El WhatsApp del celular dice que falló al vincular**: mirar Termux. "código 515" seguido de "WhatsApp conectado" es normal
+  (WhatsApp pide reconectar); se confirma en Dispositivos vinculados.
+- **"Bad MAC" / "Failed to decrypt" en cada mensaje**: era Baileys 6. Actualizar (`git pull && npm install --omit=optional`) y
+  volver a vincular (`bash bot.sh vincular`, cerrando antes la sesión vieja en Dispositivos vinculados).
+- **"Closing session: SessionEntry {…}"**: no es un error.
+- **No contesta**: el bot ignora el `numero_soporte` y al `numero_duena` lo atiende como dueño. Probar desde un tercer número.
+  Para ver si llegan los mensajes: `DEPURAR=1 pm2 restart bot-turnos --update-env && pm2 logs bot-turnos` (cada mensaje
+  muestra `[msj] de=… texto="…"`).
+
 ## Arrancar en una PC (para probar)
 
 ```bash
