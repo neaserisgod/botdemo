@@ -125,13 +125,15 @@ function listaServicios(config, servicios = qServicios.activos()) {
 }
 
 // Los temas de cualquier negocio (nlu.tema): cómo se paga, envíos, horarios, ubicación y las preguntas que cargó el
-// negocio. Lo que el negocio no contestó en config.respuestas lo contesta una persona (`porDefecto` pone otra respuesta).
+// negocio (`porDefecto` pone la respuesta de un rubro). Si el negocio no cargó la respuesta en config.respuestas, el bot
+// le pasa la pregunta a la dueña y SIGUE atendiendo: por "¿aceptan tarjeta?" no se calla una hora en ese chat.
 function responderTema(ctx, tm, porDefecto = {}, estado = 'inicio') {
   if (tm.tema === 'pregunta') return responder(ctx, estado, tm.respuesta);
   if (tm.tema === 'horarios' || tm.tema === 'ubicacion') return responder(ctx, estado, faq.ubicacionYHorarios(ctx.config));
   const respuesta = ctx.config.respuestas?.[tm.tema] || porDefecto[tm.tema];
   if (respuesta) return responder(ctx, estado, respuesta);
-  return derivarAHumano(ctx, ctx.msj.texto);
+  return responder(ctx, estado, `Eso te lo confirma ${ctx.config.textos.quien_atiende} por acá en un ratito 🙌 Mientras, si querés otra cosa, escribime.`,
+    [notif.pregunta(ctx.config, ctx.clienta, ctx.msj.texto)]);
 }
 
 const esPreguntaDePrecio = (ctx, t) => {

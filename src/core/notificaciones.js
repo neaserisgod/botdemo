@@ -92,6 +92,14 @@ function demora(config, clienta, turno, textoCitado) {
   };
 }
 
+// Una pregunta que el bot no sabe contestar (el negocio no cargó la respuesta). El bot sigue atendiendo.
+function pregunta(config, clienta, textoCitado) {
+  return {
+    para: config.numero_duena,
+    texto: `❓ *Pregunta para vos*\n${config.textos.cliente_mayuscula}: ${clienta.nombre || clienta.telefono} (${clienta.telefono})\n> ${textoCitado || ''}\n\nContestale directo desde este número. Para que la conteste el bot la próxima, cargala en la configuración del bot (respuestas).`,
+  };
+}
+
 function derivacion(config, clienta, textoCitado) {
   return {
     para: config.numero_duena,
@@ -146,6 +154,6 @@ function tarjetaContacto(config, clienta, turno) {
 module.exports = {
   duracion,
   turnoSenado, senaARevisar, senaVencida, turnoConfirmado,
-  cancelacion, derivacion, turnoMovido, demora, agendaDiaria, resumenSemanal, linea,
+  cancelacion, derivacion, pregunta, turnoMovido, demora, agendaDiaria, resumenSemanal, linea,
   invitacionCalendario, tarjetaContacto,
 };

@@ -41,10 +41,13 @@ const qTurnos = require('../src/db/consultas/turnos');
 const qPedidos = require('../src/db/consultas/pedidos');
 const fechas = require('../src/core/fechas');
 
+// Los pesables como los publica la app de Nodo Sur: "(por kg)" y el precio por kilo. "Pan francés x kg" es un catálogo
+// cargado a mano: también se pesa.
 catalogo.fijar([
   ['Coca Cola 2,25 L', 350000], ['Coca Cola Zero 1,5 L', 300000], ['Cerveza Quilmes lata 473 ml', 180000],
   ['Pan francés x kg', 250000], ['Alfajor Jorgito', 90000], ['Papel higiénico Higienol x4', 400000],
-  ['Fernet Branca 750 ml', 1200000], ['Jamón cocido Paladini x kg', 1500000], ['Queso cremoso x kg', 900000],
+  ['Fernet Branca 750 ml', 1200000], ['Jamón cocido Paladini (por kg)', 1500000], ['Queso cremoso (por kg)', 900000],
+  ['Queso barra (por kg)', 1100000], ['Salame Milán (por kg)', 2000000],
   ['Cigarrillos Marlboro box 20', 450000], ['Leche La Serenísima 1 L', 150000], ['Huevos x 6', 180000],
   ['Huevos x 12', 300000], ['Galletitas 9 de Oro', 120000], ['Seven Up 1,5 L', 280000], ['Yerba Playadito 1 kg', 520000],
 ].map(([nombre, precioCentavos], i) => ({ gid: `g${i}`, nombre, precioCentavos, hay: true })));
@@ -197,8 +200,10 @@ const PRUEBAS = {
     caso('"un fernet y 2 cocas": los dos', ['pedido', 'un fernet y 2 cocas'], { incluye: ['1 × Fernet', '¿Cuál de estos'] });
     caso('"alfajores x 3"', ['pedido', 'alfajores x 3'], { incluye: 'Anotado: 3 × Alfajor Jorgito' });
     caso('"un par de alfajores"', ['pedido', 'un par de alfajores'], { incluye: 'Anotado: 2 × Alfajor Jorgito' });
-    caso('"2 kg de yerba": 2 de la de 1 kg', ['pedido', '2 kg de yerba'], { incluye: 'Anotado: 2 × Yerba Playadito 1 kg' });
-    caso('"1kg de pan": a pesar', ['pedido', '1kg de pan'], { incluye: ['1 kg', 'Pan francés', 'a pesar'] });
+    console.log('\n— Almacén: lo que viene en paquete no se fracciona —');
+    caso('"2 kg de yerba": 2 paquetes de 1 kg', ['pedido', '2 kg de yerba'], { incluye: 'Anotado: 2 × Yerba Playadito 1 kg' });
+    caso('"medio kilo de yerba": viene en paquete', ['pedido', 'medio kilo de yerba'], { incluye: 'viene en paquete', no: '500 g' });
+    caso('"1kg de pan" (pan suelto): 1 kg, con precio', ['pedido', '1kg de pan'], { incluye: 'Anotado: 1 kg de Pan francés — $2.500' });
   },
 
   kiosco() {
@@ -213,20 +218,35 @@ const PRUEBAS = {
   fiambreria() {
     COMUNES();
     COMERCIO();
-    console.log('\n— Fiambrería: por peso, a la nota del pedido —');
-    caso('"1/4 de jamon"', ['pedido', '1/4 de jamon'], { incluye: ['250 g', 'Jamón cocido Paladini'] });
-    caso('"un cuarto de jamon"', ['pedido', 'un cuarto de jamon'], { incluye: ['250 g', 'Jamón cocido'] });
-    caso('"200 gramos de queso cremoso"', ['pedido', '200 gramos de queso cremoso'], { incluye: ['200 g', 'Queso cremoso'] });
-    caso('"medio kilo de queso"', ['pedido', 'medio kilo de queso'], { incluye: ['500 g', 'Queso cremoso'] });
-    caso('"300g de jamon cocido"', ['pedido', '300g de jamon cocido'], { incluye: ['300 g', 'Jamón cocido'] });
-    caso('"150 de jamon"', ['pedido', '150 de jamon'], { incluye: ['150 g', 'Jamón cocido'] });
-    caso('"1/4 de jamon y 2 cocas": los dos', ['pedido', '1/4 de jamon y 2 cocas'], { incluye: ['250 g', '¿Cuál de estos'] });
-    caso('el pedido lleva lo pesable en la nota, y el resumen lo aclara',
-      ['pedido', '1/4 de jamon', 'alfajor', 'listo', 'Sofi'], { incluye: ['A pesar', '250 g de Jamón cocido Paladini x kg', '1 × Alfajor Jorgito'] });
-    caso('al confirmar, sale con la nota',
+    console.log('\n— Fiambrería: lo que se pesa —');
+    caso('"cuanto esta el jamon?": el precio por kilo', 'cuanto esta el jamon?', { incluye: 'Jamón cocido Paladini — $15.000 el kilo' });
+    caso('"1/4 de jamon": 250 g, con precio', ['pedido', '1/4 de jamon'], { incluye: 'Anotado: 250 g de Jamón cocido Paladini — $3.750' });
+    caso('"un cuarto de jamon"', ['pedido', 'un cuarto de jamon'], { incluye: '250 g de Jamón cocido Paladini' });
+    caso('"200 de jamon"', ['pedido', '200 de jamon'], { incluye: '200 g de Jamón cocido Paladini — $3.000' });
+    caso('"200 jamon" (como en la caja): 200 g', ['pedido', '200 jamon'], { incluye: '200 g de Jamón cocido Paladini' });
+    caso('"medio de cremoso"', ['pedido', 'medio de cremoso'], { incluye: '500 g de Queso cremoso — $4.500' });
+    caso('"medio cremoso"', ['pedido', 'medio cremoso'], { incluye: '500 g de Queso cremoso' });
+    caso('"medio de queso barra"', ['pedido', 'medio de queso barra'], { incluye: '500 g de Queso barra — $5.500' });
+    caso('"200 gramos de queso cremoso"', ['pedido', '200 gramos de queso cremoso'], { incluye: '200 g de Queso cremoso' });
+    caso('"300g de jamon cocido"', ['pedido', '300g de jamon cocido'], { incluye: '300 g de Jamón cocido Paladini' });
+    caso('"kilo y medio de cremoso"', ['pedido', 'kilo y medio de cremoso'], { incluye: '1,5 kg de Queso cremoso — $13.500' });
+    caso('"medio kilo de queso": cuál queso, y el peso se mantiene', ['pedido', 'medio kilo de queso', '1'], { incluye: '500 g de Queso barra' });
+    caso('"jamon" sin cuánto: pregunta, con el precio por kilo', ['pedido', 'jamon'], { incluye: ['¿Cuánto *Jamón cocido Paladini* querés?', '$15.000 el kilo'], estado: 'eligiendo_peso' });
+    caso('y "1/4" lo anota', ['pedido', 'jamon', '1/4'], { incluye: '250 g de Jamón cocido Paladini' });
+    caso('y "200" son gramos', ['pedido', 'jamon', '200'], { incluye: '200 g de Jamón' });
+    caso('y "1" es un kilo', ['pedido', 'jamon', '1'], { incluye: '1 kg de Jamón' });
+    caso('"2 jamon": 2 qué, pregunta', ['pedido', '2 jamon'], { incluye: '¿Cuánto *Jamón' });
+    caso('varios renglones de mostrador', ['pedido', '1/4 de jamon\n200 de salame\nmedio de cremoso'],
+      { incluye: ['250 g de Jamón cocido', '200 g de Salame Milán', '500 g de Queso cremoso'] });
+    caso('"1/4 de jamon y 2 cocas": el jamón, y pregunta qué coca', ['pedido', '1/4 de jamon y 2 cocas'], { incluye: ['250 g', '¿Cuál de estos'] });
+    caso('"jamon, 2 alfajores": pregunta cuánto jamón y sigue con los alfajores', ['pedido', 'jamon, 2 alfajores', '1/4'],
+      { incluye: ['250 g de Jamón', '2 × Alfajor'] });
+    caso('el resumen suma lo pesado con su precio', ['pedido', '1/4 de jamon', 'alfajor', 'listo', 'Sofi'],
+      { incluye: ['250 g de Jamón cocido Paladini — $3.750', '1 × Alfajor Jorgito — $900', 'Total aproximado: $4.650', 'puede variar'] });
+    caso('al confirmar, lo pesado va en gramos',
       ['pedido', '1/4 de jamon', 'alfajor', 'listo', 'Sofi', '1'], { incluye: 'Le pasé tu pedido',
-        y: () => { const p = qPedidos.porEnviar().pop(); return p && /250 g de Jamón cocido/.test(p.datos.nota || '') && p.datos.items.length === 1; } });
-    caso('solo pesable: igual se puede pedir', ['pedido', '1/4 de jamon', 'listo', 'Sofi'], { incluye: ['A pesar', '*1* — Confirmar'] });
+        y: () => { const p = qPedidos.porEnviar().pop(); return p && p.datos.items.some((x) => x.gid && x.gramos === 250) && p.datos.items.some((x) => x.cantidad === 1); } });
+    caso('solo cosas pesadas: igual se puede pedir', ['pedido', '1/4 de jamon', 'listo', 'Sofi'], { incluye: ['250 g de Jamón', '*1* — Confirmar'] });
   },
 };
 
@@ -243,7 +263,8 @@ function COMERCIO() {
   caso('"papel higienico"', 'tenes papel higienico?', { incluye: 'Higienol' });
   caso('"hay coca de 1,5?": la de 1,5 L', 'hay coca de 1,5?', { incluye: 'Coca Cola Zero 1,5 L', no: '2,25' });
   caso('"tenes queso? alguien me atiende": el queso y la opción de una persona', 'tenes queso? alguien me atiende', { incluye: ['Queso cremoso', 'escribí *4*'], sinAviso: true });
-  caso('pedido "jamon y queso": los dos', ['pedido', 'jamon y queso'], { incluye: ['Jamón cocido', 'Queso cremoso'] });
+  caso('pedido "jamon y queso" (se pesan): cuánto jamón primero, después cuál queso', ['pedido', 'jamon y queso', '1/4'], { incluye: ['250 g de Jamón cocido', '¿Cuál de estos', 'Queso cremoso'] });
+  caso('pedido "fernet y alfajor": los dos', ['pedido', 'fernet y alfajor'], { incluye: ['1 × Fernet', '1 × Alfajor'] });
   caso('pedido "2 alfajores y una coca zero": los dos', ['pedido', '2 alfajores y una coca zero'], { incluye: ['2 × Alfajor', '1 × Coca Cola Zero'] });
   caso('"alguien me atiende? quiero saber si tienen leche": la leche, sin pasar a una persona',
     'alguien me atiende? quiero saber si tienen leche', { incluye: 'Leche La Serenísima', sinAviso: true });

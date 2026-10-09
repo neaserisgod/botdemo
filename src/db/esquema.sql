@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS pedidos (
   clienta_id     INTEGER NOT NULL REFERENCES clientas(id),
   datos          TEXT NOT NULL,                 -- JSON: { cliente: {nombre, telefono}, items: [...], nota? }
   estado         TEXT NOT NULL DEFAULT 'por_enviar',
-    -- por_enviar → enviado → aceptado | rechazado
+    -- por_enviar → enviado → aceptado | rechazado;  por_enviar → a_mano (Nodo Sur no aceptó los gramos: fue por WhatsApp)
   remoto_id      INTEGER,                       -- el id del pedido en Nodo Sur
   avisado        INTEGER NOT NULL DEFAULT 0,    -- 1 cuando el cliente ya recibió si se aceptó o no
   creado_en      TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),

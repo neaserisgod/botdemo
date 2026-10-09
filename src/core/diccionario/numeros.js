@@ -33,13 +33,17 @@ function pesoInicial(texto) {
   const kilo = '(?:kg|kgs|kilo|kilos|k)';
   const de = '(?:\\s*de)?\\s+';
   const pruebas = [
+    // "kilo y medio", "1 kilo y medio", "un kilo y cuarto"
+    [new RegExp(`^(?:un |1 )?${kilo} y (medio|cuarto)${de}(.+)$`), (m) => (m[1] === 'medio' ? 1500 : 1250)],
     [new RegExp(`^(\\d+(?:[.,]\\d+)?)\\s*${kilo}${de}(.+)$`), (m) => Math.round(Number(m[1].replace(',', '.')) * 1000)],
     [new RegExp(`^(${PALABRA})\\s+${kilo}${de}(.+)$`), (m) => PALABRAS[m[1]] * 1000],
     [new RegExp(`^${kilo}${de}(.+)$`), () => 1000],
     [new RegExp(`^(\\d+)\\s*(?:g|gr|grs|gramos)${de}(.+)$`), (m) => Number(m[1])],
     [new RegExp(`^(?:1/4|un cuarto|cuarto)(?:\\s*${kilo})?${de}(.+)$`), () => 250],
     [new RegExp(`^(?:3/4|tres cuartos)(?:\\s*${kilo})?${de}(.+)$`), () => 750],
-    [new RegExp(`^(?:1/2\\s*${kilo}?|medio\\s*${kilo}|medio(?=\\s+de\\s))${de}(.+)$`), () => 500],
+    // "medio kilo de queso", "1/2 de jamón", "medio de cremoso", "medio cremoso" (no "medio litro", "media docena").
+    [new RegExp(`^(?:1/2\\s*${kilo}?|medio\\s*${kilo}|medio(?!\\s*(?:litro|lt|l\\b|docena)))${de}(.+)$`), () => 500],
+    [new RegExp(`^(?:1/4|un cuarto|cuarto)(?:\\s*${kilo})?\\s+(.+)$`), () => 250],
     // "150 de jamón": en un mostrador, un número de 50 para arriba seguido de "de" son gramos.
     [/^(\d{2,4})\s+de\s+(.+)$/, (m) => (Number(m[1]) >= 50 ? Number(m[1]) : null)],
   ];
@@ -52,10 +56,24 @@ function pesoInicial(texto) {
   return null;
 }
 
+// La respuesta a "¿cuánto querés?" de un pesable: "200", "200 g", "1/4", "medio", "1 kilo", "kilo y medio". Un número
+// chico suelto son kilos ("2" → 2 kg); de 50 para arriba, gramos ("200" → 200 g, como en la caja). Devuelve gramos o null.
+function pesoSuelto(texto) {
+  const t = sinTildes(String(texto || '').trim()).replace(/[.!?]+$/, '');
+  const p = pesoInicial(`${t} de x`);
+  if (p && p.resto === 'x') return p.gramos;
+  const m = t.match(/^(\d+(?:[.,]\d+)?)$/);
+  if (!m) return null;
+  const n = Number(m[1].replace(',', '.'));
+  if (n >= 50 && n <= 50000 && Number.isInteger(n)) return n;
+  if (n > 0 && n <= 20) return Math.round(n * 1000);
+  return null;
+}
+
 // 250 → "250 g", 1000 → "1 kg", 1500 → "1,5 kg".
 function textoPeso(gramos) {
   if (gramos < 1000) return `${gramos} g`;
   return `${String(gramos / 1000).replace('.', ',')} kg`;
 }
 
-module.exports = { PALABRAS, cantidadInicial, pesoInicial, textoPeso };
+module.exports = { PALABRAS, cantidadInicial, pesoInicial, pesoSuelto, textoPeso };

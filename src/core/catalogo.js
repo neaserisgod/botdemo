@@ -84,9 +84,20 @@ function buscar(texto, max = 5, sinonimos = {}) {
 
 const porGid = (gid) => items.find((x) => x.gid === gid) || null;
 
-// Lo que pesa una unidad, si el nombre lo dice ("Yerba Playadito 1 kg" → 1000, "Queso x 500 g" → 500). Null si se vende
-// suelto ("Jamón cocido x kg": el kilo es el precio, no el paquete).
+// Lo que se vende pesado (fiambres, quesos, pan): la app de Nodo Sur lo publica como "Jamón cocido (por kg)" con el
+// precio POR KILO (`catalogoParaBot`, Nodo-Sur-Pos). Un catálogo cargado a mano puede decir "x kg" o "por kg" sin número.
+const RE_POR_KG = /\(por kg\)\s*$|(?:^|\s)(?:x|por)\s*kg\b/i;
+const esPesable = (producto) => RE_POR_KG.test(producto.nombre);
+// "Jamón cocido Paladini (por kg)" → "Jamón cocido Paladini": para decir "250 g de Jamón cocido Paladini".
+const nombreCorto = (producto) => producto.nombre.replace(/\s*\(por kg\)\s*$/i, '').replace(/\s+(?:x|por)\s*kg\b/i, '').trim();
+// Lo que sale [gramos] de un pesable: la misma cuenta que la caja (`subtotalPesable`, Nodo-Sur-Pos): precio por kilo ×
+// gramos / 1000, redondeado al centavo.
+const precioDeGramos = (precioPorKilo, gramos) => Math.floor((precioPorKilo * gramos + 500) / 1000);
+
+// Lo que pesa una unidad de lo que viene en paquete ("Yerba Playadito 1 kg" → 1000, "Queso x 500 g" → 500). Null si se
+// pesa ("Jamón cocido (por kg)": el kilo es el precio, no el paquete) o si el nombre no lo dice.
 function gramosPorUnidad(producto) {
+  if (esPesable(producto)) return null;
   const m = medidas(producto.nombre).toLowerCase().match(/\b(\d+)(?:d(\d+))?(kg|g)\b/);
   if (!m) return null;
   const n = Number(`${m[1]}.${m[2] || 0}`);
@@ -101,4 +112,7 @@ function plata(centavos) {
   return `$${miles}${resto ? `,${String(resto).padStart(2, '0')}` : ''}`;
 }
 
-module.exports = { fijar, todos, cargado, cuando, buscar, porGid, palabrasClave, plata, medidas, RE_MEDIDA, gramosPorUnidad };
+module.exports = {
+  fijar, todos, cargado, cuando, buscar, porGid, palabrasClave, plata, medidas, RE_MEDIDA, gramosPorUnidad, esPesable, nombreCorto,
+  precioDeGramos,
+};
