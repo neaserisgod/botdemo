@@ -8,6 +8,7 @@ const fechas = require('./fechas');
 const notif = require('./notificaciones');
 const nluDuena = require('./nlu-duena');
 const contactos = require('./contactos');
+const qNoEntendidos = require('../db/consultas/noEntendidos');
 
 // Acción destructiva esperando un "sí". En memoria a propósito: si el bot se
 // reinicia, la confirmación se pierde y la dueña la repite (más seguro que
@@ -205,6 +206,15 @@ function ejecutar(config, accion, id, r) {
       }
     }
 
+    // Lo que el bot no entendió: para sumarlo al diccionario (src/core/diccionario/ y test/frases.js).
+    case 'no_entendidos': {
+      const lista = qNoEntendidos.ultimos(15);
+      if (!lista.length) return responder('Por ahora entendí todo lo que me escribieron 😎');
+      return responder(`🤔 *Lo último que no entendí* (de lo más nuevo a lo más viejo):\n\n${lista.map((x) =>
+        `• "${x.texto}"${x.veces > 1 ? ` (×${x.veces})` : ''} — ${x.ultimo.slice(5, 16).replace(' ', ' ')}`).join('\n')}\n\n` +
+        'Pasáselo a soporte así lo aprendo 🙌');
+    }
+
     case 'ayuda': default:
       return responder(ayuda(config));
   }
@@ -216,13 +226,14 @@ function ejemploPrecio(config) {
 }
 
 // Lo que la dueña o el dueño de un comercio le puede pedir al bot.
-const ACCIONES_COMERCIO = ['aviso', 'contactos', 'ayuda'];
+const ACCIONES_COMERCIO = ['aviso', 'contactos', 'no_entendidos', 'ayuda'];
 
 function ayuda(config) {
   if (config.forma === 'productos') {
     return `Escribime como te salga 😊\n\n` +
       `📣 *"aviso mañana abrimos a las 10"* — mensaje ${config.textos.a_todos}\n` +
-      `👥 *"pasame los contactos"* — ${config.textos.todos} para tu agenda\n\n` +
+      `👥 *"pasame los contactos"* — ${config.textos.todos} para tu agenda\n` +
+      `🤔 *"qué no entendiste"* — lo que me escribieron y no supe contestar\n\n` +
       'Los pedidos que toma el bot los ves y los confirmás en la app de Nodo Sur (Encargues).';
   }
   return `Escribime como te salga, te entiendo 😊\n\n` +
@@ -235,7 +246,8 @@ function ayuda(config) {
     `💰 *"precios"* — ver la lista\n` +
     `✏️ *"${ejemploPrecio(config)}"* — cambiar un precio\n` +
     `📣 *"aviso mañana no abrimos por el feriado"* — mensaje ${config.textos.a_todos}\n` +
-    `👥 *"pasame los contactos"* — ${config.textos.todos} para tu agenda\n\n` +
+    `👥 *"pasame los contactos"* — ${config.textos.todos} para tu agenda\n` +
+    `🤔 *"qué no entendiste"* — lo que me escribieron y no supe contestar\n\n` +
     `También andan los atajos: !hoy !semana !turno N !ok N !no N !anular N !precio`;
 }
 

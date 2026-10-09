@@ -93,3 +93,14 @@ CREATE TABLE IF NOT EXISTS pedidos (
   actualizado_en TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_pedidos_estado ON pedidos(estado);
+
+-- Lo que el bot no entendió (cayó al menú sin ser un saludo, "no encontré", "no te entendí"). Es lo que alimenta el
+-- diccionario (src/core/diccionario/): la dueña lo ve con "qué no entendiste" y cada frase se suma a test/frases.js.
+-- Se guardan las últimas 500.
+CREATE TABLE IF NOT EXISTS no_entendidos (
+  id         INTEGER PRIMARY KEY,
+  telefono   TEXT NOT NULL,
+  texto      TEXT NOT NULL,
+  estado     TEXT,                                  -- en qué paso de la charla estaba
+  creado_en  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);

@@ -9,6 +9,8 @@ const DESTRUCTIVAS = ['anular', 'rechazar', 'aviso'];
 
 const CLAVES = {
   // El orden de este objeto define la prioridad al interpretar.
+  no_entendidos: ['no entendiste', 'no entendio', 'no entendidos', 'lo que no entendiste', 'que no entendiste',
+                  'que no entendio', 'que te preguntaron', 'que no supiste', 'no supiste contestar'],
   anular:    ['anular', 'anula', 'anulame', 'anulá', 'borrar', 'borra', 'borrame',
               'eliminar', 'elimina', 'sacar', 'saca', 'sacame', 'dar de baja',
               'cancelar el turno', 'cancela el turno', 'cancelar turno'],

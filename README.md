@@ -127,6 +127,7 @@ src/
 │   ├── motor.js        puerta de entrada: rutea dueña / clienta
 │   ├── maquina.js      máquina de estados de la conversación
 │   ├── nlu.js          intenciones + typos + fechas/horas en texto libre
+│   ├── diccionario/    las palabras: chat, intenciones, rubros, cantidades y pesos
 │   ├── agenda.js       slots libres, sin solapamientos
 │   ├── duena.js        comandos de la dueña (lenguaje natural + atajos !)
 │   ├── nlu-duena.js    interpreta "anulá el 3", "qué tengo hoy", etc.

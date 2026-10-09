@@ -88,6 +88,7 @@ core/maquina.js ───────── ¿en qué punto de la conversación 
    │                      (el estado se lee de la DB, no de la memoria)
    ▼
 core/nlu.js ───────────── ¿qué quiso decir? intención + servicio + fecha/hora
+   │                      (las palabras salen de core/diccionario/)
    ▼
 core/agenda.js ────────── ¿qué horarios quedan libres?
    │                      (consulta turnos y descarta los que se pisan)
@@ -124,15 +125,20 @@ inicio ──► eligiendo_servicio ──► eligiendo_dia ──► eligiendo_
 
 **El estado vive en la base, no en memoria.** La tabla `clientas` tiene `estado_conv` (dónde está) y `datos_conv` (un JSON con lo que ya eligió). Por eso el bot puede reiniciarse en medio de una conversación y la clienta ni se entera. Si ese JSON se corrompe, se descarta y la conversación vuelve al menú, en vez de tumbar el proceso.
 
-### Entender lenguaje natural sin IA (`core/nlu.js`)
+### Entender lenguaje natural sin IA (`core/nlu.js` + `core/diccionario/`)
 
-Son 145 líneas y tres técnicas simples:
+Cuatro técnicas simples. Las palabras viven en `core/diccionario/`, separadas del código que las usa:
 
-1. **Normalizar**: saca tildes, mayúsculas y signos. `"¿Cuánto sale?"` → `"cuanto sale"`.
-2. **Diccionario de intenciones**: listas de palabras clave por intención (reservar, cancelar, confirmar, hablar con humano, saludo). El orden importa: *"quiero cancelar el turno"* tiene que dar `cancelar`, no `reservar`.
-3. **Distancia de edición de 1**: tolera un typo por palabra en palabras de 5+ letras. Por eso `"kaping"` encuentra Kapping y `"presios"` dispara la FAQ de precios.
+1. **Normalizar** (`diccionario/normalizar.js`): saca tildes, mayúsculas y signos, y escribe de una sola forma lo de chat: `"q"` → que, `"dsp"` → después, `"mñn"` → mañana, `"holaaa"` → hola, `"okk"` → ok, `"👍🏻"` → 👍. `"¿Cuánto sale?"` → `"cuanto sale"`.
+2. **Diccionario común** (`diccionario/comun.js`): las intenciones de cualquier rubro (cambiar el turno, llegar tarde, cancelar, confirmar, pedir una persona, reservar, saludar), la cortesía (un mensaje hecho solo de "gracias", "genia", "mil", "dale"…), volver al menú y los temas de siempre (cómo se paga, envíos, horarios, ubicación). El orden importa: *"no puedo ir el viernes, ¿me lo pasás para el sábado?"* tiene que dar `reprogramar`, no `cancelar`; *"no quiero cancelar"*, `confirmar`.
+3. **Diccionario del rubro** (`diccionario/rubros.js`): cómo se pide cada servicio (`"manicura"` → semipermanente manos, `"rebaje"` → corte, `"mechitas"` → platinado) y cada producto (`"birra"` → cerveza, `"puchos"` → cigarrillos). Si el cliente nombra un servicio a medias (*"un semi"*), pregunta cuál.
+4. **Distancia de edición de 1**: tolera un typo por palabra en palabras de 5+ letras. Por eso `"kaping"` encuentra Kapping y `"graciias"` es un gracias.
 
-Además extrae **fecha y hora** del texto libre: `"mañana"`, `"pasado mañana"`, `"el viernes"`, `"20/8"`, `"día 25"`, `"a las 11"`, `"16:30"`, `"4 de la tarde"`. Si el mensaje trae servicio + día + hora, la máquina se saltea esos pasos y va derecho a pedir el nombre.
+Además extrae **fecha y hora** del texto libre: `"mañana"`, `"pasado mañana"`, `"el viernes"`, `"el finde"`, `"la semana que viene"`, `"20/8"`, `"día 25"`, `"a las 11"`, `"16:30"`, `"tipo 4 y media"`, `"4 de la tarde"`, `"a la tarde"`, `"dsp del mediodía"`. *"A las 5"* sin decir de la tarde se lee con el horario del negocio: si a las 5 está cerrado y a las 17 abierto, son las 17. Si el mensaje trae servicio + día + hora, la máquina se saltea esos pasos y va derecho a pedir el nombre.
+
+En un comercio (`diccionario/numeros.js`), las cantidades como se piden: *"dos cocas"*, *"un par de alfajores"*, *"media docena de huevos"* (el paquete de 6), y los pesos de mostrador: *"1/4 de jamón"*, *"200 g de queso"*, *"medio kilo"*, *"150 de salame"*. Lo que se pesa va en la **nota del pedido** ("A pesar: 250 g de Jamón cocido…"), porque el precio sale de la balanza y lo confirma el local.
+
+**Cómo se mantiene**: cada frase real va a `test/frases.js` con lo que el bot tiene que hacer, por rubro, y corre con `npm test`. Lo que el bot no entiende queda anotado (tabla `no_entendidos`) y la dueña lo ve con *"qué no entendiste"*: esa lista es lo que se suma al diccionario después de cada chat real.
 
 Un detalle que costó: hay que borrar `"de la mañana"` del texto antes de buscar el día, o *"a las 9 de la **mañana** el lunes"* agenda para mañana en vez del lunes.
 
@@ -298,8 +304,9 @@ Que corran sin WhatsApp es consecuencia directa de tener el núcleo desacoplado:
 | Un servicio nuevo | `config.json` → `servicios` |
 | Un rubro nuevo | `src/plantillas.js` (textos y servicios de ejemplo) y la pregunta de `setup.sh` |
 | Cambiar cómo habla el bot en un negocio | `config.json` → `textos` |
-| Que entienda otra forma de decir algo | `core/nlu.js` → el diccionario de intenciones |
-| Otra pregunta frecuente | `config.json` → `faq` y `core/flujos/faq.js` |
+| Que entienda otra forma de decir algo | `core/diccionario/` (común o del rubro) + la frase en `test/frases.js` |
+| Contestar cómo se paga, si hacen envíos | `config.json` → `respuestas.pagos`, `respuestas.envios` |
+| Otra pregunta frecuente de ese negocio | `config.json` → `preguntas`: `[{ "claves": ["estacionamiento"], "respuesta": "…" }]` |
 | Un comando nuevo para la dueña | `core/duena.js` → el `switch` |
 | Un paso más en la conversación | `core/maquina.js` → un estado nuevo + agregarlo al objeto `manejadores` |
 | Otro formato de comprobante | `core/ocr.js` → los regex de `parsear()` |

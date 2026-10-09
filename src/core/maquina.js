@@ -14,11 +14,13 @@ const qClientas = require('../db/consultas/clientas');
 const qServicios = require('../db/consultas/servicios');
 const qTurnos = require('../db/consultas/turnos');
 const qSenas = require('../db/consultas/senas');
+const qNoEntendidos = require('../db/consultas/noEntendidos');
 const agenda = require('./agenda');
 const fechas = require('./fechas');
 const senasFlujo = require('./flujos/senas');
 const faq = require('./flujos/faq');
 const nlu = require('./nlu');
+const rubros = require('./diccionario/rubros');
 const notif = require('./notificaciones');
 const { aQuienAtiende } = require('../plantillas');
 
@@ -28,27 +30,12 @@ function numerosDe(texto) {
   return (texto.match(/\d+/g) || []).map(Number);
 }
 
-// Escape global: desde cualquier punto de la conversación se vuelve al menú.
-const VOLVER_AL_MENU = [
-  'menu', 'menú', 'inicio', 'volver', 'volver al menu', 'volver al menú',
-  'volver al inicio', 'ir al menu', 'ir al menú', 'menu principal', 'menú principal',
-  'empezar de nuevo', 'empezar de cero', 'de nuevo', 'atras', 'atrás', 'salir',
-];
+// Preguntas de precio: "cuánto sale el kapping", "precio del semi", "a cuánto el corte con barba".
+const PIDE_PRECIO = ['precio', 'precios', 'cuanto', 'sale', 'salen', 'cuesta', 'cuestan', 'vale', 'valen', 'valor', 'cobras',
+  'cobran', 'tarifa', 'tarifas', 'lista de precios'];
 
-// Cierres de cortesía: no merecen el menú completo de vuelta.
-const CORTESIA = [
-  'gracias', 'muchas gracias', 'mil gracias', 'genial', 'perfecto', 'dale',
-  'listo', 'buenisimo', 'buenísimo', 'ok', 'oka', 'okey', 'joya', 'barbaro',
-  'bárbaro', 'nos vemos', 'besos', 'de nada', 'igualmente', '👍', '❤️', '🙌', '😊', '💅', '💈', '✂️',
-];
-
-// ¿Es un cierre de cortesía? Con un error de tipeo en las palabras largas ("graciias", "perfeto"): en el primer chat real
-// del almacén (2026-10-09) un "graciias" recibió el menú entero.
-function esCortesia(texto) {
-  const t = texto.replace(/[!.,~\s]+$/g, '');
-  return CORTESIA.includes(t)
-    || CORTESIA.some((c) => c.length >= 5 && !c.includes(' ') && nlu.distancia1(t, c));
-}
+// Los sinónimos de servicios del rubro (diccionario/rubros.js): "manicura" → semipermanente manos.
+const sinonimos = (ctx) => rubros.serviciosDe(ctx.config.negocio.rubro);
 
 // ---------- entrada principal ----------
 // msj: { texto, rutaImagen?, productoId? }  →  devuelve [{para, texto, ...}]
@@ -75,7 +62,7 @@ function procesar(config, clienta, msj) {
   }
 
   // "menú" / "volver" / "empezar de nuevo" funcionan en cualquier estado.
-  if (VOLVER_AL_MENU.includes(ctx.texto.replace(/[!.,¿?]/g, '').trim())) {
+  if (nlu.esVolverAlMenu(texto)) {
     // Excepción: si está esperando el comprobante hay un turno reservado
     // ocupando un horario. No la sacamos del flujo sin avisarle.
     if (clienta.estado_conv === 'esperando_comprobante') {
@@ -104,8 +91,16 @@ function responder(ctx, estado, texto, extraSalientes) {
   return extraSalientes ? salientes.concat(extraSalientes) : salientes;
 }
 
+// Queda anotado para mejorar el diccionario (la dueña lo ve con "qué no entendiste").
+function anotarNoEntendido(ctx) {
+  try { qNoEntendidos.registrar(ctx.clienta.telefono, ctx.msj.texto, ctx.clienta.estado_conv); } catch (e) {
+    console.error('No pude anotar un mensaje no entendido:', e.message);
+  }
+}
+
 // Entrada no reconocida: a la segunda seguida, deriva a humano.
 function noEntendi(ctx, ayuda) {
+  anotarNoEntendido(ctx);
   const n = qClientas.sumarNoEntendido(ctx.clienta.id);
   if (n >= 2) {
     qClientas.derivar(ctx.clienta.id, ctx.config.pausa_minutos);
@@ -123,27 +118,47 @@ function menu(ctx, saludo) {
     `${encabezado}¿Qué necesitás?\n\n*1* — Reservar un turno ${ctx.config.textos.emoji}\n*2* — Ver precios\n*3* — Ubicación y horarios\n*4* — Hablar con una persona\n\nRespondé con el número.`);
 }
 
-function listaServicios(config) {
-  return qServicios.activos().map(
+function listaServicios(config, servicios = qServicios.activos()) {
+  return servicios.map(
     (s) => `*${s.id}* — ${s.nombre} (${s.duracion_min} min) $${s.precio}${s.sena ? ` — seña $${s.sena}` : ''}`
   ).join('\n');
 }
 
+// Los temas de cualquier negocio (nlu.tema): cómo se paga, envíos, horarios, ubicación y las preguntas que cargó el
+// negocio. Lo que el negocio no contestó en config.respuestas lo contesta una persona (`porDefecto` pone otra respuesta).
+function responderTema(ctx, tm, porDefecto = {}, estado = 'inicio') {
+  if (tm.tema === 'pregunta') return responder(ctx, estado, tm.respuesta);
+  if (tm.tema === 'horarios' || tm.tema === 'ubicacion') return responder(ctx, estado, faq.ubicacionYHorarios(ctx.config));
+  const respuesta = ctx.config.respuestas?.[tm.tema] || porDefecto[tm.tema];
+  if (respuesta) return responder(ctx, estado, respuesta);
+  return derivarAHumano(ctx, ctx.msj.texto);
+}
+
+const esPreguntaDePrecio = (ctx, t) => {
+  const norm = nlu.normalizar(t);
+  const tokens = norm.split(' ');
+  return [...PIDE_PRECIO, ...(ctx.config.faq?.precios || []).map(nlu.normalizar)].some((k) => nlu.contiene(norm, tokens, k));
+};
+
 // ---------- estados ----------
 function inicio(ctx) {
   const t = ctx.texto;
+  // Lo que se ofreció en el mensaje anterior ("¿Querés reservarlo? Respondé sí"): vale solo para este mensaje.
+  const ofrecido = ctx.datos.ofrecido;
+  delete ctx.datos.ofrecido;
 
-  // Sin texto (sticker, audio, foto suelta): silencio, nada de menú.
-  if (!t) return [];
+  // Sin texto (sticker, audio, foto suelta) o una risa: silencio, nada de menú.
+  if (!t || nlu.esRisa(t)) return [];
 
-  // "gracias", "genial", un emoji: respuesta corta y listo.
-  if (esCortesia(t)) {
-    return responder(ctx, 'inicio', '¡Gracias a vos! 😊 Cualquier cosa escribime *hola* y te ayudo.');
+  if (ofrecido && nlu.esSi(t)) {
+    const s = qServicios.porId(ofrecido);
+    if (s && s.activo) return elegirServicio(ctx, s);
   }
 
-  // FAQ por palabras clave (no cuenta como "no entendido")
-  const respuestaFaq = faq.buscar(ctx.config, t, listaServicios(ctx.config));
-  if (respuestaFaq) return responder(ctx, 'inicio', respuestaFaq);
+  // "gracias", "genial", un emoji: respuesta corta y listo.
+  if (nlu.esCortesia(t)) {
+    return responder(ctx, 'inicio', '¡Gracias a vos! 😊 Cualquier cosa escribime *hola* y te ayudo.');
+  }
 
   // Opciones numéricas del menú
   if (t === '1') {
@@ -155,18 +170,34 @@ function inicio(ctx) {
   if (t === '3') return responder(ctx, 'inicio', faq.ubicacionYHorarios(ctx.config));
   if (t === '4') return derivarAHumano(ctx, '(pidió hablar con una persona)');
 
-  // Lenguaje natural: diccionario de intenciones + typos (ver nlu.js)
-  const inter = nlu.interpretar(t, qServicios.activos());
+  // Lenguaje natural: diccionario común y del rubro + typos (ver nlu.js y diccionario/)
+  const inter = nlu.interpretar(t, qServicios.activos(), sinonimos(ctx));
+  const fh = nlu.extraerFechaHora(t);
+  const quiereFecha = fh.dia || fh.hora || fh.franja || fh.desde;
+  const proximo = () => qTurnos.proximoDeClienta(ctx.clienta.id, fechas.aTexto(fechas.ahora()));
 
+  // Cambiar el turno. Sin turno, si igual nombró un servicio o una fecha ("mejor el kapping"), sigue como una reserva.
+  if (inter.intencion === 'reprogramar') {
+    const turno = proximo();
+    if (turno) return reprogramar(ctx, turno);
+    if (!inter.servicio && !inter.candidatos.length && !quiereFecha) {
+      return responder(ctx, 'inicio', 'No encontré ningún turno tuyo para cambiar 🤔 Si querés sacar uno, escribí *1*.');
+    }
+  }
+  if (inter.intencion === 'demora') {
+    const turno = proximo();
+    return responder(ctx, 'inicio', `¡Gracias por avisar! Ya le aviso ${aQuienAtiende(ctx.config.textos)} 🙌`,
+      [notif.demora(ctx.config, ctx.clienta, turno, ctx.msj.texto)]);
+  }
   if (inter.intencion === 'confirmar') {
-    const turno = qTurnos.proximoDeClienta(ctx.clienta.id, fechas.aTexto(fechas.ahora()));
+    const turno = proximo();
     if (turno) {
       qTurnos.guardarRespuestaRecordatorio(turno.id, 'confirmo');
       return responder(ctx, 'inicio', `¡Gracias por confirmar! Te esperamos el ${fechas.diaLindo(turno.inicio.slice(0, 10))} a las ${turno.inicio.slice(11)} ${ctx.config.textos.emoji}`);
     }
   }
   if (inter.intencion === 'cancelar') {
-    const turno = qTurnos.proximoDeClienta(ctx.clienta.id, fechas.aTexto(fechas.ahora()));
+    const turno = proximo();
     if (!turno) return responder(ctx, 'inicio', 'No encontré ningún turno tuyo para cancelar. Escribí *hola* si querés reservar uno.');
     ctx.datos.turnoCancelar = turno.id;
     return responder(ctx, 'cancelando',
@@ -174,13 +205,39 @@ function inicio(ctx) {
   }
   if (inter.intencion === 'humano') return derivarAHumano(ctx, ctx.msj.texto);
 
+  // Cómo se paga, horarios, ubicación, las preguntas del negocio. "¿A qué hora tenés turno?" no pregunta el horario del
+  // local: es una reserva. "¿Cómo pago la seña?": el alias.
+  const tm = nlu.tema(ctx.config, t);
+  const senas = ctx.config.senas || {};
+  if (tm && tm.tema === 'pagos' && senas.habilitadas && /\bsena\b/.test(nlu.normalizar(t))) {
+    return responder(ctx, 'inicio', `La seña se paga por transferencia 🏦\nAlias: *${senas.alias_mp}*\nTitular: ${senas.titular}\n\nDespués me mandás la foto del comprobante por acá.`);
+  }
+  if (tm && !(tm.tema === 'horarios' && inter.intencion === 'reservar')) return responderTema(ctx, tm);
+
+  // "¿cuánto sale el kapping?": ese precio (y ofrece reservarlo), no la lista entera.
+  const nombrados = inter.servicio ? [inter.servicio] : inter.candidatos;
+  if (esPreguntaDePrecio(ctx, t) && !quiereFecha) {
+    if (!nombrados.length) return responder(ctx, 'inicio', faq.precios(listaServicios(ctx.config)));
+    if (nombrados.length === 1) ctx.datos.ofrecido = nombrados[0].id;
+    const cola = nombrados.length === 1
+      ? '¿Querés reservarlo? Respondé *sí*, o *2* para ver todos los precios.'
+      : 'Para reservar, escribime cuál (o *1* para ver todos).';
+    return responder(ctx, 'inicio', `💰 ${nombrados.map((s) => `*${s.nombre}* (${s.duracion_min} min): $${s.precio}${s.sena ? ` — seña $${s.sena}` : ''}`).join('\n')}\n\n${cola}`);
+  }
+
   // "quiero kapping mañana a las 15" → salta todos los pasos que ya vinieron
-  const fh = nlu.extraerFechaHora(t);
   if (inter.servicio) return elegirServicio(ctx, inter.servicio, fh);
+  // "quiero un semi" → ¿manos o pies?
+  if (inter.candidatos.length === 1) return elegirServicio(ctx, inter.candidatos[0], fh);
+  if (inter.candidatos.length > 1) {
+    ctx.datos = { fh };
+    return responder(ctx, 'eligiendo_servicio',
+      `¿Cuál de estos?\n\n${listaServicios(ctx.config, inter.candidatos)}\n\nRespondé con el número (o *menú* para ver todo).`);
+  }
 
   // Mencionar un día u hora ya es querer un turno, aunque no diga "reservar"
   // ("se puede el sábado 10 hs?", "tenés algo mañana a la tarde?")
-  if (inter.intencion === 'reservar' || fh.dia || fh.hora) {
+  if (inter.intencion === 'reservar' || quiereFecha) {
     // "quería reservar para el viernes a las 10" sin decir el servicio:
     // guardamos día/hora y los usamos apenas elija el servicio.
     ctx.datos = { fh };
@@ -188,8 +245,24 @@ function inicio(ctx) {
       `¡Buenísimo! ¿Qué servicio querés?\n\n${listaServicios(ctx.config)}\n\nRespondé con el número (o *menú* para volver al principio).`);
   }
 
-  // Saludo o cualquier otra cosa → menú de bienvenida
+  // Saludo o cualquier otra cosa → menú de bienvenida. Lo que no era un saludo queda anotado.
+  if (inter.intencion !== 'saludo') anotarNoEntendido(ctx);
   return menu(ctx, `¡Hola! 👋 Soy el asistente de *${ctx.config.negocio.nombre}*.`);
+}
+
+// "no puedo ir el viernes, ¿me lo pasás para el sábado?": el mismo turno, en otro día u hora. Lo que propone está
+// después de "pasás", "puedo", "mejor"… ("no llego a las 10, puedo a las 11" → las 11, no las 10).
+function reprogramar(ctx, turno) {
+  const servicio = qServicios.porId(turno.servicio_id);
+  const partes = ctx.msj.texto.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .split(/\b(?:puedo|podria|podes|pueden|mejor|pasas|pasan|pasar|pasarlo|pasarla|cambiar|cambias|cambialo|moverlo|correrlo|para el|para la|en vez de)\b/);
+  const propuesta = partes.length > 1 ? partes[partes.length - 1] : '';
+  const fh = nlu.extraerFechaHora(propuesta);
+  if (fh.hora && !fh.dia) fh.dia = turno.inicio.slice(0, 10);
+  ctx.datos = { reprogramar: turno.id };
+  const r = elegirServicio(ctx, servicio, fh);
+  r[0].texto = `🔁 Cambiamos tu turno del ${fechas.diaLindo(turno.inicio.slice(0, 10))} a las ${turno.inicio.slice(11)} (${servicio.nombre}).\n\n${r[0].texto}`;
+  return r;
 }
 
 function derivarAHumano(ctx, textoCitado) {
@@ -219,7 +292,7 @@ function cancelando(ctx) {
 function eligiendo_servicio(ctx) {
   // Primero por nombre, porque puede venir con fecha y hora incluidas
   // ("kapping el 14/8 a las 10") y esos números NO son una selección múltiple.
-  const porNombre = nlu.servicioPorNombre(ctx.texto, qServicios.activos());
+  const porNombre = nlu.servicioPorNombre(ctx.texto, qServicios.activos(), sinonimos(ctx));
   if (porNombre && porNombre.activo) {
     return elegirServicio(ctx, porNombre, nlu.extraerFechaHora(ctx.msj.texto || ''));
   }
@@ -241,10 +314,26 @@ function eligiendo_servicio(ctx) {
 // haya dicho antes en el mismo flujo (ctx.datos.fh).
 function elegirServicio(ctx, servicio, fh) {
   const previo = ctx.datos.fh || {};
-  fh = { dia: (fh && fh.dia) || previo.dia || null, hora: (fh && fh.hora) || previo.hora || null };
-  ctx.datos = { servicioId: servicio.id };
+  const f = fh || {};
+  fh = {
+    dia: f.dia || previo.dia || null, hora: f.hora || previo.hora || null,
+    horaAmbigua: f.hora ? !!f.horaAmbigua : !!previo.horaAmbigua,
+    franja: f.franja || previo.franja || null, desde: f.desde || previo.desde || null,
+  };
+  // Si está cambiando un turno, se sigue sabiendo cuál (y ese turno no le ocupa el lugar a sí mismo).
+  const reprogramarId = ctx.datos.reprogramar || 0;
+  ctx.datos = { servicioId: servicio.id, ...(reprogramarId ? { reprogramar: reprogramarId } : {}), ...(fh.franja ? { franja: fh.franja } : {}) };
 
-  const dias = agenda.diasDisponibles(ctx.config, servicio);
+  // "a las 5" sin decir de la tarde: si a las 5 está cerrado y a las 17 abierto, son las 17.
+  if (fh.hora && fh.horaAmbigua) {
+    const [h, m] = fh.hora.split(':').map(Number);
+    const pm = `${String(h + 12).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    if (!agenda.abiertoA(ctx.config, fh.hora, fh.dia) && agenda.abiertoA(ctx.config, pm, fh.dia)) fh.hora = pm;
+  }
+
+  // "la semana que viene", "a la tarde": los días que cumplen; si ninguno, todos.
+  let dias = agenda.diasDisponibles(ctx.config, servicio, { desde: fh.desde, franja: fh.franja, excluirId: reprogramarId });
+  if (!dias.length && (fh.desde || fh.franja)) dias = agenda.diasDisponibles(ctx.config, servicio, { excluirId: reprogramarId });
   if (!dias.length) {
     return responder(ctx, 'inicio', `Uy, no tengo horarios libres en los próximos días 😔 Escribí *4* si querés coordinar directo con ${ctx.config.textos.quien_atiende}.`);
   }
@@ -258,7 +347,7 @@ function elegirServicio(ctx, servicio, fh) {
       return responder(ctx, 'eligiendo_dia',
         `Por ahora agendo hasta ${ctx.config.turnos.dias_hacia_adelante} días para adelante 😅 Estos días puedo:\n\n${listaDias}\n\nRespondé con el número, *0* para volver o *menú* para empezar de nuevo.`);
     }
-    const horas = agenda.horariosLibres(ctx.config, servicio, fh.dia);
+    const horas = horasEnFranja(agenda.horariosLibres(ctx.config, servicio, fh.dia, reprogramarId), fh.franja);
     if (!horas.length) {
       return responder(ctx, 'eligiendo_dia',
         `Uy, el ${fechas.diaLindo(fh.dia)} no tengo lugar para *${servicio.nombre}* 😕 Estos días sí puedo:\n\n${listaDias}\n\nRespondé con el número, *0* para volver o *menú* para empezar de nuevo.`);
@@ -310,9 +399,15 @@ function eligiendo_dia(ctx) {
   return pedirHorarios(ctx, dia);
 }
 
+// Los horarios de la franja que pidió ("a la tarde"); si esa franja no tiene ninguno, todos.
+function horasEnFranja(horas, franja) {
+  const enFranja = horas.filter((h) => nlu.enFranja(h, franja));
+  return enFranja.length ? enFranja : horas;
+}
+
 function pedirHorarios(ctx, dia) {
   const servicio = qServicios.porId(ctx.datos.servicioId);
-  const horas = agenda.horariosLibres(ctx.config, servicio, dia);
+  const horas = horasEnFranja(agenda.horariosLibres(ctx.config, servicio, dia, ctx.datos.reprogramar || 0), ctx.datos.franja);
   if (!horas.length) return noEntendi(ctx, 'Ese día se acaba de llenar 😅 Elegí otro de la lista.');
 
   ctx.datos.dia = dia;
@@ -370,6 +465,11 @@ function pidiendo_nombre(ctx) {
 
 function resumenParaConfirmar(ctx) {
   const s = qServicios.porId(ctx.datos.servicioId);
+  if (ctx.datos.reprogramar) {
+    const antes = qTurnos.porId(ctx.datos.reprogramar);
+    return responder(ctx, 'confirmando',
+      `Perfecto ${ctx.clienta.nombre}, repasemos el cambio:\n\n${ctx.config.textos.emoji} ${s.nombre}\n🔁 Antes: ${fechas.diaLindo(antes.inicio.slice(0, 10))} a las ${antes.inicio.slice(11)}\n📅 Ahora: ${fechas.diaLindo(ctx.datos.dia)} a las ${ctx.datos.hora}\n\n*1* — Confirmar el cambio\n*2* — Elegir otro horario\n*0* — Dejarlo como estaba`);
+  }
   const senaTxt = (ctx.config.senas.habilitadas && s.sena > 0)
     ? `\n💸 Seña para reservar: $${s.sena}` : '';
   return responder(ctx, 'confirmando',
@@ -377,6 +477,7 @@ function resumenParaConfirmar(ctx) {
 }
 
 function confirmando(ctx) {
+  if (ctx.datos.reprogramar) return confirmandoCambio(ctx);
   if (ctx.texto === '2') { ctx.datos = {}; return responder(ctx, 'eligiendo_servicio', `Dale, arranquemos de nuevo. ¿Qué servicio querés?\n\n${listaServicios(ctx.config)}`); }
   if (ctx.texto === '0') { ctx.datos = {}; return responder(ctx, 'inicio', 'Listo, no reservé nada. Cuando quieras escribí *hola* 😊'); }
   if (ctx.texto !== '1') return noEntendi(ctx, 'Respondé *1* para confirmar, *2* para cambiar o *0* para cancelar.');
@@ -411,6 +512,34 @@ function confirmando(ctx) {
     `¡Casi listo! Para reservar te pido una seña de *$${s.sena}* por transferencia:\n\n🏦 Alias: *${ctx.config.senas.alias_mp}*\n👤 Titular: ${ctx.config.senas.titular}\n\nCuando la hagas, mandame la *foto del comprobante* por acá. Tenés ${ctx.config.senas.vencimiento_horas} hs, después el horario se libera solo 😉`);
 }
 
+// Confirmar el cambio de un turno: se mueve el MISMO turno (con su seña, si la tenía) al horario nuevo.
+function confirmandoCambio(ctx) {
+  const id = ctx.datos.reprogramar;
+  const s = qServicios.porId(ctx.datos.servicioId);
+  if (ctx.texto === '2') return elegirServicio(ctx, s);
+  if (ctx.texto === '0') { ctx.datos = {}; return responder(ctx, 'inicio', `Listo, tu turno sigue como estaba ${ctx.config.textos.emoji}`); }
+  if (ctx.texto !== '1') return noEntendi(ctx, 'Respondé *1* para confirmar el cambio, *2* para elegir otro horario o *0* para dejarlo como estaba.');
+
+  const antes = qTurnos.porId(id);
+  if (!antes || !['pendiente_sena', 'confirmado'].includes(antes.estado)) {
+    ctx.datos = {};
+    return responder(ctx, 'inicio', 'Ese turno ya no está activo 🤔 Si querés sacar uno nuevo, escribí *1*.');
+  }
+  const inicioT = `${ctx.datos.dia} ${ctx.datos.hora}`;
+  const finT = fechas.sumarMinutos(inicioT, s.duracion_min);
+  if (qTurnos.haySolapamiento(inicioT, finT, id)) {
+    const r = elegirServicio(ctx, s);
+    r[0].texto = `Uy, justo ese horario lo acaban de reservar 😔 Elegí otro:\n\n${r[0].texto}`;
+    return r;
+  }
+  qTurnos.mover(id, inicioT, finT);
+  const turno = qTurnos.porId(id);
+  ctx.datos = {};
+  return responder(ctx, 'inicio',
+    `¡Listo! Tu turno quedó para el ${fechas.diaLindo(turno.inicio.slice(0, 10))} a las ${turno.inicio.slice(11)} ${ctx.config.textos.emoji}\nTe mandamos un recordatorio un día antes.`,
+    [notif.turnoMovido(ctx.config, antes, turno), ...notif.invitacionCalendario(ctx.config, turno)]);
+}
+
 function esperando_comprobante(ctx) {
   if (!ctx.msj.rutaImagen) {
     if (ctx.texto === '0' || ctx.texto === 'cancelar') {
@@ -435,4 +564,4 @@ function esperando_comprobante(ctx) {
 
 // Lo común con la conversación de un comercio (`comercio.js`): una sola forma de responder, de "no entendí" y de pasarle
 // la charla a una persona.
-module.exports = { procesar, responder, noEntendi, derivarAHumano, numerosDe, VOLVER_AL_MENU, esCortesia };
+module.exports = { procesar, responder, noEntendi, anotarNoEntendido, derivarAHumano, responderTema, numerosDe };

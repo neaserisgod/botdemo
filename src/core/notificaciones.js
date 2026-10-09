@@ -75,6 +75,23 @@ function cancelacion(config, turno, origen) {
   };
 }
 
+// El cliente cambió su turno de día u hora (es el mismo turno: la seña, si la tenía, sigue valiendo).
+function turnoMovido(config, antes, turno) {
+  return {
+    para: config.numero_duena,
+    texto: `🔁 *Turno cambiado* #${turno.id} — ${turno.servicio}\n${config.textos.cliente_mayuscula}: ${turno.clienta_nombre || turno.telefono}\nAntes: ${fechas.diaLindo(antes.inicio.slice(0, 10))} ${antes.inicio.slice(11)}\nAhora: *${fechas.diaLindo(turno.inicio.slice(0, 10))} ${turno.inicio.slice(11)}*`,
+  };
+}
+
+// "llego 10 min tarde": se le avisa al negocio, sin pausar el bot.
+function demora(config, clienta, turno, textoCitado) {
+  const cual = turno ? `turno #${turno.id} de las ${turno.inicio.slice(11)} (${fechas.diaLindo(turno.inicio.slice(0, 10))})` : 'sin turno próximo';
+  return {
+    para: config.numero_duena,
+    texto: `⏰ *Avisa que llega tarde* — ${cual}\n${config.textos.cliente_mayuscula}: ${clienta.nombre || clienta.telefono} (${clienta.telefono})\n> ${textoCitado || ''}`,
+  };
+}
+
 function derivacion(config, clienta, textoCitado) {
   return {
     para: config.numero_duena,
@@ -129,6 +146,6 @@ function tarjetaContacto(config, clienta, turno) {
 module.exports = {
   duracion,
   turnoSenado, senaARevisar, senaVencida, turnoConfirmado,
-  cancelacion, derivacion, agendaDiaria, resumenSemanal, linea,
+  cancelacion, derivacion, turnoMovido, demora, agendaDiaria, resumenSemanal, linea,
   invitacionCalendario, tarjetaContacto,
 };

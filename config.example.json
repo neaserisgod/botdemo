@@ -60,6 +60,12 @@
     "horarios":  ["horario", "horarios", "cuando abren", "cuándo abren", "que hora abren", "a que hora"]
   },
 
+  "respuestas": {
+    "pagos": null,
+    "envios": null
+  },
+  "preguntas": [],
+
   "panel": {
     "puerto": 3010,
     "escuchar_en_red": false
