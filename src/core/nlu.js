@@ -17,9 +17,13 @@ function normalizar(texto) {
 }
 
 // Distancia de edición con salida rápida (alcanza para typos de 1 letra:
-// "kaping" → "kapping", "presios" → "precios").
+// "kaping" → "kapping", "presios" → "precios"), y dos letras vecinas dadas vuelta ("tunro" → "turno", "cnacelar").
 function distancia1(a, b) {
   if (a === b) return true;
+  if (a.length === b.length) {
+    const d = [...a].map((c, i) => (c === b[i] ? -1 : i)).filter((i) => i >= 0);
+    if (d.length === 2 && d[1] === d[0] + 1 && a[d[0]] === b[d[1]] && a[d[1]] === b[d[0]]) return true;
+  }
   if (Math.abs(a.length - b.length) > 1) return false;
   let i = 0, j = 0, dif = 0;
   while (i < a.length && j < b.length) {
@@ -35,10 +39,20 @@ function distancia1(a, b) {
 // ¿El texto contiene esta palabra/frase clave? Frases: como palabras enteras ("si voy" no está en "casi voy").
 // Palabras: por token exacto, o typo de 1 letra si la palabra es larga. Una expresión regular se prueba tal cual
 // (para lo que una lista no alcanza: "llego 10 min tarde").
+// También por cómo suena ("kansela" = "cancela", "reserbar" = "reservar") y, en una palabra larga, pegada a otras
+// ("quierounturno" tiene "turno").
+const sonidos = new Map();
+const suena = (p) => { let s = sonidos.get(p); if (s === undefined) { s = chat.sonido(p); if (sonidos.size < 20000) sonidos.set(p, s); } return s; };
 function contiene(textoNorm, tokens, clave) {
   if (clave instanceof RegExp) return clave.test(textoNorm);
-  if (clave.includes(' ')) return ` ${textoNorm} `.includes(` ${clave} `);
-  return tokens.some((tok) => tok === clave || (clave.length >= 5 && distancia1(tok, clave)));
+  if (clave.includes(' ')) {
+    if (` ${textoNorm} `.includes(` ${clave} `)) return true;
+    return ` ${tokens.map(suena).join(' ')} `.includes(` ${clave.split(' ').map(suena).join(' ')} `);
+  }
+  const s = suena(clave);
+  return tokens.some((tok) => tok === clave || (tok.length >= 3 && suena(tok) === s)
+    || (clave.length >= 5 && (distancia1(tok, clave) || distancia1(suena(tok), s)))
+    || (clave.length >= 5 && tok.length >= clave.length + 3 && tok.includes(clave)));
 }
 
 // Las intenciones (cambiar, cancelar, confirmar, llegar tarde, pedir una persona, reservar, saludar) están en el
@@ -124,8 +138,34 @@ function esCortesia(texto) {
 }
 
 const esVolverAlMenu = (texto) => comun.VOLVER_AL_MENU.includes(normalizar(texto));
+
+// Enojo: insultos o emojis de bronca ("bot de mierda", "la concha de…", "😡"). Al que está enojado lo atiende una persona.
+function esInsulto(texto) {
+  if (comun.EMOJIS_ENOJO.test(texto || '')) return true;
+  const n = normalizar(texto);
+  const tokens = n.split(' ');
+  return comun.INSULTOS.some((k) => (k.includes(' ') ? ` ${n} `.includes(` ${k} `) : tokens.includes(k)));
+}
+
+// Apuro: "??", "hola???", "contestá", "hay alguien?", "y?": quiere que le contesten, no el menú de nuevo.
+function esApuro(texto) {
+  const crudo = String(texto || '').trim();
+  if (/^[?¿!.\s]+$/.test(crudo)) return true;
+  return comun.APURO.includes(normalizar(crudo));
+}
+
+// Una opción del menú, como la escriba: "1", "1.", "1)", "el 1", "la 2", "opción 3", "uno", "la primera". Devuelve el
+// número (1 a 9) o null.
+const ORDINALES = { uno: 1, una: 1, primero: 1, primera: 1, dos: 2, segundo: 2, segunda: 2, tres: 3, tercero: 3, tercera: 3,
+  cuatro: 4, cuarto: 4, cuarta: 4, cinco: 5, quinto: 5, quinta: 5 };
+function opcionMenu(texto) {
+  const n = normalizar(texto).replace(/^(?:el|la|opcion|op|numero|nro|n|la opcion|el numero|quiero la|quiero el|la de|el de)\s+/, '').trim();
+  if (/^[1-9]$/.test(n)) return Number(n);
+  return ORDINALES[n] || null;
+}
 const esRisa = (texto) => chat.esRisa(normalizar(texto), texto);
 const esSi = (texto) => comun.SI.has(normalizar(texto));
+const esNo = (texto) => comun.NO.has(normalizar(texto));
 
 // ¿Pregunta por un tema que se responde igual en cualquier negocio? Primero las preguntas que cargó el negocio
 // (config.preguntas: [{ claves, respuesta }]); después cómo se paga, envíos, horarios y ubicación (estos dos suman las
@@ -158,6 +198,8 @@ const HORAS_PALABRA = { una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, s
 function extraerFechaHora(texto, ahora = new Date()) {
   let t = (texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   t = chat.expandir(t.replace(/[¿?!,;()"'¡]/g, ' ').replace(/\s+/g, ' ').trim());
+  // "alas 5", "ala 1": "a las 5", "a la 1".
+  t = t.replace(/\balas? (?=\d|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)/g, (m) => (m.startsWith('alas') ? 'a las ' : 'a la '));
   const hoy0 = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
   const aYmd = (d) => fechas.aTexto(d).slice(0, 10);
   const masDias = (n) => new Date(hoy0.getFullYear(), hoy0.getMonth(), hoy0.getDate() + n);
@@ -251,5 +293,5 @@ const enFranja = (hora, franja) => !franja || !FRANJA_HORAS[franja] || (hora >= 
 
 module.exports = {
   interpretar, servicioPorNombre, serviciosMencionados, conSinonimos, extraerFechaHora, enFranja, normalizar, distancia1,
-  contiene, esCortesia, esVolverAlMenu, esRisa, esSi, tema,
+  contiene, suena, esCortesia, esVolverAlMenu, esRisa, esSi, esNo, esInsulto, esApuro, opcionMenu, tema,
 };

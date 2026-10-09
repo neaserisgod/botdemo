@@ -59,6 +59,7 @@ Un **adaptador** traduce entre eso y la librería de turno. Hay tres:
 |---|---|
 | `baileys.js` | Producción (celu) y pruebas reales |
 | `consola.js` | Probar el flujo entero en la terminal, sin WhatsApp |
+| `scripts/probar.js` | Simulador en el navegador (`bash bot.sh probar`): cliente y dueña en la misma pantalla, base de prueba, al lado del bot andando |
 | `whatsappweb.js` | Alternativa en PC (arrastra Chromium) |
 
 Se elige al arrancar: `node src/index.js --adaptador=baileys`.
@@ -141,6 +142,18 @@ En un comercio (`diccionario/numeros.js`), las cantidades como se piden (*"dos c
 - **Qué se pesa lo dice el catálogo**: la app de Nodo Sur publica los pesables como *"Jamón cocido (por kg)"* con el precio **por kilo**. El bot los ofrece así (*"$15.000 el kilo"*) y los pide en gramos: *"200 de jamón"*, *"1/4 de jamón"*, *"medio de cremoso"*, *"kilo y medio de queso"*, y *"200 jamón"* como en la caja (de 50 para arriba son gramos). Si no dijo cuánto, pregunta. El precio sale con la misma cuenta que la caja (`subtotalPesable`): precio por kilo × gramos / 1000.
 - **Lo que viene en paquete no se fracciona**: *"2 kg de yerba"* son 2 paquetes de 1 kg; *"medio kilo de yerba"* busca el paquete de 500 g y, si no hay, dice que viene en paquete.
 - **A Nodo Sur** lo pesado viaja en gramos (`{ gid, nombre, gramos, precioCentavos }`, precio por kilo). El sitio de hoy solo acepta cantidades enteras (que para un pesable la app toma como kilos): si rechaza los gramos, los kilos enteros van como cantidad y un pedido con gramos sueltos (250 g) le llega **entero al local por WhatsApp** (estado `a_mano`), en vez de quedar trabado. Para que vaya a Encargues hace falta que el sitio (`pedidoDesdeBot`) y la app (`apartadosDePedido`) acepten `gramos`.
+
+**La regla del cliente difícil** (el dueño, 2026-10-09): hay que suponer que quien escribe lo hace mal, apurado, enojado, todo junto, manda audios y no lee lo que se le contesta. Por eso:
+
+- se compara también **por cómo suena** (`kansela` = cancela, `reserbar` = reservar, `kiero` = quiero), con **letras dadas vuelta** (`tunro`) y **palabras pegadas** (`quierounturno`);
+- las opciones del menú valen **como se escriban**: `1.`, `el 1`, `opción 2`, `uno`, `la primera`;
+- a mitad de un paso, **cambiar de tema no es no entender**: un "gracias", una pregunta de precio o de horarios se contestan sin perder el paso;
+- **apuro** (`??`, `hola???`, `contestá`) después del menú: una respuesta corta, no el menú otra vez; a la segunda, una persona;
+- **enojo** (insultos, 😡) sin otro pedido: perdón y una persona, sin discutir. Con un pedido ("dame un turno la puta madre"), se atiende el pedido. "Boludo" no cuenta;
+- **dos mensajes seguidos sin entender**: una persona, no el menú dos veces;
+- un **audio**: se le pide que lo escriba (callarse es lo peor).
+
+Todo eso está en `test/frases.js` (sección "El cliente difícil"), para los cinco rubros.
 
 **Cómo se mantiene**: cada frase real va a `test/frases.js` con lo que el bot tiene que hacer, por rubro, y corre con `npm test`. Lo que el bot no entiende queda anotado (tabla `no_entendidos`) y la dueña lo ve con *"qué no entendiste"*: esa lista es lo que se suma al diccionario después de cada chat real.
 

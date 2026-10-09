@@ -262,7 +262,9 @@ function crearAdaptador(config, hooks) {
     // Ítem del catálogo tocado por la clienta
     const productoId = m.productMessage?.product?.productId || null;
 
-    const salientes = hooks.alRecibir({ de, texto, rutaImagen, productoId });
+    // Audio o nota de voz: el bot no los escucha, pero le avisa al cliente (ver motor.js).
+    const tipo = m.audioMessage ? 'audio' : null;
+    const salientes = hooks.alRecibir({ de, texto, rutaImagen, productoId, tipo });
     await enviarTodos(salientes);
   }
 
