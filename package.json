@@ -13,13 +13,14 @@
     "demo": "node src/index.js --adaptador=whatsappweb",
     "baileys": "node src/index.js --adaptador=baileys",
     "consola": "node src/index.js --adaptador=consola",
-    "test": "node test/simulacion.js && node test/escenarios.js && node test/limites.js && node test/plantillas.js && node test/comercio.js"
+    "test": "node test/simulacion.js && node test/escenarios.js && node test/limites.js && node test/plantillas.js && node test/comercio.js && node test/nube.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.19",
     "express": "^4.19.2",
     "node-cron": "^3.0.3",
-    "qrcode-terminal": "^0.12.0"
+    "qrcode-terminal": "^0.12.0",
+    "ws": "^8.18.0"
   },
   "optionalDependencies": {
     "better-sqlite3": "^12.11.1",

@@ -2,7 +2,8 @@
 // Elegís el adaptador con la variable ADAPTADOR: whatsappweb (demo PC),
 // consola (pruebas sin WhatsApp), baileys (fase 2, celu).
 const cron = require('node-cron');
-const config = require('./config').cargar(); // valida y avisa si algo está mal
+const configuracion = require('./config');
+const config = configuracion.cargar(); // valida y avisa si algo está mal
 const db = require('./db');
 const qTurnos = require('./db/consultas/turnos');
 
@@ -63,6 +64,12 @@ salud.registrarArranque();
 const motor = crearMotor(config);
 const estado = { conectado: false };
 
+// Nodo Sur (opcional): el catálogo que quedó guardado, para atender aunque el celu arranque sin internet.
+const nube = require('./nube/sincronizar');
+if (config.forma === 'productos' && !nube.cargarCatalogoGuardado()) {
+  console.log('Todavía no hay catálogo de Nodo Sur guardado: se baja apenas haya conexión.');
+}
+
 // --- Adaptador ---
 // Se elige con --adaptador=X (anda en Windows) o la variable ADAPTADOR (Linux/Termux)
 const arg = process.argv.find((a) => a.startsWith('--adaptador='));
@@ -71,6 +78,9 @@ const { crearAdaptador } = require(`./adaptadores/${nombreAdaptador}`);
 
 const adaptador = crearAdaptador(config, {
   alRecibir: (msj) => motor.procesarMensaje(msj),
+
+  // El dueño contestó a mano desde el WhatsApp del negocio: el bot se calla en ese chat un rato.
+  alResponderDueno: (numero) => motor.pausar(numero),
 
   alConectar: () => {
     const primeraVez = !estado.conectado;
@@ -126,29 +136,39 @@ function tarea(nombre, fn) {
   };
 }
 
-// Recordatorios + señas vencidas, cada 5 min
-cron.schedule(config.recordatorios.chequeo_cron,
-  tarea('recordatorios', () => recordatorios.tick(config)));
+// Las tareas que dependen de la configuración (horarios de la agenda, del resumen, del latido) se arman acá, para
+// volver a armarlas cuando la configuración cambia desde Nodo Sur sin reiniciar el bot.
+let tareasProgramadas = [];
+function programarTareas() {
+  for (const t of tareasProgramadas) t.stop();
+  tareasProgramadas = [];
+  const programar = (expr, fn) => tareasProgramadas.push(cron.schedule(expr, fn));
 
-// Batería (corte de luz), cada 5 min — no hace nada fuera de Termux
-cron.schedule('*/5 * * * *',
-  tarea('batería', () => salud.chequearBateria(config)));
+  // Recordatorios + señas vencidas, cada 5 min
+  programar(config.recordatorios.chequeo_cron,
+    tarea('recordatorios', () => recordatorios.tick(config)));
 
-// Agenda diaria a la dueña
-const [hAg, mAg] = config.notificaciones_duena.agenda_diaria_hora.split(':');
-cron.schedule(`${mAg} ${hAg} * * *`,
-  tarea('agenda diaria', () => recordatorios.agendaDiaria(config)));
+  // Batería (corte de luz), cada 5 min — no hace nada fuera de Termux
+  programar('*/5 * * * *',
+    tarea('batería', () => salud.chequearBateria(config)));
 
-// Resumen semanal
-const DIA_CRON = { domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6 };
-const [hRes, mRes] = config.notificaciones_duena.resumen_semanal_hora.split(':');
-cron.schedule(`${mRes} ${hRes} * * ${DIA_CRON[config.notificaciones_duena.resumen_semanal_dia]}`,
-  tarea('resumen semanal', () => recordatorios.resumenSemanal(config)));
+  // Agenda diaria a la dueña
+  const [hAg, mAg] = config.notificaciones_duena.agenda_diaria_hora.split(':');
+  programar(`${mAg} ${hAg} * * *`,
+    tarea('agenda diaria', () => recordatorios.agendaDiaria(config)));
 
-// Latido diario a mi número (solo salud del sistema)
-const [hLat, mLat] = config.latido.hora.split(':');
-cron.schedule(`${mLat} ${hLat} * * *`,
-  tarea('latido', () => salud.latido(config)));
+  // Resumen semanal
+  const DIA_CRON = { domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6 };
+  const [hRes, mRes] = config.notificaciones_duena.resumen_semanal_hora.split(':');
+  programar(`${mRes} ${hRes} * * ${DIA_CRON[config.notificaciones_duena.resumen_semanal_dia]}`,
+    tarea('resumen semanal', () => recordatorios.resumenSemanal(config)));
+
+  // Latido diario a mi número (solo salud del sistema)
+  const [hLat, mLat] = config.latido.hora.split(':');
+  programar(`${mLat} ${hLat} * * *`,
+    tarea('latido', () => salud.latido(config)));
+}
+programarTareas();
 
 // Limpieza de archivos viejos (comprobantes, .ics, .vcf): en un celu el espacio
 // es finito y estos se acumulan para siempre. Todos los días a las 4 AM.
@@ -177,6 +197,39 @@ function limpiarArchivosViejos() {
     }
   }
   if (borrados) console.log(`Limpieza: ${borrados} archivos de más de ${diasQueGuardamos} días`);
+}
+
+// --- Nodo Sur ---
+// Mensajes que salen ahora mismo (avisos de pedidos resueltos): devuelve los que salieron de verdad.
+async function enviarAhora(salientes) {
+  if (!estado.conectado) return [];
+  try { return (await adaptador.enviar(salientes)) || []; } catch { return []; }
+}
+
+// La configuración cambió en Nodo Sur: se vuelve a leer en el lugar (el motor y las tareas tienen la misma referencia),
+// se siembran los servicios y se reprograman las tareas. Si no pasa la validación, sigue la anterior.
+function recargarConfig() {
+  const problemas = configuracion.recargar(config);
+  if (problemas.length) return problemas;
+  db.sembrarServicios(config.servicios || []);
+  programarTareas();
+  return [];
+}
+
+const cuentaNube = require('./nube/cuenta').leer();
+if (cuentaNube) {
+  const { crearCliente } = require('./nube/cliente');
+  const sincronizador = nube.crearSincronizador({
+    config, recargarConfig, enviar: enviarAhora,
+    cliente: crearCliente({ sitio: cuentaNube.sitio, token: cuentaNube.token }),
+    version: require('../package.json').version,
+  });
+  let WebSocket = null;
+  try { WebSocket = require('ws'); } catch { console.log('Sin el paquete ws: Nodo Sur se revisa cada 10 minutos, sin avisos en vivo.'); }
+  sincronizador.iniciar({ WebSocket });
+  console.log(`Vinculado a Nodo Sur (${cuentaNube.email}).`);
+} else {
+  console.log('Sin vincular a Nodo Sur: el bot usa solo config.json (para vincularlo: bash bot.sh vincular-nodosur).');
 }
 
 // --- Panel + arranque ---

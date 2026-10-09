@@ -28,18 +28,26 @@ function mezclar(base, encima) {
   return r;
 }
 
-// La configuración se arma en tres capas, de menor a mayor prioridad:
+// La configuración se arma en capas, de menor a mayor prioridad:
 //
-//   1. config.example.json  ← versionado. La plantilla con TODOS los campos.
-//                             Al agregarse funciones nuevas, los valores por
-//                             defecto llegan por acá con un simple git pull.
-//   2. config.json          ← NO versionado. Lo del cliente de este equipo.
-//   3. config.local.json    ← NO versionado. Ajustes finos, opcional.
+//   1. config.example.json    ← versionado. La plantilla con TODOS los campos.
+//                               Al agregarse funciones nuevas, los valores por
+//                               defecto llegan por acá con un simple git pull.
+//   2. config.json            ← NO versionado. Lo del cliente de este equipo.
+//   3. data/config-nube.json  ← lo que se configura desde la app de Nodo Sur
+//                               (lo baja `nube/sincronizar.js`). Gana sobre
+//                               config.json: si el negocio lo configura desde
+//                               la app, eso es lo que vale. Queda guardado, así
+//                               que sin internet sigue andando lo último.
+//   4. config.local.json      ← NO versionado. Ajustes finos, opcional.
 //
-// Que las capas 2 y 3 estén fuera del repo es lo que hace que `git pull` nunca
+// Que las capas 2 a 4 estén fuera del repo es lo que hace que `git pull` nunca
 // choque ni pise los datos del cliente. Y que la capa 1 sea la base es lo que
 // hace que una config vieja no se rompa cuando el bot suma opciones nuevas.
-function cargar() {
+const rutaNube = () => path.join(require('./nube/cuenta').dirDatos(), 'config-nube.json');
+
+// Lee las capas que haya y aplica la plantilla del rubro. No valida ni corta el proceso.
+function construir() {
   const ejemplo = path.join(RAIZ, 'config.example.json');
   const propio = path.join(RAIZ, 'config.json');
   const local = path.join(RAIZ, 'config.local.json');
@@ -55,25 +63,52 @@ function cargar() {
     config = mezclar(config, leerJson(propio));
     capas.push('config.json');
   }
+  const nube = configNube();
+  if (nube) {
+    config = mezclar(config, nube.config);
+    capas.push(`Nodo Sur (versión ${nube.version})`);
+  }
   if (fs.existsSync(local)) {
     config = mezclar(config, leerJson(local));
     capas.push('config.local.json');
   }
+  return { config: aplicarPlantilla(config), capas };
+}
 
+// La configuración que bajó de Nodo Sur ({ version, config }), o null si no hay o está rota (se ignora, no corta).
+function configNube() {
+  try {
+    const n = JSON.parse(fs.readFileSync(rutaNube(), 'utf8'));
+    return n && n.config && typeof n.config === 'object' ? n : null;
+  } catch { return null; }
+}
+
+function cargar() {
+  const { config, capas } = construir();
   if (capas.length) {
     console.log(`Configuración: config.example.json + ${capas.join(' + ')}`);
   } else {
     console.log('⚠️  Solo hay config.example.json (datos de demo).');
-    console.log('   Para un cliente real: cp config.example.json config.json && nano config.json\n');
+    console.log('   Para un cliente real: node scripts/config-de-rubro.js <rubro> && nano config.json\n');
   }
-
-  config = aplicarPlantilla(config);
   const problemas = validar(config);
   if (problemas.length) {
     console.error('❌ Revisá config.json:\n' + problemas.map((p) => `   • ${p}`).join('\n') + '\n');
     process.exit(1);
   }
   return config;
+}
+
+// Vuelve a leer las capas (por ejemplo, cuando cambió la configuración en Nodo Sur) y cambia [actual] EN EL LUGAR: el
+// motor, la conversación y las tareas tienen la misma referencia y ven lo nuevo sin reiniciar. Si lo nuevo no pasa la
+// validación, [actual] queda como estaba y se devuelven los problemas.
+function recargar(actual) {
+  const { config } = construir();
+  const problemas = validar(config);
+  if (problemas.length) return problemas;
+  for (const k of Object.keys(actual)) delete actual[k];
+  Object.assign(actual, config);
+  return [];
 }
 
 // Los textos del rubro van DEBAJO de lo que haya en config.json: la plantilla
@@ -179,4 +214,4 @@ function validar(c) {
   return malos;
 }
 
-module.exports = { cargar, validar, armar, ejemplo, mezclar };
+module.exports = { cargar, recargar, validar, armar, ejemplo, mezclar, rutaNube, configNube };
