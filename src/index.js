@@ -76,8 +76,16 @@ const arg = process.argv.find((a) => a.startsWith('--adaptador='));
 const nombreAdaptador = (arg && arg.split('=')[1]) || process.env.ADAPTADOR || 'whatsappweb';
 const { crearAdaptador } = require(`./adaptadores/${nombreAdaptador}`);
 
+// Sin Nodo Sur no hay a dónde mandar los pedidos (queda en no hacer nada).
+let mandarPedidosYa = () => {};
 const adaptador = crearAdaptador(config, {
-  alRecibir: (msj) => motor.procesarMensaje(msj),
+  alRecibir: (msj) => {
+    const salientes = motor.procesarMensaje(msj);
+    // Un pedido recién confirmado sale a Nodo Sur ya, no en la vuelta de cada 10 minutos: el local lo tiene que ver mientras
+    // el cliente espera la respuesta. Si falla, queda en la bandeja para la vuelta siguiente.
+    mandarPedidosYa();
+    return salientes;
+  },
 
   // El dueño contestó a mano desde el WhatsApp del negocio: el bot se calla en ese chat un rato.
   alResponderDueno: (numero) => motor.pausar(numero),
@@ -230,6 +238,7 @@ if (cuentaNube) {
   let WebSocket = null;
   try { WebSocket = require('ws'); } catch { console.log('Sin el paquete ws: Nodo Sur se revisa cada 10 minutos, sin avisos en vivo.'); }
   sincronizador.iniciar({ WebSocket });
+  mandarPedidosYa = () => { sincronizador.mandarBandeja().catch(() => { /* queda en la bandeja */ }); };
   console.log(`Vinculado a Nodo Sur (${cuentaNube.email}).`);
 } else {
   console.log('Sin vincular a Nodo Sur: el bot usa solo config.json (para vincularlo: bash bot.sh vincular-nodosur).');
