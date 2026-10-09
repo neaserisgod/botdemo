@@ -85,6 +85,8 @@ function aplicarPlantilla(config) {
   return {
     ...config,
     negocio: { ...config.negocio, rubro: claveDeRubro(config.negocio.rubro) },
+    // Lo decide el rubro, no config.json: un almacén no da turnos y una barbería no toma pedidos de productos.
+    forma: plantilla.forma,
     textos: mezclar(plantilla.textos, config.textos || {}),
   };
 }
@@ -120,7 +122,10 @@ function validar(c) {
     malos.push('numero_duena no puede ser el mismo número del bot: WhatsApp no se escribe a sí mismo');
   }
 
-  if (!Array.isArray(c.servicios) || c.servicios.length === 0) {
+  // Un comercio (forma productos) no tiene servicios: lo que vende sale del catálogo de Nodo Sur.
+  if (c.forma === 'productos') {
+    // nada que revisar en servicios
+  } else if (!Array.isArray(c.servicios) || c.servicios.length === 0) {
     malos.push('servicios: tiene que haber al menos uno');
   } else {
     const ids = new Set();
@@ -153,6 +158,10 @@ function validar(c) {
     if (!c.senas.alias_mp) malos.push('senas.alias_mp: falta el alias para que transfieran');
     if (!c.senas.titular) malos.push('senas.titular: falta el nombre del titular (se usa para validar el comprobante)');
     if (!(c.senas.vencimiento_horas > 0)) malos.push('senas.vencimiento_horas: tiene que ser mayor a 0');
+  }
+
+  if (!(Number.isInteger(c.pausa_minutos) && c.pausa_minutos >= 5 && c.pausa_minutos <= 24 * 60)) {
+    malos.push(`pausa_minutos: cuánto se calla el bot en un chat, entre 5 y 1440 minutos (está: "${c.pausa_minutos}")`);
   }
 
   if (!(c.turnos?.intervalo_slot_min > 0)) malos.push('turnos.intervalo_slot_min: tiene que ser mayor a 0');

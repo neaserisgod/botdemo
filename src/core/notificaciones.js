@@ -7,6 +7,14 @@ const qTurnos = require('../db/consultas/turnos');
 
 // Invitación .ics para que la dueña se agregue el turno al calendario del celu.
 // Devuelve [] si está desactivado o si algo falla: nunca frena una confirmación.
+// "1 hora", "30 minutos", "1 h 30 min", "12 horas": para decir cuánto se calla el bot.
+function duracion(minutos) {
+  const h = Math.floor(minutos / 60), m = minutos % 60;
+  if (!h) return `${m} minutos`;
+  if (!m) return h === 1 ? '1 hora' : `${h} horas`;
+  return `${h} h ${m} min`;
+}
+
 function invitacionCalendario(config, turno, opciones) {
   if (config.calendario && config.calendario.habilitado === false) return [];
   try {
@@ -70,7 +78,7 @@ function cancelacion(config, turno, origen) {
 function derivacion(config, clienta, textoCitado) {
   return {
     para: config.numero_duena,
-    texto: `🙋 *Necesita atención humana*\n${config.textos.cliente_mayuscula}: ${clienta.nombre || clienta.telefono} (${clienta.telefono})\nÚltimo mensaje:\n> ${textoCitado}\n\nEl bot deja de responderle por 12 hs; contestale directo desde este número.`,
+    texto: `🙋 *Necesita atención humana*\n${config.textos.cliente_mayuscula}: ${clienta.nombre || clienta.telefono} (${clienta.telefono})\nÚltimo mensaje:\n> ${textoCitado}\n\nEl bot deja de responderle por ${duracion(config.pausa_minutos)}; contestale directo desde este número.`,
   };
 }
 
@@ -119,6 +127,7 @@ function tarjetaContacto(config, clienta, turno) {
 }
 
 module.exports = {
+  duracion,
   turnoSenado, senaARevisar, senaVencida, turnoConfirmado,
   cancelacion, derivacion, agendaDiaria, resumenSemanal, linea,
   invitacionCalendario, tarjetaContacto,

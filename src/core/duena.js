@@ -50,6 +50,12 @@ function procesar(config, msj) {
 
   if (!r.accion) return responder(ayuda(config));
 
+  // En un comercio no hay turnos ni señas, y los precios salen de Nodo Sur: cambiarlos acá dejaría al bot diciendo
+  // un precio distinto del de la caja.
+  if (config.forma === 'productos' && !ACCIONES_COMERCIO.includes(r.accion)) {
+    return responder('Eso es de los negocios con turnos 🙂 Acá los pedidos los ves y los confirmás en la app de Nodo Sur (Encargues), y los precios salen de ahí.\n\n' + ayuda(config));
+  }
+
   // El aviso masivo SIEMPRE se confirma (aunque venga con !): le llega a
   // todas las clientas y no hay forma de despublicarlo.
   if (r.accion === 'aviso') {
@@ -209,7 +215,16 @@ function ejemploPrecio(config) {
   return `el ${config.textos.ejemplo_servicio} ahora sale ${config.textos.ejemplo_precio}`;
 }
 
+// Lo que la dueña o el dueño de un comercio le puede pedir al bot.
+const ACCIONES_COMERCIO = ['aviso', 'contactos', 'ayuda'];
+
 function ayuda(config) {
+  if (config.forma === 'productos') {
+    return `Escribime como te salga 😊\n\n` +
+      `📣 *"aviso mañana abrimos a las 10"* — mensaje ${config.textos.a_todos}\n` +
+      `👥 *"pasame los contactos"* — ${config.textos.todos} para tu agenda\n\n` +
+      'Los pedidos que toma el bot los ves y los confirmás en la app de Nodo Sur (Encargues).';
+  }
   return `Escribime como te salga, te entiendo 😊\n\n` +
     `📅 *"qué tengo hoy"* — la agenda del día\n` +
     `🗓️ *"cómo viene la semana"* — próximos 7 días\n` +

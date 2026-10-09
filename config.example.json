@@ -11,6 +11,8 @@
   "numero_soporte": "5492944000002",
   "numero_actual": "5492944000003",
 
+  "pausa_minutos": 60,
+
   "horarios": {
     "lunes":     { "desde": "09:00", "hasta": "18:00" },
     "martes":    { "desde": "09:00", "hasta": "18:00" },

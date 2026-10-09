@@ -31,11 +31,13 @@ function tick(config) {
 }
 
 function agendaDiaria(config) {
+  if (config.forma === 'productos') return []; // un comercio no tiene agenda de turnos
   const hoy = fechas.hoyYmd();
   return [notif.agendaDiaria(config, qTurnos.delDia(hoy), hoy)];
 }
 
 function resumenSemanal(config) {
+  if (config.forma === 'productos') return [];
   const desde = fechas.aTexto(fechas.ahora());
   const hasta = fechas.sumarMinutos(desde, 7 * 24 * 60);
   return [notif.resumenSemanal(config, qTurnos.entreFechas(desde, hasta))];

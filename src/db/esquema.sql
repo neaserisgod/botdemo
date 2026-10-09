@@ -76,3 +76,20 @@ CREATE TABLE IF NOT EXISTS eventos_conectividad (
   detalle   TEXT,
   creado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
+
+-- Pedidos de un comercio (forma productos): la bandeja de salida hacia Nodo Sur. El pedido se guarda acá apenas el
+-- cliente lo confirma, así no se pierde si no hay internet; `nube/sincronizar.js` lo manda (reintentar con el mismo
+-- pedido_id no lo duplica en el sitio) y, cuando el local lo acepta o rechaza en la app, el bot le avisa al cliente.
+CREATE TABLE IF NOT EXISTS pedidos (
+  id             INTEGER PRIMARY KEY,
+  pedido_id      TEXT NOT NULL UNIQUE,          -- el id que viaja a Nodo Sur
+  clienta_id     INTEGER NOT NULL REFERENCES clientas(id),
+  datos          TEXT NOT NULL,                 -- JSON: { cliente: {nombre, telefono}, items: [...], nota? }
+  estado         TEXT NOT NULL DEFAULT 'por_enviar',
+    -- por_enviar → enviado → aceptado | rechazado
+  remoto_id      INTEGER,                       -- el id del pedido en Nodo Sur
+  avisado        INTEGER NOT NULL DEFAULT 0,    -- 1 cuando el cliente ya recibió si se aceptó o no
+  creado_en      TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  actualizado_en TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pedidos_estado ON pedidos(estado);

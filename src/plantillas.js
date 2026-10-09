@@ -14,11 +14,17 @@
 // redondeado hacia arriba a $500, en los servicios que la piden (lo que eligió
 // el dueño como valor por defecto, 2026-10-09).
 //
-// Las claves de rubro se guardan en config.json: no se renombran nunca.
+// Las claves de rubro se guardan en config.json: no se renombran nunca. Son las mismas que usa Nodo Sur
+// (`PlantillaRubro` en la app: almacen, kiosco, fiambreria, otro), así el rubro que el negocio eligió en la app
+// llega tal cual al bot.
+//
+// `forma` dice qué hace el bot: `turnos` (uñas, barbería: agenda, seña, recordatorio) o `productos` (un comercio:
+// precio y si hay, sacado del catálogo de Nodo Sur, y pedidos para retirar en el local; `core/comercio.js`).
 
 const PLANTILLAS = {
   unas: {
     nombre: 'Uñas y belleza',
+    forma: 'turnos',
     textos: {
       emoji: '💅',
       cliente: 'clienta',
@@ -47,6 +53,7 @@ const PLANTILLAS = {
 
   barberia: {
     nombre: 'Barbería',
+    forma: 'turnos',
     textos: {
       emoji: '💈',
       cliente: 'cliente',
@@ -71,7 +78,37 @@ const PLANTILLAS = {
       { id: 6, nombre: 'Platinado', duracion_min: 120, precio: 38000, sena: 11500 },
     ],
   },
+  // Comercios (forma productos). No traen servicios: lo que venden sale del catálogo de Nodo Sur. Los textos de
+  // "quien atiende" hablan del local, que es quien confirma los pedidos.
+  almacen: comercio('Almacén', '🛒'),
+  kiosco: comercio('Kiosco', '🍬'),
+  fiambreria: comercio('Fiambrería', '🧀'),
+  otro: comercio('Otro comercio', '🏪'),
 };
+
+function comercio(nombre, emoji) {
+  return {
+    nombre,
+    forma: 'productos',
+    textos: {
+      emoji,
+      cliente: 'cliente',
+      clientes: 'clientes',
+      cliente_mayuscula: 'Cliente',
+      el_cliente: 'el cliente',
+      cliente_nuevo: 'es cliente nuevo. Tocá el archivo para guardarlo en tu agenda.',
+      algun_cliente: 'algún cliente',
+      ningun_cliente: 'ningún cliente registrado',
+      a_todos: 'a TODOS los clientes',
+      todos: 'todos los clientes',
+      quien_atiende: 'el local',
+      // Un comercio no cambia precios por el bot (salen de Nodo Sur): estos dos quedan por completitud.
+      ejemplo_servicio: 'pan',
+      ejemplo_precio: '2800',
+    },
+    servicios: [],
+  };
+}
 
 // Nombres viejos que ya pueden estar en un config.json instalado.
 const ALIAS = { salon_de_unas: 'unas' };

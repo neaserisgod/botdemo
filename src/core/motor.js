@@ -6,6 +6,7 @@
 // Mensaje saliente:  { para, texto, imagenRuta? }
 const qClientas = require('../db/consultas/clientas');
 const maquina = require('./maquina');
+const comercio = require('./comercio');
 const duena = require('./duena');
 
 function crearMotor(config) {
@@ -22,10 +23,22 @@ function crearMotor(config) {
     // Derivada a humano: el bot calla mientras la dueña atiende a mano.
     if (qClientas.estaDerivada(clienta)) return [];
 
-    return maquina.procesar(config, clienta, msj);
+    // Un comercio (almacén, kiosco…) atiende consultas y pedidos; una barbería o un salón de uñas, turnos. Se lee cada
+    // vez: la configuración se puede recargar desde Nodo Sur sin reiniciar.
+    return config.forma === 'productos'
+      ? comercio.procesar(config, clienta, msj)
+      : maquina.procesar(config, clienta, msj);
   }
 
-  return { procesarMensaje };
+  // El dueño contestó a mano en el chat de [numero] (desde el WhatsApp del negocio): el bot se calla ahí un rato
+  // (config.pausa_minutos) para no pisarlo.
+  function pausar(numero) {
+    if (!numero || numero === config.numero_duena || numero === config.numero_soporte) return;
+    const clienta = qClientas.obtenerOCrear(numero);
+    qClientas.derivar(clienta.id, config.pausa_minutos);
+  }
+
+  return { procesarMensaje, pausar };
 }
 
 module.exports = { crearMotor };

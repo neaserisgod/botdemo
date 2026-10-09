@@ -22,7 +22,6 @@ const nlu = require('./nlu');
 const notif = require('./notificaciones');
 const { aQuienAtiende } = require('../plantillas');
 
-const HORAS_DERIVACION = 12;
 
 // Números sueltos dentro del texto: "el 2 porfa" → [2], "1 y 3" → [1, 3]
 function numerosDe(texto) {
@@ -101,7 +100,7 @@ function responder(ctx, estado, texto, extraSalientes) {
 function noEntendi(ctx, ayuda) {
   const n = qClientas.sumarNoEntendido(ctx.clienta.id);
   if (n >= 2) {
-    qClientas.derivar(ctx.clienta.id, HORAS_DERIVACION);
+    qClientas.derivar(ctx.clienta.id, ctx.config.pausa_minutos);
     return [
       { para: ctx.clienta.telefono, texto: `Disculpá, no te estoy entendiendo 😅 Ya le aviso ${aQuienAtiende(ctx.config.textos)} para que te responda personalmente en un ratito.` },
       notif.derivacion(ctx.config, ctx.clienta, ctx.msj.texto || '(sin texto)'),
@@ -187,7 +186,7 @@ function inicio(ctx) {
 }
 
 function derivarAHumano(ctx, textoCitado) {
-  qClientas.derivar(ctx.clienta.id, HORAS_DERIVACION);
+  qClientas.derivar(ctx.clienta.id, ctx.config.pausa_minutos);
   return [
     { para: ctx.clienta.telefono, texto: `Dale, le aviso ${aQuienAtiende(ctx.config.textos)} y te responde personalmente en un ratito 🙌` },
     notif.derivacion(ctx.config, ctx.clienta, textoCitado || '(sin texto)'),
@@ -427,4 +426,6 @@ function esperando_comprobante(ctx) {
   return r.salientes;
 }
 
-module.exports = { procesar };
+// Lo común con la conversación de un comercio (`comercio.js`): una sola forma de responder, de "no entendí" y de pasarle
+// la charla a una persona.
+module.exports = { procesar, responder, noEntendi, derivarAHumano, numerosDe, VOLVER_AL_MENU, CORTESIA };
