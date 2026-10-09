@@ -13,7 +13,7 @@
     "demo": "node src/index.js --adaptador=whatsappweb",
     "baileys": "node src/index.js --adaptador=baileys",
     "consola": "node src/index.js --adaptador=consola",
-    "test": "node test/simulacion.js && node test/escenarios.js && node test/limites.js && node test/plantillas.js && node test/comercio.js && node test/nube.js"
+    "test": "node test/simulacion.js && node test/escenarios.js && node test/limites.js && node test/plantillas.js && node test/comercio.js && node test/nube.js && node test/frases.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",

@@ -13,6 +13,7 @@ const path = require('path');
 const catalogo = require('../core/catalogo');
 const comercio = require('../core/comercio');
 const qPedidos = require('../db/consultas/pedidos');
+const { textoPeso } = require('../core/diccionario/numeros');
 const { rutaNube, configNube } = require('../config');
 const cuentaArchivo = require('./cuenta');
 
@@ -64,13 +65,58 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
     return true;
   }
 
+  // Lo que se pesa viaja en gramos: `{ gid, nombre, gramos, precioCentavos }` con el precio POR KILO. El sitio de hoy
+  // solo acepta `cantidad` entera, que para un pesable la app toma como KILOS (`apartadosDePedido`, Nodo-Sur-Pos). Si
+  // el sitio rechaza los gramos, se manda como antes: los kilos enteros como cantidad, y si queda algo que no entra
+  // (250 g), el pedido le llega al local por WhatsApp (ver `aMano`). Se vuelve a probar con gramos cada vez que arranca.
+  let sitioConGramos = true;
+  function cuerpoPedido(p, conGramos) {
+    const items = [], sueltos = [];
+    for (const x of p.datos.items) {
+      const base = { gid: x.gid, nombre: x.nombre, precioCentavos: x.precioCentavos };
+      if (!x.gramos) items.push({ ...base, cantidad: x.cantidad });
+      else if (conGramos) items.push({ ...base, gramos: x.gramos });
+      else if (x.gramos % 1000 === 0) items.push({ ...base, cantidad: x.gramos / 1000 });
+      else sueltos.push(x);
+    }
+    return { envio: { id: p.pedido_id, cliente: p.datos.cliente, items, ...(p.datos.nota ? { nota: p.datos.nota } : {}) }, sueltos };
+  }
+
+  // Lo manda y devuelve lo que contestó el sitio, o null si con el sitio de hoy no se puede (gramos sueltos).
+  async function mandarUno(p) {
+    if (sitioConGramos) {
+      try {
+        return await cliente.mandarPedido(cuerpoPedido(p, true).envio);
+      } catch (e) {
+        if (!(e.status === 400 && p.datos.items.some((x) => x.gramos))) throw e;
+        sitioConGramos = false;
+        log.log('Nodo Sur todavía no recibe pedidos en gramos: mando los kilos enteros y lo demás por WhatsApp.');
+      }
+    }
+    const { envio, sueltos } = cuerpoPedido(p, false);
+    if (sueltos.length || !envio.items.length) return null;
+    return cliente.mandarPedido(envio);
+  }
+
+  // El pedido que Nodo Sur no puede recibir todavía (gramos sueltos): al dueño por WhatsApp, entero, para que lo prepare y
+  // le conteste al cliente directo. Si WhatsApp no está, queda en la bandeja para la próxima vuelta.
+  async function aMano(p) {
+    const lineas = p.datos.items.map((x) => `• ${x.gramos ? `${textoPeso(x.gramos)} de ${catalogo.nombreCorto(x)}` : `${x.cantidad} × ${x.nombre}`}`).join('\n');
+    const c = p.datos.cliente;
+    const enviados = await enviar([{ para: config.numero_duena,
+      texto: `🛒 *Pedido por WhatsApp* (para retirar)\n${c.nombre} — ${c.telefono}\n\n${lineas}\n\nLleva cosas por gramos y Nodo Sur todavía no las recibe: no está en Encargues. Preparalo y avisale a ${c.nombre} directo por acá.` }]);
+    if (!enviados || !enviados.length) return false;
+    qPedidos.marcarAMano(p.id);
+    return true;
+  }
+
   async function mandarBandeja() {
     let mandados = 0;
     for (const p of qPedidos.porEnviar()) {
       try {
-        const r = await cliente.mandarPedido({ id: p.pedido_id, cliente: p.datos.cliente, items: p.datos.items, ...(p.datos.nota ? { nota: p.datos.nota } : {}) });
-        qPedidos.marcarEnviado(p.id, r.id);
-        mandados++;
+        const r = await mandarUno(p);
+        if (r) qPedidos.marcarEnviado(p.id, r.id);
+        if (r || await aMano(p)) mandados++;
       } catch (e) {
         // Sin red o el sitio caído: queda en la bandeja para la próxima vuelta. Un 400 sería un pedido que el sitio no
         // acepta nunca: se avisa en el log para revisarlo a mano.

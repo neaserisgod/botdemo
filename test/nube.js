@@ -31,7 +31,14 @@ const sitio = {
   token: 'token-del-bot', codigo: 'codigo-de-un-uso', estadoConfig: 200,
   config: { version: 0, config: null }, catalogo: { items: [], actualizado: null },
   pedidos: [], recibidos: 0, pings: 0, tokenNuevo: null,
+  // El sitio de hoy (`pedidoDesdeBot`, NodoSurPage): al menos una línea y `cantidad` entera de 1 a 999; no sabe de gramos.
+  aceptaGramos: false,
 };
+function pedidoValido(b) {
+  if (!Array.isArray(b.items) || !b.items.length) return false;
+  return b.items.every((x) => (sitio.aceptaGramos && Number.isInteger(x.gramos) && x.gramos > 0)
+    || (Number.isInteger(x.cantidad) && x.cantidad >= 1 && x.cantidad <= 999));
+}
 function responder(res, status, j) { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(j)); }
 const servidor = http.createServer((req, res) => {
   let cuerpo = '';
@@ -49,6 +56,7 @@ const servidor = http.createServer((req, res) => {
     if (u.pathname === '/api/device/ping') { sitio.pings++; return responder(res, 200, { ok: true, ...(sitio.tokenNuevo ? { token: sitio.tokenNuevo } : {}) }); }
     if (u.pathname === '/api/bot/pedido' && req.method === 'POST') {
       sitio.recibidos++;
+      if (!pedidoValido(b)) return responder(res, 400, { error: 'bad_request' });
       const ya = sitio.pedidos.find((p) => p.pedidoId === b.id);
       if (ya) return responder(res, 200, { ok: true, id: ya.id, repetido: true });
       const p = { id: sitio.pedidos.length + 1, pedidoId: b.id, estado: 'por_confirmar', ...b, actualizado: Date.now() };
@@ -65,7 +73,10 @@ const servidor = http.createServer((req, res) => {
 });
 
 const CONFIG_ALMACEN = { negocio: { rubro: 'almacen', nombre: 'La Plazoleta', direccion: 'Mitre 150' }, textos: { quien_atiende: 'Juli' }, pausa_minutos: 30 };
-const ITEMS = [{ gid: 'g-yerba', nombre: 'Yerba Playadito 1 kg', precioCentavos: 520000, hay: true }];
+const ITEMS = [
+  { gid: 'g-yerba', nombre: 'Yerba Playadito 1 kg', precioCentavos: 520000, hay: true },
+  { gid: 'g-jamon', nombre: 'Jamón cocido (por kg)', precioCentavos: 1500000, hay: true },
+];
 
 (async () => {
   await new Promise((r) => servidor.listen(0, '127.0.0.1', r));
@@ -149,6 +160,30 @@ const ITEMS = [{ gid: 'g-yerba', nombre: 'Yerba Playadito 1 kg', precioCentavos:
   await sinc.revisarPedidos();
   chequear('no se le avisa dos veces', enviados.length === 1);
   chequear('el cursor de pedidos queda guardado', cuenta.leer().cursorPedidos === enSitio.actualizado);
+
+  console.log('\n— 4b. Lo que se pesa —');
+  const pedir = (de, ...textos) => { for (const t of ['pedido', ...textos, 'listo', 'Sofi', '1']) motor.procesarMensaje({ de, texto: t }); };
+  const recibidosAntes = sitio.pedidos.length;
+  pedir('5492944200002', '1 kilo de jamon', '1 yerba');
+  await sinc.mandarBandeja();
+  const kilo = sitio.pedidos[recibidosAntes];
+  chequear('el sitio de hoy no sabe de gramos: los kilos enteros van como cantidad (la app la toma en kilos)',
+    kilo && kilo.items.some((x) => x.gid === 'g-jamon' && x.cantidad === 1 && x.gramos === undefined));
+  enviados.length = 0;
+  pedir('5492944200003', '1/4 de jamon', '2 yerba');
+  await sinc.mandarBandeja();
+  chequear('250 g no entra en el sitio de hoy: no se manda a medias', sitio.pedidos.length === recibidosAntes + 1);
+  chequear('le llega entero al local por WhatsApp, para prepararlo a mano', enviados.length === 1 && enviados[0].para === config.numero_duena
+    && enviados[0].texto.includes('250 g de Jamón cocido') && enviados[0].texto.includes('2 × Yerba') && enviados[0].texto.includes('5492944200003'));
+  chequear('y no queda trabado en la bandeja', qPedidos.porEnviar().length === 0);
+  sitio.aceptaGramos = true;
+  const sincNuevo = crearSincronizador({ config, cliente: crearCliente({ sitio: SITIO, token: sitio.token }), recargarConfig: () => [],
+    enviar: async (x) => { enviados.push(...x); return x; }, log: { log: () => {}, error: () => {} } });
+  pedir('5492944200004', '1/4 de jamon');
+  await sincNuevo.mandarBandeja();
+  const gramos = sitio.pedidos[sitio.pedidos.length - 1];
+  chequear('con un sitio que acepta gramos: va en gramos, con el precio por kilo', gramos.items.length === 1
+    && gramos.items[0].gramos === 250 && gramos.items[0].precioCentavos === 1500000 && gramos.items[0].cantidad === undefined);
 
   console.log('\n— 5. Ping, token y lo que sale mal —');
   sitio.tokenNuevo = 'token-renovado';

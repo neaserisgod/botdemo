@@ -26,13 +26,22 @@ function cambiarEstado(id, estado) {
   obtener().prepare('UPDATE turnos SET estado = ? WHERE id = ?').run(estado, id);
 }
 
-// ¿Hay solapamiento? Dos rangos se pisan si (inicioA < finB) y (finA > inicioB).
-function haySolapamiento(inicio, fin) {
+// ¿Hay solapamiento? Dos rangos se pisan si (inicioA < finB) y (finA > inicioB). `excluirId`: el turno que se está
+// cambiando de horario no se pisa consigo mismo (pasarlo media hora más tarde tiene que poder).
+function haySolapamiento(inicio, fin, excluirId = 0) {
   const fila = obtener().prepare(`
     SELECT COUNT(*) AS n FROM turnos
-    WHERE estado IN ${OCUPAN} AND inicio < ? AND fin > ?
-  `).get(fin, inicio);
+    WHERE estado IN ${OCUPAN} AND inicio < ? AND fin > ? AND id != ?
+  `).get(fin, inicio, excluirId || 0);
   return fila.n > 0;
+}
+
+// El cliente cambió el turno de día u hora: es el mismo turno (con su seña, si la tenía), en otro horario. El
+// recordatorio se vuelve a mandar para el horario nuevo.
+function mover(id, inicio, fin) {
+  obtener().prepare(`
+    UPDATE turnos SET inicio = ?, fin = ?, recordatorio_enviado = 0, recordatorio_respuesta = NULL WHERE id = ?
+  `).run(inicio, fin, id);
 }
 
 function ocupadosDelDia(fechaYmd) {
@@ -106,7 +115,7 @@ function guardarRespuestaRecordatorio(id, respuesta) {
 }
 
 module.exports = {
-  crear, porId, cambiarEstado, haySolapamiento, ocupadosDelDia, delDia,
+  crear, porId, cambiarEstado, haySolapamiento, mover, ocupadosDelDia, delDia,
   entreFechas, proximoDeClienta, contarDeClienta, pendientesDeRecordatorio,
   marcarRecordatorioEnviado, guardarRespuestaRecordatorio,
 };

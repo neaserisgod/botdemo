@@ -199,6 +199,17 @@ function validar(c) {
     malos.push(`pausa_minutos: cuánto se calla el bot en un chat, entre 5 y 1440 minutos (está: "${c.pausa_minutos}")`);
   }
 
+  // Lo que el bot contesta por su cuenta (null: lo contesta una persona). Ver docs/COMO-FUNCIONA.md.
+  for (const [k, v] of Object.entries(c.respuestas || {})) {
+    if (v !== null && typeof v !== 'string') malos.push(`respuestas.${k}: tiene que ser un texto o null`);
+  }
+  if (c.preguntas !== undefined && !Array.isArray(c.preguntas)) malos.push('preguntas: tiene que ser una lista');
+  for (const p of Array.isArray(c.preguntas) ? c.preguntas : []) {
+    if (!p || !Array.isArray(p.claves) || !p.claves.length || typeof p.respuesta !== 'string' || !p.respuesta.trim()) {
+      malos.push(`preguntas: cada una lleva "claves" (una lista de palabras) y "respuesta" (un texto): ${JSON.stringify(p)}`);
+    }
+  }
+
   if (!(c.turnos?.intervalo_slot_min > 0)) malos.push('turnos.intervalo_slot_min: tiene que ser mayor a 0');
   if (!(c.turnos?.dias_hacia_adelante > 0)) malos.push('turnos.dias_hacia_adelante: tiene que ser mayor a 0');
   if (!(c.panel?.puerto > 0)) malos.push('panel.puerto: falta o es inválido');

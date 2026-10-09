@@ -1,4 +1,4 @@
-// FAQ por palabras clave (precios, ubicación, horarios), configurable por cliente.
+// Las respuestas de precios y de ubicación y horarios. Cuándo se dan lo decide el diccionario (nlu.tema, diccionario/comun.js).
 const NOMBRES_DIA = {
   lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles',
   jueves: 'Jueves', viernes: 'Viernes', sabado: 'Sábado', domingo: 'Domingo',
@@ -15,19 +15,4 @@ function ubicacionYHorarios(config) {
   return `📍 *${config.negocio.nombre}*\n${config.negocio.direccion}\n${config.negocio.ubicacion_maps}\n\n🕐 *Horarios:*\n${horarios}`;
 }
 
-// Devuelve la respuesta si el texto matchea alguna palabra clave, o null.
-// Usa el matcher del NLU: normaliza tildes y tolera typos ("presios" → precios).
-const nlu = require('../nlu');
-
-function buscar(config, texto, listaServicios) {
-  const textoNorm = nlu.normalizar(texto);
-  const tokens = textoNorm.split(' ');
-  const hay = (claves) => claves.some((k) => nlu.contiene(textoNorm, tokens, nlu.normalizar(k)));
-  if (hay(config.faq.precios)) return precios(listaServicios);
-  if (hay(config.faq.ubicacion) || hay(config.faq.horarios)) {
-    return ubicacionYHorarios(config);
-  }
-  return null;
-}
-
-module.exports = { buscar, precios, ubicacionYHorarios };
+module.exports = { precios, ubicacionYHorarios };

@@ -36,6 +36,12 @@ function resolver(id, estado) {
   return r.changes > 0;
 }
 
+// Nodo Sur no lo pudo recibir (lleva gramos y el sitio todavía no los acepta): se le mandó al local por WhatsApp y lo
+// sigue a mano. No se reintenta ni se le avisa al cliente desde acá.
+function marcarAMano(id) {
+  obtener().prepare("UPDATE pedidos SET estado = 'a_mano', actualizado_en = datetime('now', 'localtime') WHERE id = ? AND estado = 'por_enviar'").run(id);
+}
+
 function marcarAvisado(id) {
   obtener().prepare('UPDATE pedidos SET avisado = 1 WHERE id = ?').run(id);
 }
@@ -45,4 +51,4 @@ function sinAvisar() {
   return obtener().prepare("SELECT * FROM pedidos WHERE estado IN ('aceptado', 'rechazado') AND avisado = 0 ORDER BY id").all().map(leer);
 }
 
-module.exports = { crear, porId, porEnviar, marcarEnviado, porRemotoId, resolver, marcarAvisado, sinAvisar };
+module.exports = { crear, porId, porEnviar, marcarEnviado, marcarAMano, porRemotoId, resolver, marcarAvisado, sinAvisar };
