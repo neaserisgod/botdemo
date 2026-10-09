@@ -146,10 +146,42 @@ const TURNOS_COMUNES = () => {
   else { fallas++; console.log(`  ✘ FALLÓ: "qué no entendiste" no muestra lo de estacionamiento → ${r.slice(0, 200)}`); }
 };
 
+// A mitad de un paso (eligiendo día u hora, confirmando): cambiar de tema no es "no entender". Del simulador (2026-10-09).
+const TURNOS_EN_PASO = () => {
+  console.log('\n— Turnos: a mitad de la reserva —');
+  const s1 = config.servicios[0].nombre.toLowerCase();
+  const hastaHora = [`quiero ${s1}`, '1'];
+  caso('"gracias genia!" eligiendo la hora: sigue en la hora, sin "no entiendo"', [...hastaHora, 'gracias genia!'], { incluye: 'Elegí un número de la lista de horarios', estado: 'eligiendo_hora', no: 'no te estoy entendiendo' });
+  caso('"¿cuánto sale?" eligiendo la hora: el precio, y sigue en la hora', [...hastaHora, `cuanto sale el ${s1}?`], { incluye: ['$', 'Elegí un número de la lista de horarios'], estado: 'eligiendo_hora', sinAviso: true });
+  caso('dos preguntas seguidas no pasan la charla a una persona', [...hastaHora, 'gracias!', 'como se paga?'], { sinAviso: true, no: 'no te estoy entendiendo' });
+  caso('"jajaja" a mitad: silencio', [...hastaHora, 'jajaja'], { silencio: true });
+  caso('"me arrepentí, cancelá" a mitad (sin turno): lo deja', [`quiero ${s1}`, 'cancelalo'], { incluye: 'no reservé nada', estado: 'inicio' });
+  caso(`"el ${D1.nombre}" eligiendo el día: ese día`, [`quiero ${s1}`, `el ${nombreDia(D1)}`], { incluye: 'Horarios libres', estado: 'eligiendo_hora' });
+  caso('"mañana" eligiendo el día', [`quiero ${s1}`, 'mañana'], { estado: 'eligiendo_hora' }, () => {});
+  const conNombre = (de) => qClientas.guardarNombre(qClientas.obtenerOCrear(de).id, 'Sofi');
+  caso(`"a las 5" eligiendo la hora: las 17`, [`quiero ${s1} el ${nombreDia(D2)}`, 'a las 5'], { incluye: ['repasemos', '17:00'] }, conNombre);
+  caso('"16 hs" eligiendo la hora', [`quiero ${s1} el ${nombreDia(D2)}`, '16 hs'], { incluye: ['repasemos', '16:00'] }, conNombre);
+  caso('"si" para confirmar (en vez de 1)', [`quiero ${s1} el ${nombreDia(D2)} a las 13`, 'si'], { no: ['Respondé *1*', 'no te estoy entendiendo'],
+    y: (de) => !!qTurnos.proximoDeClienta(qClientas.porTelefono(de).id, fechas.aTexto(new Date())) }, conNombre);
+  caso('"dale" para confirmar', [`quiero ${s1} el ${nombreDia(D2)} a las 14`, 'dale'], { no: ['Respondé *1*', 'no te estoy entendiendo'],
+    y: (de) => !!qTurnos.proximoDeClienta(qClientas.porTelefono(de).id, fechas.aTexto(new Date())) }, conNombre);
+  caso('"si" para cancelar un turno', ['me lo cancelas', 'si'], { incluye: 'quedó cancelado' }, conTurno(1));
+  caso('"no" para mantenerlo', ['me lo cancelas', 'no'], { incluye: 'sigue en pie' }, conTurno(1));
+};
+
+const COMERCIO_EN_PASO = () => {
+  console.log('\n— Comercio: a mitad del pedido —');
+  caso('"gracias" a mitad del pedido: sigue, sin "no entiendo"', ['pedido', 'alfajor', 'gracias'], { incluye: 'listo', estado: 'armando_pedido', no: 'no te estoy entendiendo' });
+  caso('"¿hacen envíos?" a mitad del pedido: contesta y sigue', ['pedido', 'alfajor', 'hacen envios?'], { incluye: ['retirar en el local', '¿Algo más?'], estado: 'armando_pedido' });
+  caso('"listo gracias" termina el pedido', ['pedido', 'alfajor', 'listo gracias'], { incluye: '¿A nombre de quién' });
+  caso('"si" para confirmar el pedido', ['pedido', 'alfajor', 'listo', 'Sofi', 'si'], { incluye: 'Le pasé tu pedido' });
+};
+
 const PRUEBAS = {
   unas() {
     COMUNES();
     TURNOS_COMUNES();
+    TURNOS_EN_PASO();
     console.log('\n— Uñas —');
     caso('"hola quiero un semi": pregunta manos o pies', 'hola quiero un semi', { incluye: ['Semipermanente manos', 'Semipermanente pies'], no: 'Kapping' });
     caso('"cuanto sale el kapping?": ese precio, no la lista', 'cuanto sale el kapping?', { incluye: ['Kapping rubber', '$22000'], no: 'Esculpidas' });
@@ -170,6 +202,7 @@ const PRUEBAS = {
   barberia() {
     COMUNES();
     TURNOS_COMUNES();
+    TURNOS_EN_PASO();
     console.log('\n— Barbería —');
     caso('"quiero cortarme el pelo"', 'quiero cortarme el pelo', { incluye: ['Corte clásico', '¿Qué día'] });
     caso('"me rapas?"', 'me rapas?', { incluye: 'Corte clásico' });
@@ -190,6 +223,7 @@ const PRUEBAS = {
   almacen() {
     COMUNES();
     COMERCIO();
+    COMERCIO_EN_PASO();
     console.log('\n— Almacén: pedidos —');
     caso('"pedido" + "dos cocas": pregunta cuál, y anota 2', ['pedido', 'dos cocas', '1'], { incluye: 'Anotado: 2 × Coca Cola 2,25 L' });
     caso('"media docena de huevos": los de 6', ['pedido', 'media docena de huevos'], { incluye: 'Anotado: 1 × Huevos x 6' });

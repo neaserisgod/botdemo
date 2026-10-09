@@ -33,7 +33,7 @@ function procesar(config, clienta, msj) {
     console.error(`datos_conv inválido en ${clienta.id}, reiniciando su estado`);
     clienta.estado_conv = 'inicio';
   }
-  const ctx = { config, clienta, datos, msj, texto: texto.toLowerCase() };
+  const ctx = { config, clienta, datos, msj, texto: texto.toLowerCase(), entender: entenderEnPaso };
 
   if (nlu.esVolverAlMenu(texto)) {
     ctx.datos = {};
@@ -195,14 +195,18 @@ function armando_pedido(ctx) {
     ctx.datos = {};
     return responder(ctx, 'inicio', 'Listo, no anoté nada. Cuando quieras escribí *hola* 😊');
   }
-  if (TERMINAR.includes(norm)) return terminarPedido(ctx);
-
+  // "listo", y también "listo gracias", "eso es todo, gracias".
+  if (TERMINAR.includes(norm) || (nlu.esCortesia(ctx.msj.texto || '') && /\b(?:listo|eso es todo|nada mas|ya esta|eso nomas)\b/.test(norm))) return terminarPedido(ctx);
   const texto = ctx.msj.texto || '';
   const lineas = separarLineas(texto);
   if (lineas.length > 1) return anotarVarias(ctx, lineas, []);
 
   const r = leerLinea(ctx, texto);
   if (r.tipo === 'no_encontre') {
+    // No es un producto: ¿es una pregunta de siempre ("¿hacen envíos?", "¿hasta qué hora están?")? Se contesta sin perder
+    // lo anotado. Va después de buscar en el catálogo, así una palabra de un producto nunca se confunde con una pregunta.
+    const aparte = entenderEnPaso(ctx, '¿Algo más? Si no, escribí *listo*.');
+    if (aparte) return aparte;
     // "jamón y queso": dos productos, si cada uno existe por separado.
     const partes = texto.split(/\s+y\s+/i);
     if (partes.length > 1 && partes.every((x) => !['no_encontre', 'nada'].includes(leerLinea(ctx, x).tipo))) return anotarVarias(ctx, partes, []);
@@ -370,6 +374,7 @@ function resumen(ctx) {
 }
 
 function confirmando_pedido(ctx) {
+  if (nlu.esSi(ctx.texto) || /^(?:confirmo|confirmar|confirmado|mandalo|pedilo)$/.test(nlu.normalizar(ctx.texto))) ctx.texto = '1';
   if (ctx.texto === '2') return responder(ctx, 'armando_pedido', 'Dale, decime qué más querés.');
   if (ctx.texto === '0') { ctx.datos = {}; return responder(ctx, 'inicio', 'Listo, no anoté nada. Cuando quieras escribí *hola* 😊'); }
   if (ctx.texto !== '1') return noEntendi(ctx, 'Respondé *1* para confirmar, *2* para agregar algo o *0* para cancelar.');
@@ -379,6 +384,25 @@ function confirmando_pedido(ctx) {
   });
   ctx.datos = {};
   return responder(ctx, 'inicio', '¡Listo! Le pasé tu pedido al local 🙌 Te aviso por acá apenas lo confirmen.');
+}
+
+// `ctx.entender` del comercio (ver noEntendi en maquina.js), también al principio de cada renglón del pedido: una risa no
+// se contesta, un "gracias" no es no entender, y una pregunta de siempre (envíos, cómo se paga, horarios) o pedir una
+// persona se atienden sin perder el paso. Lo demás (null) lo sigue resolviendo el paso.
+function entenderEnPaso(ctx, ayuda) {
+  const t = ctx.texto;
+  const estado = ctx.clienta.estado_conv;
+  if (estado === 'inicio' || estado === 'consultando') return null;
+  if (!t || nlu.esRisa(t)) return [];
+  if (nlu.esCortesia(t)) return responder(ctx, estado, `😊 ${ayuda}`);
+  const tm = nlu.tema(ctx.config, t);
+  if (tm) {
+    const r = responderTema(ctx, tm, POR_DEFECTO, estado);
+    r[0].texto += `\n\n${ayuda}`;
+    return r;
+  }
+  if (nlu.interpretar(t).intencion === 'humano') return derivarAHumano(ctx, ctx.msj.texto);
+  return null;
 }
 
 // El mensaje para el cliente cuando el local resolvió su pedido en la app.

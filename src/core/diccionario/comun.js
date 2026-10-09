@@ -102,4 +102,7 @@ const TEMAS = {
 const SI = new Set(['si', 'dale', 'ok', 'oka', 'okey', 'bueno', 'obvio', 'claro', 'de una', 'quiero', 'sisi', 'si quiero',
   'reservalo', 'reservamelo', 'si porfa', 'dale porfa', 'si dale', 'por favor', 'porfa', 'joya', 'va', 'vamos']);
 
-module.exports = { INTENCIONES, VOLVER_AL_MENU, CORTESIA_PRINCIPALES, CORTESIA_RELLENO, EMOJIS_CORTESIA, TEMAS, SI };
+const NO = new Set(['no', 'nop', 'nope', 'nah', 'nono', 'no no', 'mejor no', 'dejalo', 'dejala', 'no gracias', 'para nada',
+  'ni ahi', 'no quiero', 'no dale', 'no porfa', 'no por favor']);
+
+module.exports = { INTENCIONES, VOLVER_AL_MENU, CORTESIA_PRINCIPALES, CORTESIA_RELLENO, EMOJIS_CORTESIA, TEMAS, SI, NO };

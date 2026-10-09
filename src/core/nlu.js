@@ -126,6 +126,7 @@ function esCortesia(texto) {
 const esVolverAlMenu = (texto) => comun.VOLVER_AL_MENU.includes(normalizar(texto));
 const esRisa = (texto) => chat.esRisa(normalizar(texto), texto);
 const esSi = (texto) => comun.SI.has(normalizar(texto));
+const esNo = (texto) => comun.NO.has(normalizar(texto));
 
 // ¿Pregunta por un tema que se responde igual en cualquier negocio? Primero las preguntas que cargó el negocio
 // (config.preguntas: [{ claves, respuesta }]); después cómo se paga, envíos, horarios y ubicación (estos dos suman las
@@ -251,5 +252,5 @@ const enFranja = (hora, franja) => !franja || !FRANJA_HORAS[franja] || (hora >= 
 
 module.exports = {
   interpretar, servicioPorNombre, serviciosMencionados, conSinonimos, extraerFechaHora, enFranja, normalizar, distancia1,
-  contiene, esCortesia, esVolverAlMenu, esRisa, esSi, tema,
+  contiene, esCortesia, esVolverAlMenu, esRisa, esSi, esNo, tema,
 };

@@ -59,6 +59,7 @@ Un **adaptador** traduce entre eso y la librería de turno. Hay tres:
 |---|---|
 | `baileys.js` | Producción (celu) y pruebas reales |
 | `consola.js` | Probar el flujo entero en la terminal, sin WhatsApp |
+| `scripts/probar.js` | Simulador en el navegador (`bash bot.sh probar`): cliente y dueña en la misma pantalla, base de prueba, al lado del bot andando |
 | `whatsappweb.js` | Alternativa en PC (arrastra Chromium) |
 
 Se elige al arrancar: `node src/index.js --adaptador=baileys`.
