@@ -214,4 +214,4 @@ function validar(c) {
   return malos;
 }
 
-module.exports = { cargar, recargar, validar, armar, ejemplo, mezclar, rutaNube, configNube };
+module.exports = { cargar, recargar, construir, validar, armar, ejemplo, mezclar, rutaNube, configNube };
