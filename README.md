@@ -23,6 +23,18 @@ Para instalar una rama que todavía no está en `main` (el instalador también t
 curl -fsSL https://raw.githubusercontent.com/neaserisgod/botdemo/<rama>/instalar.sh | RAMA=<rama> bash
 ```
 
+## Probar el bot sin otro celular
+
+```bash
+bash bot.sh probar      # en el celular, en otra sesión de Termux (el bot sigue atendiendo)
+npm run probar          # en una PC
+```
+
+Abre un chat en el navegador (`http://localhost:3011`) donde escribís como **cliente** o como **dueña** con un botón, con
+la configuración y el catálogo de verdad de ese equipo. No toca nada real: base de prueba, nada sale por WhatsApp ni
+llega a Nodo Sur. «Charla nueva» arranca con un cliente que nunca escribió; «No entendió» muestra lo que el bot no supo
+contestar en la prueba.
+
 ## Problemas comunes al instalar (primer celular real, 2026-10-09)
 
 - **"curl: command not found"**: Termux recién instalado no lo trae. Primero `pkg install -y curl`.
@@ -33,7 +45,8 @@ curl -fsSL https://raw.githubusercontent.com/neaserisgod/botdemo/<rama>/instalar
 - **"Bad MAC" / "Failed to decrypt" en cada mensaje**: era Baileys 6. Actualizar (`git pull && npm install --omit=optional`) y
   volver a vincular (`bash bot.sh vincular`, cerrando antes la sesión vieja en Dispositivos vinculados).
 - **"Closing session: SessionEntry {…}"**: no es un error.
-- **No contesta**: el bot ignora el `numero_soporte` y al `numero_duena` lo atiende como dueño. Probar desde un tercer número.
+- **No contesta**: el bot ignora el `numero_soporte` y al `numero_duena` lo atiende como dueño. Probar desde un tercer número,
+  o con `bash bot.sh probar` (sin otro celular).
   Para ver si llegan los mensajes: `DEPURAR=1 pm2 restart bot-turnos --update-env && pm2 logs bot-turnos` (cada mensaje
   muestra `[msj] de=… texto="…"`).
 

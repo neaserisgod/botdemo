@@ -10,6 +10,7 @@
 #   vincular    volver a vincular WhatsApp (pide código nuevo)
 #   vincular-nodosur  vincular el bot a tu cuenta de Nodo Sur (abre el navegador)
 #   revisar     chequeo de salud: config, sesión, base, espacio
+#   probar      chatear con el bot desde el navegador, como cliente o como dueña (no manda nada de verdad)
 # ============================================================
 cd "$(dirname "$0")" || exit 1
 ACCION="${1:-ayuda}"
@@ -138,7 +139,12 @@ case "$ACCION" in
     pm2 status
     ;;
 
+  probar|simulador)
+    # Corre aparte del bot (puede seguir atendiendo): base de prueba, sin WhatsApp ni Nodo Sur.
+    node scripts/probar.js
+    ;;
+
   *)
-    sed -n '/^# Control del bot/,/^#   revisar/p' "$0" | sed 's|^# \?||'
+    sed -n '/^# Control del bot/,/^#   probar/p' "$0" | sed 's|^# \?||'
     ;;
 esac

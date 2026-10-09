@@ -52,10 +52,12 @@ function palabrasClave(texto) {
 
 // ¿La palabra del cliente está en el nombre? Igual, como comienzo de una palabra del nombre ("galle" → galletitas) o
 // con un error de tipeo en palabras largas ("lactall" → lactal).
+// O como suena ("jamon kosido", "yerva", "kerso"→ no: dos letras distintas).
 function calzaUna(palabra, tokens) {
+  const s = nlu.suena(palabra);
   return tokens.some((t) => t === palabra
-    || (palabra.length >= 3 && t.startsWith(palabra))
-    || (palabra.length >= 5 && nlu.distancia1(palabra, t)));
+    || (palabra.length >= 3 && (t.startsWith(palabra) || nlu.suena(t).startsWith(s)))
+    || (palabra.length >= 5 && (nlu.distancia1(palabra, t) || nlu.distancia1(s, nlu.suena(t)))));
 }
 
 // La palabra, en singular ("panes" → pan, "alfajores" → alfajor, "cocas" → coca) y sus sinónimos del rubro

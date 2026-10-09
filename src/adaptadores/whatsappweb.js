@@ -47,7 +47,9 @@ function crearAdaptador(config, hooks) {
         productoId = msg.rawData.productId || null;
       }
 
-      const salientes = hooks.alRecibir({ de, texto: msg.body || '', rutaImagen, productoId });
+      // Audio o nota de voz: el bot no los escucha, pero le avisa al cliente (ver motor.js).
+      const tipo = ['ptt', 'audio'].includes(msg.type) ? 'audio' : null;
+      const salientes = hooks.alRecibir({ de, texto: msg.body || '', rutaImagen, productoId, tipo });
       await enviarTodos(salientes);
     } catch (e) {
       console.error('Error procesando mensaje:', e.message);
