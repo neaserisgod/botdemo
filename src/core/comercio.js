@@ -7,14 +7,14 @@
 //  * el pedido entra en Nodo Sur "por confirmar" (no aparta stock): el bot lo guarda en la bandeja (`pedidos`), `nube/`
 //    lo manda y, cuando el local lo acepta o rechaza en la app, `avisoDePedido` arma el mensaje para el cliente.
 //
-// Estados (en clientas.estado_conv, como los turnos): inicio → armando_pedido ⇄ eligiendo_producto → pidiendo_nombre →
-// confirmando_pedido → inicio.
+// Estados (en clientas.estado_conv, como los turnos): inicio ⇄ consultando (después del "1": cada mensaje es un producto);
+// inicio → armando_pedido ⇄ eligiendo_producto → pidiendo_nombre → confirmando_pedido → inicio.
 const qClientas = require('../db/consultas/clientas');
 const qPedidos = require('../db/consultas/pedidos');
 const catalogo = require('./catalogo');
 const faq = require('./flujos/faq');
 const nlu = require('./nlu');
-const { responder, noEntendi, derivarAHumano, numerosDe, VOLVER_AL_MENU, CORTESIA } = require('./maquina');
+const { responder, noEntendi, derivarAHumano, numerosDe, VOLVER_AL_MENU, esCortesia } = require('./maquina');
 
 const AVISO_PRECIO = '_Precios de hoy, pueden cambiar._';
 const MAX_LINEAS = 50; // lo que acepta Nodo Sur por pedido
@@ -32,7 +32,7 @@ function procesar(config, clienta, msj) {
     ctx.datos = {};
     return menu(ctx, '¡Volvamos al principio!');
   }
-  const manejadores = { inicio, armando_pedido, eligiendo_producto, pidiendo_nombre, confirmando_pedido };
+  const manejadores = { inicio, consultando, armando_pedido, eligiendo_producto, pidiendo_nombre, confirmando_pedido };
   return (manejadores[clienta.estado_conv] || inicio)(ctx);
 }
 
@@ -52,13 +52,16 @@ const lineaProducto = (x) => `• ${x.nombre} — ${catalogo.plata(x.precioCenta
 const PIDE_PEDIDO = ['pedido', 'pedir', 'hacer un pedido', 'quiero pedir', 'encargar', 'encargo', 'reservar'];
 const PIDE_PRECIO = ['precio', 'precios', 'cuanto', 'sale', 'cuesta', 'vale', 'hay', 'tienen', 'tenes', 'queda', 'quedan', 'stock'];
 
-function inicio(ctx) {
+// Después del "1" (consultar precios) cada mensaje es un producto: lo que no está dice "no encontré" (no el menú) y se
+// sigue consultando sin volver a poner "1". Lo demás (las otras opciones, "pedido", "gracias", "hola") anda como en inicio.
+const consultando = (ctx) => inicio(ctx, 'consultando');
+
+function inicio(ctx, estado = 'inicio') {
   const t = ctx.texto;
   if (!t) return [];
-  const tLimpio = t.replace(/[!.,~\s]+$/g, '');
-  if (CORTESIA.includes(tLimpio)) return responder(ctx, 'inicio', '¡Gracias a vos! 😊 Cualquier cosa escribime *hola*.');
+  if (esCortesia(t)) return responder(ctx, 'inicio', '¡Gracias a vos! 😊 Cualquier cosa escribime *hola*.');
 
-  if (t === '1') return responder(ctx, 'inicio', `Decime qué producto buscás y te paso el precio y si hay ${ctx.config.textos.emoji}\n(por ejemplo: *coca*, *pan lactal*)`);
+  if (t === '1') return responder(ctx, 'consultando', `Decime qué producto buscás y te paso el precio y si hay ${ctx.config.textos.emoji}\n(por ejemplo: *coca*, *pan lactal*)`);
   if (t === '2') return empezarPedido(ctx);
   if (t === '3') return responder(ctx, 'inicio', faq.ubicacionYHorarios(ctx.config));
   if (t === '4') return derivarAHumano(ctx, '(pidió hablar con una persona)');
@@ -79,10 +82,13 @@ function inicio(ctx) {
     const { resultados, total } = catalogo.buscar(t);
     if (resultados.length) {
       const mas = total > resultados.length ? `\n…y ${total - resultados.length} más: decime algo más específico.` : '';
-      return responder(ctx, 'inicio', `${resultados.map(lineaProducto).join('\n')}${mas}\n\n${AVISO_PRECIO}\nPara pedir, escribí *pedido*.`);
+      return responder(ctx, estado, `${resultados.map(lineaProducto).join('\n')}${mas}\n\n${AVISO_PRECIO}\nPara pedir, escribí *pedido*.`);
     }
-    // Preguntó por algo que no está: no es que no lo entendimos.
-    if (pregunta) return responder(ctx, 'inicio', 'No encontré ese producto 🤔 Probá con otro nombre, o escribí *4* para preguntarle a una persona.');
+    // Preguntó por algo que no está (o está consultando): no es que no lo entendimos.
+    if (estado === 'consultando' && inter.intencion !== 'saludo') {
+      return responder(ctx, estado, `No encontré "${ctx.msj.texto.trim()}" 🤔 Probá con otro nombre, escribí *4* para preguntarle a una persona o *menú* para ver las opciones.`);
+    }
+    if (pregunta) return responder(ctx, estado, 'No encontré ese producto 🤔 Probá con otro nombre, o escribí *4* para preguntarle a una persona.');
   }
   if (inter.intencion === 'saludo' || !pregunta) return menu(ctx, `¡Hola! 👋 Soy el asistente de *${ctx.config.negocio.nombre}*.`);
   return noEntendi(ctx, 'No te entendí bien 🤔 Decime qué producto buscás, o escribí *menú* para ver las opciones.');
@@ -96,10 +102,12 @@ function empezarPedido(ctx) {
     `¡Dale! ${ctx.config.textos.emoji} Lo preparamos para que lo *retires en el local*.\nDecime qué querés, de a uno y con la cantidad (ej: *2 coca*).\nCuando termines, escribí *listo*.`);
 }
 
-// "2 coca", "coca x2", "coca": cantidad (1 si no dice) y lo que busca.
+// "2 coca", "coca x2", "coca": cantidad (1 si no dice) y lo que busca. Un número que es una medida ("1kg yerba",
+// "2.25 l coca") no es la cantidad.
 function cantidadYProducto(texto) {
   const t = texto.trim();
-  let m = t.match(/^(\d{1,3})\s*(?:x\s*)?(.+)$/i);
+  const medida = catalogo.RE_MEDIDA.source;
+  let m = !new RegExp(`^${medida}`, 'i').test(t) && t.match(/^(\d{1,3})\s*(?:x\s*)?(.+)$/i);
   if (m) return { cantidad: Number(m[1]), busqueda: m[2] };
   m = t.match(/^(.+?)\s*x\s*(\d{1,3})$/i);
   if (m) return { cantidad: Number(m[2]), busqueda: m[1] };
@@ -116,42 +124,93 @@ function armando_pedido(ctx) {
   }
   if (TERMINAR.includes(norm)) return terminarPedido(ctx);
 
+  const lineas = separarLineas(ctx.msj.texto || '');
+  if (lineas.length > 1) return anotarVarias(ctx, lineas, []);
+
   const { cantidad, busqueda } = cantidadYProducto(ctx.msj.texto || '');
   if (!catalogo.palabrasClave(busqueda).length) return noEntendi(ctx, 'Decime qué producto querés (ej: *2 coca*), o *listo* para terminar.');
   if (cantidad < 1 || cantidad > 999) return responder(ctx, 'armando_pedido', 'Esa cantidad no la puedo anotar 😅 Probá de nuevo (ej: *2 coca*).');
   const { resultados } = catalogo.buscar(busqueda);
   if (!resultados.length) return responder(ctx, 'armando_pedido', `No encontré "${busqueda.trim()}" 🤔 Probá con otro nombre, o *listo* para terminar.`);
   if (resultados.length === 1) return agregar(ctx, resultados[0], cantidad);
+  return preguntarCual(ctx, resultados, cantidad, []);
+}
 
+// Varios productos en un mensaje: uno por renglón, o separados por coma ("2 yerba, 1 coca"). La coma entre dos números
+// es de una medida ("2,25 L") y no separa.
+function separarLineas(texto) {
+  return texto.split(/\n|,(?!\d)|(?<!\d),/).map((x) => x.trim()).filter(Boolean);
+}
+
+// Anota cada renglón y junta en un solo mensaje lo anotado y lo que no se encontró. Si uno tiene varias opciones,
+// pregunta cuál y guarda el resto (`pendientes`) para seguir apenas elija.
+function anotarVarias(ctx, lineas, notas) {
+  const resto = [...lineas];
+  while (resto.length) {
+    const linea = resto.shift();
+    const { cantidad, busqueda } = cantidadYProducto(linea);
+    if (!catalogo.palabrasClave(busqueda).length) continue;
+    if (cantidad < 1 || cantidad > 999) { notas.push(`❌ "${linea}": esa cantidad no la puedo anotar`); continue; }
+    const { resultados } = catalogo.buscar(busqueda);
+    if (!resultados.length) notas.push(`❌ No encontré "${busqueda.trim()}"`);
+    else if (resultados.length === 1) notas.push(sumar(ctx, resultados[0], cantidad).nota);
+    else {
+      ctx.datos.pendientes = resto;
+      return preguntarCual(ctx, resultados, cantidad, notas);
+    }
+  }
+  delete ctx.datos.pendientes;
+  if (!notas.length) return noEntendi(ctx, 'Decime qué producto querés (ej: *2 coca*), o *listo* para terminar.');
+  return responder(ctx, 'armando_pedido', `${notas.join('\n')}\n\n¿Algo más? Si no, escribí *listo*.`);
+}
+
+function preguntarCual(ctx, resultados, cantidad, notas) {
   ctx.datos.opciones = resultados.map((x) => x.gid);
   ctx.datos.cantidad = cantidad;
+  const antes = notas.length ? `${notas.join('\n')}\n\n` : '';
   const lista = resultados.map((x, i) => `*${i + 1}* — ${x.nombre} — ${catalogo.plata(x.precioCentavos)}${x.hay ? '' : ' (sin stock)'}`).join('\n');
-  return responder(ctx, 'eligiendo_producto', `¿Cuál de estos?\n\n${lista}\n\nRespondé con el número, o *0* para buscar otro.`);
+  return responder(ctx, 'eligiendo_producto', `${antes}¿Cuál de estos?\n\n${lista}\n\nRespondé con el número, o *0* para buscar otro.`);
 }
 
 function eligiendo_producto(ctx) {
-  if (ctx.texto === '0') { delete ctx.datos.opciones; return responder(ctx, 'armando_pedido', 'Dale, decime qué buscás.'); }
+  const pendientes = ctx.datos.pendientes;
+  if (ctx.texto === '0') {
+    delete ctx.datos.opciones; delete ctx.datos.cantidad;
+    // Venía de un mensaje con varios: sigue con lo que faltaba.
+    if (pendientes && pendientes.length) return anotarVarias(ctx, pendientes, []);
+    delete ctx.datos.pendientes;
+    return responder(ctx, 'armando_pedido', 'Dale, decime qué buscás.');
+  }
   const n = numerosDe(ctx.texto)[0];
   const gid = n ? (ctx.datos.opciones || [])[n - 1] : null;
   const producto = gid ? catalogo.porGid(gid) : null;
   if (!producto) return noEntendi(ctx, 'Elegí un número de la lista, o *0* para buscar otro.');
   const cantidad = ctx.datos.cantidad || 1;
   delete ctx.datos.opciones; delete ctx.datos.cantidad;
+  if (pendientes) return anotarVarias(ctx, pendientes, [sumar(ctx, producto, cantidad).nota]);
   return agregar(ctx, producto, cantidad);
 }
 
-function agregar(ctx, producto, cantidad) {
-  if (!producto.hay) {
-    return responder(ctx, 'armando_pedido', `No hay stock de *${producto.nombre}* ahora 😕 ¿Querés algo más? Si no, escribí *listo*.`);
-  }
+// Suma el producto al pedido (si hay stock y entra). Devuelve si se anotó y la línea para contarlo.
+function sumar(ctx, producto, cantidad) {
+  if (!producto.hay) return { ok: false, nota: `❌ No hay stock de *${producto.nombre}* ahora 😕` };
   const items = ctx.datos.items || [];
   const ya = items.find((x) => x.gid === producto.gid);
   if (ya) ya.cantidad = Math.min(999, ya.cantidad + cantidad);
   else {
-    if (items.length >= MAX_LINEAS) return responder(ctx, 'armando_pedido', 'Ya es un pedido grande 😅 Escribí *listo* para mandarlo.');
+    if (items.length >= MAX_LINEAS) return { ok: false, nota: `❌ Ya es un pedido grande 😅 No anoté *${producto.nombre}*.` };
     items.push({ gid: producto.gid, nombre: producto.nombre, cantidad, precioCentavos: producto.precioCentavos });
   }
   ctx.datos.items = items;
+  return { ok: true, nota: `✍️ ${cantidad} × ${producto.nombre} — ${catalogo.plata(producto.precioCentavos * cantidad)}` };
+}
+
+function agregar(ctx, producto, cantidad) {
+  if (!sumar(ctx, producto, cantidad).ok) {
+    return responder(ctx, 'armando_pedido', producto.hay
+      ? 'Ya es un pedido grande 😅 Escribí *listo* para mandarlo.'
+      : `No hay stock de *${producto.nombre}* ahora 😕 ¿Querés algo más? Si no, escribí *listo*.`);
+  }
   return responder(ctx, 'armando_pedido',
     `Anotado: ${cantidad} × ${producto.nombre} — ${catalogo.plata(producto.precioCentavos * cantidad)} ✍️\n¿Algo más? Si no, escribí *listo*.`);
 }

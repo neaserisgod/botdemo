@@ -6,8 +6,19 @@ const nlu = require('./nlu');
 let items = [];
 let actualizado = null;
 
+// Las medidas, escritas de una sola forma: "2,25 L", "2.25l" y "2.25 lts" → "2d25l"; "1 kg" y "1kg" → "1kg". Sin esto
+// "coca 2.25l" no encontraba "Coca Cola 2,25 L" (normalizar parte el número en la coma o el punto).
+const UNIDADES = [['l', 'l|lt|lts|litro|litros'], ['ml', 'ml|cc'], ['kg', 'kg|kgs|kilo|kilos'], ['g', 'g|gr|grs|gramos']];
+const RE_MEDIDA = new RegExp(`(\\d+)(?:[.,](\\d+))?\\s*(${UNIDADES.map(([, v]) => v).join('|')})(?![a-z])`, 'gi');
+function medidas(texto) {
+  return String(texto || '').replace(RE_MEDIDA, (_, entero, dec, unidad) => {
+    const u = UNIDADES.find(([, v]) => v.split('|').includes(unidad.toLowerCase()))[0];
+    return `${entero}${dec ? `d${dec}` : ''}${u}`;
+  });
+}
+
 function fijar(nuevos, cuando = null) {
-  items = (nuevos || []).map((x) => ({ ...x, _norm: nlu.normalizar(x.nombre) }));
+  items = (nuevos || []).map((x) => ({ ...x, _norm: nlu.normalizar(medidas(x.nombre)) }));
   actualizado = cuando;
 }
 
@@ -26,7 +37,7 @@ const VACIAS = new Set([
 
 // Lo que identifica al producto en lo que escribió el cliente.
 function palabrasClave(texto) {
-  return nlu.normalizar(texto).split(' ').filter((p) => p && !VACIAS.has(p));
+  return nlu.normalizar(medidas(texto)).split(' ').filter((p) => p && !VACIAS.has(p));
 }
 
 // ¿La palabra del cliente está en el nombre? Igual, como comienzo de una palabra del nombre ("galle" → galletitas) o
@@ -59,4 +70,4 @@ function plata(centavos) {
   return `$${miles}${resto ? `,${String(resto).padStart(2, '0')}` : ''}`;
 }
 
-module.exports = { fijar, todos, cargado, cuando, buscar, porGid, palabrasClave, plata };
+module.exports = { fijar, todos, cargado, cuando, buscar, porGid, palabrasClave, plata, medidas, RE_MEDIDA };

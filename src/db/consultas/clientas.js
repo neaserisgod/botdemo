@@ -38,9 +38,11 @@ function limpiarNoEntendidos(id) {
 
 // Derivada a humano: el bot no contesta hasta esta fecha (la dueña atiende a mano). En minutos: la pausa es
 // configurable (config.pausa_minutos, 1 hora por defecto; antes eran 12 hs fijas).
+// En UTC, igual que la comparación de estaDerivada: guardada en hora local, en Argentina (UTC-3) la pausa vencía apenas
+// se creaba y el bot nunca se callaba. Una pausa vieja guardada en hora local simplemente vence antes.
 function derivar(id, minutos) {
   obtener().prepare(`
-    UPDATE clientas SET derivada_hasta = datetime('now', 'localtime', '+' || ? || ' minutes'),
+    UPDATE clientas SET derivada_hasta = datetime('now', '+' || ? || ' minutes'),
       no_entendidos = 0, estado_conv = 'inicio', datos_conv = '{}'
     WHERE id = ?
   `).run(minutos, id);

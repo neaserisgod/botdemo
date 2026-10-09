@@ -42,6 +42,14 @@ const CORTESIA = [
   'bárbaro', 'nos vemos', 'besos', 'de nada', 'igualmente', '👍', '❤️', '🙌', '😊', '💅', '💈', '✂️',
 ];
 
+// ¿Es un cierre de cortesía? Con un error de tipeo en las palabras largas ("graciias", "perfeto"): en el primer chat real
+// del almacén (2026-10-09) un "graciias" recibió el menú entero.
+function esCortesia(texto) {
+  const t = texto.replace(/[!.,~\s]+$/g, '');
+  return CORTESIA.includes(t)
+    || CORTESIA.some((c) => c.length >= 5 && !c.includes(' ') && nlu.distancia1(t, c));
+}
+
 // ---------- entrada principal ----------
 // msj: { texto, rutaImagen?, productoId? }  →  devuelve [{para, texto, ...}]
 function procesar(config, clienta, msj) {
@@ -129,8 +137,7 @@ function inicio(ctx) {
   if (!t) return [];
 
   // "gracias", "genial", un emoji: respuesta corta y listo.
-  const tLimpio = t.replace(/[!.,~\s]+$/g, '');
-  if (CORTESIA.includes(tLimpio)) {
+  if (esCortesia(t)) {
     return responder(ctx, 'inicio', '¡Gracias a vos! 😊 Cualquier cosa escribime *hola* y te ayudo.');
   }
 
@@ -428,4 +435,4 @@ function esperando_comprobante(ctx) {
 
 // Lo común con la conversación de un comercio (`comercio.js`): una sola forma de responder, de "no entendí" y de pasarle
 // la charla a una persona.
-module.exports = { procesar, responder, noEntendi, derivarAHumano, numerosDe, VOLVER_AL_MENU, CORTESIA };
+module.exports = { procesar, responder, noEntendi, derivarAHumano, numerosDe, VOLVER_AL_MENU, esCortesia };
