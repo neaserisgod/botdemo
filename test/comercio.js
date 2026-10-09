@@ -1,5 +1,7 @@
 // Un comercio (almacén): precio y si hay, ubicación y horarios, y pedidos para retirar en el local que quedan en la
 // bandeja para Nodo Sur. Decisiones del dueño en Nodo-Sur-Pos/docs/PLAN-BOT.md (2026-10-09).
+// Con la hora de Argentina, como en el celular: con UTC (la de las PCs de prueba) la pausa andaba de casualidad.
+process.env.TZ = 'America/Argentina/Buenos_Aires';
 const os = require('os');
 const path = require('path');
 
@@ -119,13 +121,46 @@ decir(C4, 'hola');
 motor.pausar(C4);
 chequear('cuando el dueño contesta a mano, el bot se calla en ese chat', decir(C4, 'tienen coca?').length === 0);
 const vence = qClientas.porTelefono(C4).derivada_hasta;
-const minutos = (new Date(vence.replace(' ', 'T')) - Date.now()) / 60000;
+const minutos = (new Date(`${vence.replace(' ', 'T')}Z`) - Date.now()) / 60000; // se guarda en UTC
 chequear('por una hora (config.pausa_minutos)', minutos > 55 && minutos <= 61);
 motor.pausar(DUENO);
 chequear('pausar al dueño mismo no hace nada', !qClientas.porTelefono(DUENO));
 const C5 = '5492944100005';
 r = decir(C5, 'necesito hablar con alguien');
 chequear('pedir una persona: le avisa al dueño que el bot se calla 1 hora', textoPara(r, DUENO).includes('por 1 hora') && textoPara(r, C5).includes('le aviso al local'));
+chequear('y después el bot no le contesta (chat real, 2026-10-09: le mandaba el menú)', decir(C5, 'hola?').length === 0);
+
+console.log('\n— 7b. Lo que mostró el primer chat real (2026-10-09) —');
+const C6 = '5492944100006';
+decir(C6, 'hola');
+r = decir(C6, '1');
+chequear('"1" pide el producto', textoPara(r, C6).includes('Decime qué producto buscás'));
+r = decir(C6, 'fernet branca');
+chequear('después de "1", lo que no está dice "no encontré" (no el menú)', textoPara(r, C6).includes('No encontré') && !textoPara(r, C6).includes('¿Qué necesitás?'));
+r = decir(C6, 'yerba');
+chequear('y se puede seguir consultando sin volver a poner "1"', textoPara(r, C6).includes('Yerba Playadito 1 kg — $5.200,50 ✅'));
+r = decir(C6, 'coca 2.25l');
+chequear('"2.25l" encuentra "2,25 L" (medidas escritas distinto)', textoPara(r, C6).includes('Coca Cola 2,25 L'));
+r = decir(C6, 'yerba 1kg');
+chequear('"1kg" encuentra "1 kg"', textoPara(r, C6).includes('Yerba Playadito 1 kg'));
+r = decir(C6, 'graciias');
+chequear('"graciias" (con un error) es un gracias, no el menú', textoPara(r, C6).includes('Gracias a vos'));
+
+const C7 = '5492944100007';
+decir(C7, 'pedido');
+r = decir(C7, '2 yerba\n1 coca zero 2.25 l\npure de papas');
+chequear('varios productos en un mensaje: anota cada uno', textoPara(r, C7).includes('2 × Yerba Playadito 1 kg') && textoPara(r, C7).includes('1 × Coca Cola Zero 2,25 L'));
+chequear('y dice cuál no encontró, sin perder los otros', textoPara(r, C7).includes('No encontré "pure de papas"'));
+r = decir(C7, '1 yerba\ncoca\n3 coca zero');
+chequear('uno con varias opciones en el medio: pregunta cuál', textoPara(r, C7).includes('1 × Yerba') && textoPara(r, C7).includes('¿Cuál de estos'));
+r = decir(C7, '1');
+chequear('al elegir, sigue con lo que faltaba de ese mensaje', textoPara(r, C7).includes('1 × Coca Cola 2,25 L') && textoPara(r, C7).includes('3 × Coca Cola Zero 2,25 L'));
+decir(C7, 'listo');
+decir(C7, 'Sofi');
+r = decir(C7, '1');
+const ultimo = qPedidos.porEnviar().pop();
+const cant = (gid) => (ultimo.datos.items.find((x) => x.gid === gid) || {}).cantidad;
+chequear('el pedido junta todo: 3 yerbas, 1 coca y 4 coca zero', cant('g-yerba') === 3 && cant('g-coca') === 1 && cant('g-coca-z') === 4);
 
 console.log('\n— 8. Lo del dueño en un comercio —');
 r = decir(DUENO, 'qué tengo hoy');
