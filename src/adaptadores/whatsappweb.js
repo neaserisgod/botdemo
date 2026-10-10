@@ -8,11 +8,11 @@ function crearAdaptador(config, hooks) {
   const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
   const qrcode = require('qrcode-terminal');
 
-  const dirMedia = path.join(__dirname, '..', '..', 'data', 'comprobantes');
+  const dirMedia = require('../rutas').enDatos('comprobantes');
   fs.mkdirSync(dirMedia, { recursive: true });
 
   const client = new Client({
-    authStrategy: new LocalAuth({ dataPath: path.join(__dirname, '..', '..', 'data', 'sesion') }),
+    authStrategy: new LocalAuth({ dataPath: require('../rutas').enDatos('sesion') }),
     puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] },
   });
 

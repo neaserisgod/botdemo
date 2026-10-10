@@ -20,8 +20,8 @@ function crearAdaptador(config, hooks) {
   const qrcode = require('qrcode-terminal');
   const pino = require('pino'); // viene como dependencia de baileys
 
-  const dirSesion = path.join(__dirname, '..', '..', 'data', 'sesion-baileys');
-  const dirMedia = path.join(__dirname, '..', '..', 'data', 'comprobantes');
+  const dirSesion = require('../rutas').enDatos('sesion-baileys');
+  const dirMedia = require('../rutas').enDatos('comprobantes');
   fs.mkdirSync(dirMedia, { recursive: true });
 
   const logger = pino({ level: 'silent' }); // el ruido de baileys no nos sirve
@@ -77,7 +77,7 @@ function crearAdaptador(config, hooks) {
   // mensaje identificado con un ID interno (@lid) SIN el número real adjunto.
   // Si no lo resolvemos, la dueña cae al flujo de clienta. Con que una vez
   // llegue el número real, lo recordamos para siempre.
-  const rutaLidMap = path.join(__dirname, '..', '..', 'data', 'lid-map.json');
+  const rutaLidMap = require('../rutas').enDatos('lid-map.json');
   let lidMap = {};
   try { lidMap = JSON.parse(fs.readFileSync(rutaLidMap, 'utf8')); } catch { /* primera vez */ }
   function recordarLid(lid, numero) {
@@ -126,10 +126,13 @@ function crearAdaptador(config, hooks) {
     if (!state.creds.registered && (process.argv.includes('--pareo') || process.env.PAREO)) {
       setTimeout(async () => {
         try {
-          const codigo = await sock.requestPairingCode(config.numero_actual);
+          // NUMERO_BOT: la app que trae el bot adentro lo pasa, porque al arrancar la primera vez todavía no bajó la configuración.
+          const numero = String(process.env.NUMERO_BOT || config.numero_actual).replace(/\D/g, '');
+          const codigo = await sock.requestPairingCode(numero);
+          hooks.alCodigo?.(codigo, numero);
           console.log('==========================================');
           console.log(`  CÓDIGO DE VINCULACIÓN: ${codigo}`);
-          console.log(`  (para el número ${config.numero_actual})`);
+          console.log(`  (para el número ${numero})`);
           console.log('  WhatsApp > Dispositivos vinculados >');
           console.log('  Vincular con el número de teléfono');
           console.log('==========================================');
@@ -152,6 +155,7 @@ function crearAdaptador(config, hooks) {
         hooks.alDesconectar(`baileys close (código ${codigo ?? '?'})`);
         if (deslogueado) {
           console.error('Sesión cerrada desde el teléfono. Borrá data/sesion-baileys y re-escaneá el QR.');
+          hooks.alDesloguear?.();
           return;
         }
         // Un solo reintento a la vez: sin esta guarda, varios eventos "close"

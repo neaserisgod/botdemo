@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const dirDatos = () => process.env.DIR_DATOS || path.join(__dirname, '..', '..', 'data');
+const { dirDatos } = require('../rutas');
 const ruta = () => path.join(dirDatos(), 'nodosur.json');
 
 function leer() {

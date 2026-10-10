@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const fechas = require('./fechas');
 
-const DIR = path.join(__dirname, '..', '..', 'data', 'calendario');
+const DIR = require('../rutas').enDatos('calendario');
 
 // '2026-08-15 10:30' → '20260815T103000' (hora local, sin zona: el celu lo
 // interpreta con su propia zona horaria, que es la del negocio)
