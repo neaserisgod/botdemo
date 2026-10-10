@@ -57,6 +57,12 @@ function construir() {
   }
 
   let config = fs.existsSync(ejemplo) ? leerJson(ejemplo) : {};
+  // Adentro de Nodo Sur Servicios todo sale de la app: los servicios y el alias de ejemplo (uñas de demo) no se ofrecen nunca, ni
+  // antes de que la app mande su configuración (El dueño, 2026-10-10).
+  if (process.env.BOT_EN_APP) {
+    config.servicios = [];
+    config.senas = { ...(config.senas || {}), habilitadas: false, alias_mp: '', titular: '' };
+  }
   const capas = [];
   let rubroPropio = null;
 
@@ -184,7 +190,9 @@ function validar(c) {
   // Un comercio (forma productos) no tiene servicios: lo que vende sale del catálogo de Nodo Sur.
   if (c.forma === 'productos') {
     // nada que revisar en servicios
-  } else if (!Array.isArray(c.servicios) || c.servicios.length === 0) {
+  } else if (!Array.isArray(c.servicios) || (c.servicios.length === 0 && !process.env.BOT_EN_APP)) {
+    // Adentro de Nodo Sur Servicios (BOT_EN_APP) un negocio recién armado todavía no tiene servicios: el bot atiende igual y pasa
+    // los pedidos de turno a una persona (`maquina.js`, sinServicios).
     malos.push('servicios: tiene que haber al menos uno');
   } else {
     const ids = new Set();
