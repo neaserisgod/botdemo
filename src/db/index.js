@@ -24,6 +24,11 @@ function migrar(base) {
   if (!columnas.includes('alias')) {
     base.exec("ALTER TABLE servicios ADD COLUMN alias TEXT NOT NULL DEFAULT ''");
   }
+  // Turnos con Nodo Sur (2026-10-10): el id con que viaja cada turno y si tiene un cambio sin mandar.
+  const deTurnos = base.prepare('PRAGMA table_info(turnos)').all().map((c) => c.name);
+  if (!deTurnos.includes('nube_id')) base.exec('ALTER TABLE turnos ADD COLUMN nube_id TEXT');
+  if (!deTurnos.includes('nube_pendiente')) base.exec('ALTER TABLE turnos ADD COLUMN nube_pendiente INTEGER NOT NULL DEFAULT 0');
+  if (!deTurnos.includes('nube_enviado')) base.exec('ALTER TABLE turnos ADD COLUMN nube_enviado INTEGER NOT NULL DEFAULT 0');
 }
 
 // config.json es la semilla; en runtime la fuente de verdad de precios es la DB.

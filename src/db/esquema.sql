@@ -104,3 +104,13 @@ CREATE TABLE IF NOT EXISTS no_entendidos (
   estado     TEXT,                                  -- en qué paso de la charla estaba
   creado_en  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
+
+-- Lo que ocupa la agenda de la app de Nodo Sur (negocios de servicios vinculados): los turnos que cargó la dueña, sin datos
+-- de clientes. Con esto el bot no ofrece un horario que ya dio ella (`haySolapamiento`). Lo baja `nube/sincronizar.js`.
+CREATE TABLE IF NOT EXISTS turnos_nube (
+  turno_id  TEXT PRIMARY KEY,
+  inicio    TEXT NOT NULL,                        -- YYYY-MM-DD HH:MM, como los turnos
+  fin       TEXT NOT NULL,
+  estado    TEXT NOT NULL                         -- esperando_sena | confirmado | atendido | no_vino | cancelado
+);
+CREATE INDEX IF NOT EXISTS idx_turnos_nube_inicio ON turnos_nube(inicio);
