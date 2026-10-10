@@ -22,7 +22,7 @@ entenderlo igual y, si no puede, pasarlo a una persona. Cada caso nuevo va a `te
   "dame"/"onda" no se corrigen a servicios (por eso en servicios corrige desde 7 letras).
 - Lo que todavía no: "jelmans" → Hellmann's (empieza distinto, y la "ll" suena como "y").
 
-## 3. Pedidos en gramos en Nodo Sur — hecho (2026-10-10), falta publicar
+## 3. Pedidos en gramos en Nodo Sur — hecho y mezclado (2026-10-10); falta publicar la app (el PR #100 no fue `release:`)
 
 Los tres repos, rama `claude/nice-hypatia-w94whl`:
 
@@ -43,3 +43,15 @@ empiezan a entrar a Encargues en cada sucursal apenas sus apps leen los pedidos 
   pasaba antes del corrector. Si molesta en un chat real, que el prefijo pida 4+ letras y la letra de diferencia no
   valga cuando cambia la consonante del medio.
 - `src/index.js` (lock y limpieza de archivos viejos) usa `data/` fijo en vez de `DIR_DATOS`.
+
+## 5. Turnos con Nodo Sur — hecho (2026-10-10), rama `ccr-d9ff719e-qd8uv7` de los tres repos
+
+- El bot **reserva cada turno en el sitio** (`/api/bot/turno`): si otra persona tomó ese horario un instante antes, el turno
+  queda `ocupado` y al cliente se le pide que elija otro. Un cambio del bot (seña aprobada, cancelación, reprogramación) va
+  con `/api/bot/turno/cambio`.
+- Lo que ocupa la **Agenda de la app** baja a `turnos_nube` y `haySolapamiento` lo mira: el bot no ofrece esos horarios.
+- Si la dueña **mueve, cancela o anota la seña** de un turno del bot en la app, el bot le avisa al cliente.
+- Los **servicios, el horario y la seña** llegan de la app (sin configuración aparte). Con eso, cambiar un precio por
+  WhatsApp quedó cerrado cuando los servicios vienen de Nodo Sur, y un servicio borrado en la app deja de ofrecerse.
+- Test: `test/nube-turnos.js` (también con `node:sqlite`, el motor del celular).
+- Falta: probarlo con WhatsApp real y la app real.

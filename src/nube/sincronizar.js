@@ -6,6 +6,10 @@
 //    arrancar sin internet.
 //  * Pedidos (solo comercios): la bandeja local (`pedidos`) se manda al sitio, y cuando el local los acepta o rechaza en la
 //    app el bot le avisa al cliente. Reintentar no duplica nada: el pedido lleva su id, y un pedido ya resuelto no cambia.
+//  * Turnos (negocios de servicios): cada turno que da el bot se RESERVA en Nodo Sur (el sitio no deja que dos personas tomen
+//    el mismo horario: si se le adelantaron, el bot le pide al cliente que elija otro) y entra a la Agenda de la app. Lo que
+//    ocupa la agenda de la app se baja a `turnos_nube`, así el bot no ofrece un horario que dio la dueña. Si ella mueve,
+//    cancela o anota la seña de un turno del bot en la app, el bot le avisa al cliente.
 //  * Avisos en vivo: el mismo WebSocket de la sync (`/api/sync/escuchar`); el sitio le manda al bot solo lo suyo. Sin
 //    conexión de avisos se revisa igual cada 10 minutos.
 const fs = require('fs');
@@ -13,6 +17,9 @@ const path = require('path');
 const catalogo = require('../core/catalogo');
 const comercio = require('../core/comercio');
 const qPedidos = require('../db/consultas/pedidos');
+const qTurnos = require('../db/consultas/turnos');
+const qSenas = require('../db/consultas/senas');
+const fechas = require('../core/fechas');
 const { textoPeso } = require('../core/diccionario/numeros');
 const { rutaNube, configNube } = require('../config');
 const cuentaArchivo = require('./cuenta');
@@ -156,6 +163,125 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
     return avisados;
   }
 
+  // --- Turnos ---------------------------------------------------------------------------------------------------------
+  const esTurnos = () => config.forma !== 'productos';
+  const ESTADO_EN_NUBE = {
+    pendiente_sena: 'esperando_sena', confirmado: 'confirmado', completado: 'atendido', no_vino: 'no_vino',
+    cancelado: 'cancelado', anulado: 'cancelado', vencido: 'cancelado', ocupado: 'cancelado',
+  };
+  const OCUPA_LOCAL = ['pendiente_sena', 'confirmado'];
+  const ms = (texto) => fechas.deTexto(texto).getTime();
+  const texto = (msEpoch) => fechas.aTexto(new Date(msEpoch));
+  const cuando = (t) => `${fechas.diaLindo(t.inicio.slice(0, 10))} a las ${t.inicio.slice(11)}`;
+
+  // Otro (un cliente por otro chat, o la dueña en la app) tomó ese horario un instante antes: el turno no vale y el cliente elige
+  // otro. Si tenía una seña esperando, deja de esperarla.
+  async function horarioOcupado(t) {
+    qTurnos.cambiarEstado(t.id, 'ocupado', { desdeNube: true });
+    qTurnos.marcarEnNube(t.id, { enviado: Boolean(t.nube_enviado) });
+    const sena = qSenas.porTurno(t.id);
+    if (sena && sena.estado === 'esperando_comprobante') qSenas.cambiarEstado(sena.id, 'vencido', 'sistema');
+    await enviar([{ para: t.telefono, texto: `😕 Perdón, justo se ocupó el turno del ${cuando(t)}: lo tomaron un instante antes. Escribí *1* y elegimos otro horario.` }]);
+  }
+
+  async function mandarTurnos() {
+    if (!esTurnos()) return 0;
+    let mandados = 0;
+    for (const t of qTurnos.paraNube()) {
+      const estado = ESTADO_EN_NUBE[t.estado] || 'cancelado';
+      const inicio = ms(t.inicio), fin = ms(t.fin);
+      try {
+        if (!t.nube_enviado) {
+          // Uno que nunca llegó a Nodo Sur y ya no ocupa nada (cancelado antes de mandarlo, o de antes de vincular el bot) no viaja.
+          if (!['esperando_sena', 'confirmado'].includes(estado) || fin < Date.now()) {
+            qTurnos.marcarEnNube(t.id, { enviado: false });
+            continue;
+          }
+          try {
+            await cliente.reservarTurno({
+              id: t.nube_id, inicio, fin, estado,
+              cliente: { nombre: (t.clienta_nombre || '').trim() || 'Cliente de WhatsApp', telefono: t.telefono },
+              servicio: { ...(t.catalogo_id ? { gid: t.catalogo_id } : {}), nombre: t.servicio },
+              ...(t.sena_monto && estado === 'esperando_sena' ? { senaPedidaCentavos: t.sena_monto * 100 } : {}),
+            });
+            qTurnos.marcarEnNube(t.id, { enviado: true });
+          } catch (e) {
+            if (e.status !== 409) throw e;
+            await horarioOcupado(t);
+          }
+        } else {
+          try {
+            await cliente.cambiarTurno({ id: t.nube_id, estado, inicio, fin });
+            qTurnos.marcarEnNube(t.id, { enviado: true });
+          } catch (e) {
+            if (e.status === 404) qTurnos.marcarEnNube(t.id, { enviado: true }); // se borró allá (viejo): nada que avisar
+            else if (e.status === 409) await horarioOcupado(t);
+            else throw e;
+          }
+        }
+        mandados++;
+      } catch (e) {
+        log.error(`No pude mandar el turno ${t.nube_id} a Nodo Sur: ${e.message}`);
+        if (!e.status || e.status >= 500) break; // sin red: queda para la próxima vuelta
+        qTurnos.marcarEnNube(t.id, { enviado: Boolean(t.nube_enviado) }); // un 400 no se arregla reintentando
+      }
+    }
+    return mandados;
+  }
+
+  // Lo que hizo la dueña en la app con un turno del bot, y el mensaje para el cliente (o null si no hay que avisarle).
+  function aplicarCambioDeNube(local, x) {
+    const ocupaAca = OCUPA_LOCAL.includes(local.estado);
+    if (x.estado === 'cancelado' && ocupaAca) {
+      qTurnos.cambiarEstado(local.id, 'anulado', { desdeNube: true });
+      const sena = qSenas.porTurno(local.id);
+      if (sena && sena.estado === 'esperando_comprobante') qSenas.cambiarEstado(sena.id, 'vencido', 'duena');
+      return { para: local.telefono, texto: `Hola ${local.clienta_nombre || ''} 👋 Tuvimos que cancelar tu turno del ${cuando(local)} (${local.servicio}). Escribí *hola* para sacar otro, ¡disculpá las molestias!` };
+    }
+    if (x.estado === 'atendido' || x.estado === 'no_vino') {
+      if (ocupaAca) qTurnos.cambiarEstado(local.id, x.estado === 'atendido' ? 'completado' : 'no_vino', { desdeNube: true });
+      return null;
+    }
+    let aviso = null;
+    if (x.estado === 'confirmado' && local.estado === 'pendiente_sena') {
+      qTurnos.cambiarEstado(local.id, 'confirmado', { desdeNube: true });
+      const sena = qSenas.porTurno(local.id);
+      if (sena && sena.estado !== 'verificado') qSenas.cambiarEstado(sena.id, 'verificado', 'duena');
+      aviso = { para: local.telefono, texto: `¡Seña recibida! ✅ Tu turno del ${cuando(local)} quedó confirmado. ¡Te esperamos!` };
+    }
+    const nuevoInicio = texto(x.inicio);
+    if (ocupaAca && nuevoInicio !== local.inicio) {
+      qTurnos.mover(local.id, nuevoInicio, texto(x.fin), { desdeNube: true });
+      aviso = { para: local.telefono, texto: `🔁 Cambiamos tu turno de ${local.servicio}: ahora es el ${cuando({ inicio: nuevoInicio })}. Si no te queda bien, escribí *hola* y lo vemos.` };
+    }
+    return aviso;
+  }
+
+  async function revisarTurnos() {
+    if (!esTurnos()) return 0;
+    let desde = (cuenta.leer() || {}).cursorTurnos || 0;
+    const avisos = [];
+    for (;;) {
+      const r = await cliente.turnos(desde);
+      for (const x of r.turnos || []) {
+        if (x.origen === 'app') {
+          qTurnos.guardarOcupadoNube(x.id, texto(x.inicio), texto(x.fin), x.estado);
+          continue;
+        }
+        const local = qTurnos.porNubeId(x.id);
+        // No es de este bot, o tiene un cambio propio sin mandar: gana el de acá, que sale en la próxima vuelta.
+        if (!local || local.nube_pendiente) continue;
+        const aviso = aplicarCambioDeNube(local, x);
+        if (aviso) avisos.push(aviso);
+      }
+      desde = r.hasta ?? desde;
+      cuenta.actualizar({ cursorTurnos: desde });
+      if (!r.mas) break;
+    }
+    if (avisos.length) await enviar(avisos);
+    return avisos.length;
+  }
+
   async function ping() {
     const r = await cliente.ping(version);
     if (r && r.token) cuenta.actualizar({ token: r.token }); // el sitio lo renueva cuando le quedan menos de 60 días
@@ -169,6 +295,9 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
     if (esComercio()) {
       try { await mandarBandeja(); } catch (e) { reportar('pedidos', e); }
       try { await revisarPedidos(); } catch (e) { reportar('pedidos', e); }
+    } else {
+      try { await revisarTurnos(); } catch (e) { reportar('turnos', e); }
+      try { await mandarTurnos(); } catch (e) { reportar('turnos', e); }
     }
   }
 
@@ -184,7 +313,7 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
     }
   }
 
-  // Lo que manda el sitio por el WebSocket: `{ bot: { config | catalogo | pedido, estado } }`. Cualquier otra cosa se ignora.
+  // Lo que manda el sitio por el WebSocket: `{ bot: { config | catalogo | pedido, estado | turno | ocupados } }`. Cualquier otra cosa se ignora.
   async function alAviso(texto) {
     let m;
     try { m = JSON.parse(texto); } catch { return; }
@@ -194,6 +323,7 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
       if (a.config !== undefined) await traerConfig();
       if (a.catalogo) await traerCatalogo();
       if (a.pedido !== undefined && a.estado) await revisarPedidos();
+      if (a.turno !== undefined || a.ocupados) await revisarTurnos();
     } catch (e) { reportar('aviso', e); }
   }
 
@@ -230,7 +360,10 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
     if (ws) try { ws.close(); } catch { /* ya cerrado */ }
   }
 
-  return { traerConfig, traerCatalogo, mandarBandeja, revisarPedidos, avisarResueltos, ping, vuelta, alAviso, iniciar, detener };
+  // Lo que se manda apenas pasa algo en una charla: un pedido (comercio) o un turno (servicios).
+  const mandarYa = () => (esComercio() ? mandarBandeja() : mandarTurnos());
+
+  return { traerConfig, traerCatalogo, mandarBandeja, revisarPedidos, avisarResueltos, mandarTurnos, revisarTurnos, mandarYa, ping, vuelta, alAviso, iniciar, detener };
 }
 
 module.exports = { crearSincronizador, cargarCatalogoGuardado, rutaCatalogo };

@@ -144,6 +144,7 @@ Vincular el bot a la cuenta del negocio (`bash bot.sh vincular-nodosur`, o el in
 - baja la **configuración** que se carga en la app y la aplica **sin reiniciar** (si no sirve, sigue la anterior);
 - baja el **catálogo** (comercios) y lo guarda para arrancar sin internet;
 - manda los **pedidos** de la bandeja (reintentar no duplica) y avisa al cliente cuando se resuelven;
+- en un negocio de **turnos**, **reserva cada turno en Nodo Sur** (si otra persona tomó ese horario un instante antes, le pide al cliente que elija otro), no ofrece lo que ya ocupa la **Agenda de la app**, y si la dueña mueve, cancela o anota la seña de un turno en la app, le avisa al cliente;
 - escucha los **avisos en vivo** del sitio (si no puede, revisa cada 10 minutos) y avisa que está vivo (ping cada hora, que renueva el token).
 
 Solo con un plan que incluya el bot. Sin vincular, el bot anda igual con su `config.json`.

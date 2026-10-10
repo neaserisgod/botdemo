@@ -238,7 +238,8 @@ if (cuentaNube) {
   let WebSocket = null;
   try { WebSocket = require('ws'); } catch { console.log('Sin el paquete ws: Nodo Sur se revisa cada 10 minutos, sin avisos en vivo.'); }
   sincronizador.iniciar({ WebSocket });
-  mandarPedidosYa = () => { sincronizador.mandarBandeja().catch(() => { /* queda en la bandeja */ }); };
+  // Un pedido o un turno sale apenas termina la charla que lo creó, no en la vuelta de cada 10 minutos.
+  mandarPedidosYa = () => { sincronizador.mandarYa().catch(() => { /* queda para la próxima vuelta */ }); };
   console.log(`Vinculado a Nodo Sur (${cuentaNube.email}).`);
 } else {
   console.log('Sin vincular a Nodo Sur: el bot usa solo config.json (para vincularlo: bash bot.sh vincular-nodosur).');

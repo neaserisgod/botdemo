@@ -16,6 +16,10 @@ const qNoEntendidos = require('../db/consultas/noEntendidos');
 let pendiente = null; // { accion, id, datos, vence }
 const MINUTOS_CONFIRMACION = 5;
 
+// Los servicios y precios llegan de la app de Nodo Sur (2026-10-10: los datos del negocio son los del bot). Cambiar un precio acá
+// lo pisaría la próxima vez que la app mande la configuración, y la caja cobraría otro: se cambian en la app.
+const serviciosDeNodoSur = () => Array.isArray(require('../config').configNube()?.config?.servicios);
+
 // Segundos entre cada mensaje de un aviso masivo. WhatsApp bloquea cuentas que
 // mandan ráfagas: 6 s es lento pero seguro (100 clientas = 10 minutos).
 const SEGUNDOS_ENTRE_AVISOS = 6;
@@ -161,10 +165,12 @@ function ejecutar(config, accion, id, r) {
       const lista = qServicios.activos().map(
         (s) => `*${s.id}* — ${s.nombre}: $${s.precio}${s.sena ? ` (seña $${s.sena})` : ''}`
       ).join('\n');
+      if (serviciosDeNodoSur()) return responder(`💰 *Precios actuales:*\n${lista}\n\nSe cambian en la app de Nodo Sur (Servicios) y me llegan solos.`);
       return responder(`💰 *Precios actuales:*\n${lista}\n\nPara cambiar uno, escribime algo como:\n_"${ejemploPrecio(config)}"_`);
     }
 
     case 'precio_set': {
+      if (serviciosDeNodoSur()) return responder('Los precios se cambian en la app de Nodo Sur (Servicios): así la caja y yo decimos lo mismo. Me llegan solos al guardarlos.');
       const s = r?.servicio || qServicios.porId(r?.idServicio);
       const monto = r?.monto;
       if (!s || !monto || monto <= 0) {

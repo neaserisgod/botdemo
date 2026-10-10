@@ -24,6 +24,11 @@ function migrar(base) {
   if (!columnas.includes('alias')) {
     base.exec("ALTER TABLE servicios ADD COLUMN alias TEXT NOT NULL DEFAULT ''");
   }
+  // Turnos con Nodo Sur (2026-10-10): el id con que viaja cada turno y si tiene un cambio sin mandar.
+  const deTurnos = base.prepare('PRAGMA table_info(turnos)').all().map((c) => c.name);
+  if (!deTurnos.includes('nube_id')) base.exec('ALTER TABLE turnos ADD COLUMN nube_id TEXT');
+  if (!deTurnos.includes('nube_pendiente')) base.exec('ALTER TABLE turnos ADD COLUMN nube_pendiente INTEGER NOT NULL DEFAULT 0');
+  if (!deTurnos.includes('nube_enviado')) base.exec('ALTER TABLE turnos ADD COLUMN nube_enviado INTEGER NOT NULL DEFAULT 0');
 }
 
 // config.json es la semilla; en runtime la fuente de verdad de precios es la DB.
@@ -36,11 +41,17 @@ function sembrarServicios(servicios) {
       precio = excluded.precio, sena = excluded.sena, catalogo_id = excluded.catalogo_id,
       alias = excluded.alias
   `);
-  const tx = db.transaction((lista) => lista.forEach((s) => up.run({
-    ...s,
-    catalogo_id: s.catalogo_id ?? '',
-    alias: Array.isArray(s.alias) ? s.alias.join(',') : (s.alias ?? ''),
-  })));
+  // Un servicio que ya no está en la lista (lo borraron en la app de Nodo Sur, o de config.json) deja de ofrecerse. No se borra:
+  // los turnos viejos lo siguen nombrando.
+  const apagarResto = db.prepare(`UPDATE servicios SET activo = CASE WHEN id IN (SELECT value FROM json_each(?)) THEN 1 ELSE 0 END`);
+  const tx = db.transaction((lista) => {
+    lista.forEach((s) => up.run({
+      ...s,
+      catalogo_id: s.catalogo_id ?? '',
+      alias: Array.isArray(s.alias) ? s.alias.join(',') : (s.alias ?? ''),
+    }));
+    if (lista.length) apagarResto.run(JSON.stringify(lista.map((s) => s.id)));
+  });
   tx(servicios);
 }
 
