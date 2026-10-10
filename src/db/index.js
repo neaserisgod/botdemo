@@ -7,7 +7,7 @@ const { abrirBase } = require('./motor');
 let db = null;
 
 function abrir(rutaDb) {
-  const ruta = rutaDb || path.join(__dirname, '..', '..', 'data', 'turnos.db');
+  const ruta = rutaDb || require('../rutas').enDatos('turnos.db');
   fs.mkdirSync(path.dirname(ruta), { recursive: true });
   db = abrirBase(ruta);
   if (process.env.DEPURAR) console.log(`SQLite: ${db.motor}`);

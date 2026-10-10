@@ -21,6 +21,7 @@ const { crearMotor } = require('./core/motor');
 const recordatorios = require('./core/recordatorios');
 const salud = require('./salud');
 const { iniciarPanel } = require('./panel/server');
+const estadoApp = require('./estado_app');
 
 // --- Una sola instancia a la vez ---
 // Dos procesos con la misma sesión de WhatsApp se desconectan mutuamente en
@@ -28,7 +29,7 @@ const { iniciarPanel } = require('./panel/server');
 // que un `pm2 restart` no alcance y haya que borrar y recrear el proceso.
 const fsLock = require('fs');
 const pathLock = require('path');
-const RUTA_PID = pathLock.join(__dirname, '..', 'data', 'bot.pid');
+const RUTA_PID = require('./rutas').enDatos('bot.pid');
 
 function tomarLock() {
   fsLock.mkdirSync(pathLock.dirname(RUTA_PID), { recursive: true });
@@ -55,6 +56,7 @@ function tomarLock() {
   process.on('SIGTERM', () => { soltar(); process.exit(0); });
 }
 tomarLock();
+require('./estado_app').anotar({ conectado: false, arranque: Date.now() });
 
 // --- DB + servicios sembrados desde config ---
 db.abrir(process.env.RUTA_DB);
@@ -80,6 +82,7 @@ const { crearAdaptador } = require(`./adaptadores/${nombreAdaptador}`);
 let mandarPedidosYa = () => {};
 const adaptador = crearAdaptador(config, {
   alRecibir: (msj) => {
+    estadoApp.mensajeRecibido();
     const salientes = motor.procesarMensaje(msj);
     // Un pedido recién confirmado sale a Nodo Sur ya, no en la vuelta de cada 10 minutos: el local lo tiene que ver mientras
     // el cliente espera la respuesta. Si falla, queda en la bandeja para la vuelta siguiente.
@@ -93,6 +96,7 @@ const adaptador = crearAdaptador(config, {
   alConectar: () => {
     const primeraVez = !estado.conectado;
     estado.conectado = true;
+    estadoApp.anotar({ conectado: true, codigo: null, deslogueado: false, desde: Date.now(), motivo: null });
     console.log('WhatsApp conectado.');
 
     // Modo vinculación: ya quedó la sesión guardada, salimos para que PM2 lo
@@ -111,8 +115,13 @@ const adaptador = crearAdaptador(config, {
     if (primeraVez) adaptador.enviar(recordatorios.tick(config));
   },
 
+  // La app que trae el bot adentro muestra el código y avisa cuando hay que volver a vincular.
+  alCodigo: (codigo, numero) => estadoApp.anotar({ codigo, codigoPara: numero, codigoDesde: Date.now() }),
+  alDesloguear: () => estadoApp.anotar({ conectado: false, deslogueado: true, codigo: null }),
+
   alDesconectar: (motivo) => {
     estado.conectado = false;
+    estadoApp.anotar({ conectado: false, motivo: String(motivo || '') });
     salud.registrarCaida(motivo);
     console.error('WhatsApp desconectado:', motivo);
   },
@@ -198,7 +207,7 @@ function limpiarArchivosViejos() {
   const limite = Date.now() - diasQueGuardamos * 86400000;
   let borrados = 0;
   for (const carpeta of ['comprobantes', 'calendario', 'contactos']) {
-    const dir = path.join(__dirname, '..', 'data', carpeta);
+    const dir = require('./rutas').enDatos(carpeta);
     if (!fs.existsSync(dir)) continue;
     for (const archivo of fs.readdirSync(dir)) {
       const ruta = path.join(dir, archivo);

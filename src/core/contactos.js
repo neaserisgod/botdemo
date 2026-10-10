@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const DIR = path.join(__dirname, '..', '..', 'data', 'contactos');
+const DIR = require('../rutas').enDatos('contactos');
 
 function escapar(t) {
   return String(t || '').replace(/([,;\\])/g, '\\$1').replace(/\n/g, '\\n');
