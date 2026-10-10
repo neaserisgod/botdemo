@@ -45,7 +45,8 @@ const servidor = http.createServer((req, res) => {
       if (sitio.turnos.some((t) => t.id === b.id)) return responder(res, 200, { ok: true, id: b.id, repetido: true });
       if (sitio.turnos.some((t) => OCUPAN.includes(t.estado) && pisa(t, b))) return responder(res, 409, { error: 'ocupado' });
       sitio.turnos.push({ ...b, origen: 'bot', actualizado: ++sitio.reloj });
-      return responder(res, 201, { ok: true, id: b.id, repetido: false });
+      const sena = sitio.conLink && b.estado === 'esperando_sena' ? { url: `https://mp.prueba/pagar/${b.id}`, vence: Date.now() + 1800000 } : undefined;
+      return responder(res, 201, { ok: true, id: b.id, repetido: false, ...(sena ? { sena } : {}) });
     }
     if (u.pathname === '/api/bot/turno/cambio' && req.method === 'POST') {
       const t = sitio.turnos.find((x) => x.id === b.id);
@@ -162,6 +163,38 @@ const servidor = http.createServer((req, res) => {
   chequear('el borrado no se pierde (los turnos viejos lo nombran)', qServicios.porId(sinSena.id) && !qServicios.porId(sinSena.id).activo);
   db.sembrarServicios(config.servicios);
   chequear('si vuelve, se ofrece de nuevo', qServicios.activos().length === config.servicios.length);
+
+  console.log('\n— 7. Seña con el link de Mercado Pago (Nodo Sur Servicios) —');
+  config.senas.cobro = 'mp';
+  sitio.conLink = true;
+  enviados.length = 0;
+  const dora = clienta('5492944300004', 'Dora');
+  const idDora = qTurnos.crear(dora, semi.id, a('14:00'), fechas.sumarMinutos(a('14:00'), semi.duracion_min), 'pendiente_sena');
+  qSenas.crear(idDora, semi.sena, a('13:00'));
+  await sinc.mandarTurnos();
+  chequear('al reservar, la clienta recibe el link de pago', enviados.length === 1 && enviados[0].para === '5492944300004'
+    && enviados[0].texto.includes('https://mp.prueba/pagar/') && enviados[0].texto.includes(`$${semi.sena}`));
+  enviados.length = 0;
+  const enSitioDora = sitio.turnos.find((t) => t.id === qTurnos.porId(idDora).nube_id);
+  Object.assign(enSitioDora, { estado: 'confirmado', senaPagada: { centavos: semi.sena * 100, pagoId: '77001' }, actualizado: ++sitio.reloj });
+  await sinc.revisarTurnos();
+  chequear('entra el pago: turno confirmado, seña verificada por MP y recibo con la operación', qTurnos.porId(idDora).estado === 'confirmado'
+    && qSenas.porTurno(idDora).estado === 'verificado' && qSenas.porTurno(idDora).resuelta_por === 'mp'
+    && enviados.length === 1 && enviados[0].texto.includes('77001') && /Mercado Pago/.test(enviados[0].texto));
+  enviados.length = 0;
+  enSitioDora.actualizado = ++sitio.reloj;
+  await sinc.revisarTurnos();
+  chequear('el mismo pago otra vez no manda otro recibo', enviados.length === 0);
+
+  sitio.conLink = false;
+  config.senas.alias_mp = 'caro.unas';
+  enviados.length = 0;
+  const eva = clienta('5492944300005', 'Eva');
+  const idEva = qTurnos.crear(eva, semi.id, a('16:00'), fechas.sumarMinutos(a('16:00'), semi.duracion_min), 'pendiente_sena');
+  qSenas.crear(idEva, semi.sena, a('15:00'));
+  await sinc.mandarTurnos();
+  chequear('sin Mercado Pago conectado: se cae al alias', enviados.length === 1 && enviados[0].texto.includes('caro.unas'));
+  delete config.senas.cobro;
 
   servidor.close();
   console.log(fallas ? `\n❌ ${fallas} chequeos de turnos con Nodo Sur fallaron` : '\n✅ Turnos con Nodo Sur OK');

@@ -609,8 +609,13 @@ function confirmando(ctx) {
   const venceEn = fechas.aTexto(new Date(Date.now() + ctx.config.senas.vencimiento_horas * 3600000));
   qSenas.crear(turnoId, s.sena, venceEn);
   ctx.datos = { turnoId };
+  if (senasFlujo.cobraConLink(ctx.config)) {
+    // El link lo crea Nodo Sur al recibir el turno y sale en el mensaje siguiente (`nube/sincronizar.js`, mandarTurnos).
+    return responder(ctx, 'esperando_comprobante',
+      `¡Casi listo! Para reservar te pido una seña de *$${s.sena}*. Ya te mando el link de Mercado Pago para pagarla 💳\n\nTenés ${senasFlujo.plazoTexto(ctx.config)}, después el horario se libera solo 😉`);
+  }
   return responder(ctx, 'esperando_comprobante',
-    `¡Casi listo! Para reservar te pido una seña de *$${s.sena}* por transferencia:\n\n🏦 Alias: *${ctx.config.senas.alias_mp}*\n👤 Titular: ${ctx.config.senas.titular}\n\nCuando la hagas, mandame la *foto del comprobante* por acá. Tenés ${ctx.config.senas.vencimiento_horas} hs, después el horario se libera solo 😉`);
+    `¡Casi listo! Para reservar te pido una seña de *$${s.sena}* por transferencia:\n\n🏦 Alias: *${ctx.config.senas.alias_mp}*\n👤 Titular: ${ctx.config.senas.titular}\n\nCuando la hagas, mandame la *foto del comprobante* por acá. Tenés ${senasFlujo.plazoTexto(ctx.config)}, después el horario se libera solo 😉`);
 }
 
 // Confirmar el cambio de un turno: se mueve el MISMO turno (con su seña, si la tenía) al horario nuevo.
@@ -652,6 +657,10 @@ function esperando_comprobante(ctx) {
       ctx.datos = {};
       return responder(ctx, 'inicio', 'Listo, cancelé la reserva y el horario quedó libre. Cuando quieras escribí *hola* 😊',
         [notif.cancelacion(ctx.config, turno, `canceló ${ctx.config.textos.el_cliente} antes de señar`)]);
+    }
+    if (senasFlujo.cobraConLink(ctx.config)) {
+      return responder(ctx, 'esperando_comprobante',
+        'Te espero con el pago de la seña por el link de Mercado Pago 💳 Apenas entra, te confirmo el turno solo.\nSi te arrepentiste, escribí *0* y libero el horario.');
     }
     return responder(ctx, 'esperando_comprobante',
       `Te espero con la *foto del comprobante* 📸 (alias: *${ctx.config.senas.alias_mp}*).\nSi te arrepentiste, escribí *0* y libero el horario.`);

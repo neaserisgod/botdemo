@@ -198,13 +198,14 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
             continue;
           }
           try {
-            await cliente.reservarTurno({
+            const r = await cliente.reservarTurno({
               id: t.nube_id, inicio, fin, estado,
               cliente: { nombre: (t.clienta_nombre || '').trim() || 'Cliente de WhatsApp', telefono: t.telefono },
               servicio: { ...(t.catalogo_id ? { gid: t.catalogo_id } : {}), nombre: t.servicio },
               ...(t.sena_monto && estado === 'esperando_sena' ? { senaPedidaCentavos: t.sena_monto * 100 } : {}),
             });
             qTurnos.marcarEnNube(t.id, { enviado: true });
+            if (estado === 'esperando_sena') await mandarCobroDeSena(t, r && r.sena);
           } catch (e) {
             if (e.status !== 409) throw e;
             await horarioOcupado(t);
@@ -229,6 +230,43 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
     return mandados;
   }
 
+  // La seña con el link de Mercado Pago (config.senas.cobro 'mp'): el link lo crea Nodo Sur al recibir el turno. Si no vino (el
+  // negocio no conectó Mercado Pago, o falló), se cae al alias si hay uno; si no, avisa que la dueña le escribe.
+  async function mandarCobroDeSena(t, sena) {
+    if (config.senas?.cobro !== 'mp') return;
+    let texto;
+    if (sena && sena.url) {
+      texto = `💳 Pagá la seña de *$${t.sena_monto}* acá:\n${sena.url}\n\nApenas entra el pago te confirmo el turno solo ✅`;
+    } else if (config.senas.alias_mp) {
+      texto = `💳 Podés pagar la seña de *$${t.sena_monto}* por transferencia:\n🏦 Alias: *${config.senas.alias_mp}*${config.senas.titular ? `\n👤 Titular: ${config.senas.titular}` : ''}\n\nDespués mandame la *foto del comprobante* por acá.`;
+    } else {
+      texto = 'En un ratito te escribimos con cómo pagar la seña 🙌';
+    }
+    await enviar([{ para: t.telefono, texto }]);
+  }
+
+  // La seña entró por Mercado Pago (Nodo Sur lo confirmó con el aviso del pago). `x.senaPagada`: { centavos, pagoId, tarde? }.
+  // Se anota una sola vez por pago (el número de operación es único en la base).
+  function senaPagadaDeNube(local, x) {
+    const p = x.senaPagada;
+    if (!p || !p.pagoId) return null;
+    const operacion = `mp-${p.pagoId}`;
+    if (qSenas.existeOperacion(operacion)) return null;
+    const sena = qSenas.porTurno(local.id);
+    const pesos = Math.round((p.centavos || 0) / 100);
+    if (sena) {
+      qSenas.resolver(sena.id, {
+        estado: p.tarde ? 'a_revisar' : 'verificado', monto: pesos, destinatario: null, nroOperacion: operacion, fecha: null,
+        rutaImagen: null, ocrTexto: null, motivo: p.tarde ? 'Pagó por Mercado Pago después de que se liberó el horario' : null, por: 'mp',
+      });
+    }
+    if (p.tarde) {
+      return { para: local.telefono, texto: `Recibimos tu pago de la seña ($${pesos}), pero el horario ya se había liberado 😕 Ya le avisamos al negocio: te van a escribir para darte otro horario o devolvértela.` };
+    }
+    if (local.estado === 'pendiente_sena') qTurnos.cambiarEstado(local.id, 'confirmado', { desdeNube: true });
+    return { para: local.telefono, texto: `¡Listo! Recibimos tu seña de *$${pesos}* por Mercado Pago ✅ (operación ${p.pagoId})\nTu turno quedó confirmado: ${cuando(local)}, ${local.servicio}.\n\nTe mandamos un recordatorio un día antes. ¡Te esperamos!` };
+  }
+
   // Lo que hizo la dueña en la app con un turno del bot, y el mensaje para el cliente (o null si no hay que avisarle).
   function aplicarCambioDeNube(local, x) {
     const ocupaAca = OCUPA_LOCAL.includes(local.estado);
@@ -243,6 +281,10 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
       return null;
     }
     let aviso = null;
+    if (x.senaPagada) {
+      const recibo = senaPagadaDeNube(local, x);
+      if (recibo || x.senaPagada.tarde) return recibo;
+    }
     if (x.estado === 'confirmado' && local.estado === 'pendiente_sena') {
       qTurnos.cambiarEstado(local.id, 'confirmado', { desdeNube: true });
       const sena = qSenas.porTurno(local.id);

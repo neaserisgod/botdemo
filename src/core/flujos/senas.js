@@ -63,6 +63,15 @@ function procesarComprobante(config, clienta, turnoId, msj) {
   return { salientes, estadoFinal: estado };
 }
 
+// Cuánto tiene la clienta para pagar la seña, en palabras: "30 minutos", "2 hs".
+function plazoTexto(config) {
+  const h = config.senas.vencimiento_horas;
+  return h < 1 ? `${Math.round(h * 60)} minutos` : `${h} hs`;
+}
+
+// La seña se cobra con el link de Mercado Pago que manda Nodo Sur (Nodo Sur Servicios, El dueño, 2026-10-10), no por transferencia.
+const cobraConLink = (config) => config.senas.cobro === 'mp';
+
 // Vence señas cuya espera superó el límite: libera el horario y avisa a ambas.
 function vencerPendientes(config) {
   const salientes = [];
@@ -74,11 +83,11 @@ function vencerPendientes(config) {
     qTurnos.cambiarEstado(turno.id, 'vencido');
     salientes.push({
       para: turno.telefono,
-      texto: `Pasaron ${config.senas.vencimiento_horas} hs y no recibimos el comprobante, así que el turno del ${fechas.diaLindo(turno.inicio.slice(0, 10))} ${turno.inicio.slice(11)} se liberó 😕\nSi todavía lo querés, escribí *hola* y lo reservamos de nuevo.`,
+      texto: `Pasaron ${plazoTexto(config)} y no recibimos ${cobraConLink(config) ? 'el pago de la seña' : 'el comprobante'}, así que el turno del ${fechas.diaLindo(turno.inicio.slice(0, 10))} ${turno.inicio.slice(11)} se liberó 😕\nSi todavía lo querés, escribí *hola* y lo reservamos de nuevo.`,
     });
     salientes.push(notif.senaVencida(config, turno));
   }
   return salientes;
 }
 
-module.exports = { procesarComprobante, vencerPendientes };
+module.exports = { procesarComprobante, vencerPendientes, plazoTexto, cobraConLink };

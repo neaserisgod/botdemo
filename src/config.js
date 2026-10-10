@@ -214,8 +214,10 @@ function validar(c) {
   if (!algunDiaAbierto) malos.push('horarios: están todos los días cerrados, el bot no podría agendar nada');
 
   if (c.senas?.habilitadas) {
-    if (!c.senas.alias_mp) malos.push('senas.alias_mp: falta el alias para que transfieran');
-    if (!c.senas.titular) malos.push('senas.titular: falta el nombre del titular (se usa para validar el comprobante)');
+    // Con el link de Mercado Pago (cobro: 'mp') el alias es solo el plan B si el negocio no conectó Mercado Pago: puede faltar.
+    if (c.senas.cobro !== undefined && !['mp', 'alias'].includes(c.senas.cobro)) malos.push('senas.cobro: "mp" (link de Mercado Pago) o "alias" (transferencia)');
+    if (c.senas.cobro !== 'mp' && !c.senas.alias_mp) malos.push('senas.alias_mp: falta el alias para que transfieran');
+    if (c.senas.cobro !== 'mp' && !c.senas.titular) malos.push('senas.titular: falta el nombre del titular (se usa para validar el comprobante)');
     if (!(c.senas.vencimiento_horas > 0)) malos.push('senas.vencimiento_horas: tiene que ser mayor a 0');
   }
 
