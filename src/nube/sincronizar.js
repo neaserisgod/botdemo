@@ -65,11 +65,13 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
     return true;
   }
 
-  // Lo que se pesa viaja en gramos: `{ gid, nombre, gramos, precioCentavos }` con el precio POR KILO. El sitio de hoy
-  // solo acepta `cantidad` entera, que para un pesable la app toma como KILOS (`apartadosDePedido`, Nodo-Sur-Pos). Si
-  // el sitio rechaza los gramos, se manda como antes: los kilos enteros como cantidad, y si queda algo que no entra
-  // (250 g), el pedido le llega al local por WhatsApp (ver `aMano`). Se vuelve a probar con gramos cada vez que arranca.
-  let sitioConGramos = true;
+  // Lo que se pesa viaja en gramos: `{ gid, nombre, gramos, precioCentavos }` con el precio POR KILO. El sitio los acepta
+  // solo si todas las apps de la sucursal los entienden (`pedidoConGramosPermitido`, NodoSurPage; una app anterior
+  // descartaba el pedido sin avisar). Si los rechaza, se manda como antes: los kilos enteros como `cantidad` (que la app
+  // toma como kilos), y si queda algo que no entra (250 g), el pedido le llega al local por WhatsApp (ver `aMano`). Se
+  // vuelve a probar con gramos una hora después: cuando actualizan la app, los pedidos solos pasan a entrar a Encargues.
+  const REPROBAR_GRAMOS_MS = 60 * 60 * 1000;
+  let gramosRechazadosEn = 0;
   function cuerpoPedido(p, conGramos) {
     const items = [], sueltos = [];
     for (const x of p.datos.items) {
@@ -84,13 +86,13 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
 
   // Lo manda y devuelve lo que contestó el sitio, o null si con el sitio de hoy no se puede (gramos sueltos).
   async function mandarUno(p) {
-    if (sitioConGramos) {
+    if (Date.now() - gramosRechazadosEn >= REPROBAR_GRAMOS_MS) {
       try {
         return await cliente.mandarPedido(cuerpoPedido(p, true).envio);
       } catch (e) {
         if (!(e.status === 400 && p.datos.items.some((x) => x.gramos))) throw e;
-        sitioConGramos = false;
-        log.log('Nodo Sur todavía no recibe pedidos en gramos: mando los kilos enteros y lo demás por WhatsApp.');
+        gramosRechazadosEn = Date.now();
+        log.log('Nodo Sur todavía no recibe pedidos en gramos en esta sucursal (falta actualizar la app): mando los kilos enteros y lo demás por WhatsApp.');
       }
     }
     const { envio, sueltos } = cuerpoPedido(p, false);

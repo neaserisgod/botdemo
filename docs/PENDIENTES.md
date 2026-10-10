@@ -22,23 +22,20 @@ entenderlo igual y, si no puede, pasarlo a una persona. Cada caso nuevo va a `te
   "dame"/"onda" no se corrigen a servicios (por eso en servicios corrige desde 7 letras).
 - Lo que todavía no: "jelmans" → Hellmann's (empieza distinto, y la "ll" suena como "y").
 
-## 3. Pedidos en gramos en Nodo Sur (otros dos repos: NodoSurPage y Nodo-Sur-Pos)
+## 3. Pedidos en gramos en Nodo Sur — hecho (2026-10-10), falta publicar
 
-El bot ya manda lo pesable como `{ gid, nombre, gramos, precioCentavos }` (precio por kilo, `src/nube/sincronizar.js`).
-El sitio de hoy lo rechaza: solo acepta `cantidad` entera, que para un pesable la app toma como KILOS. Mientras tanto el
-bot manda los kilos enteros como cantidad y un pedido con gramos sueltos (250 g) le llega al local por WhatsApp
-(estado `a_mano`). Para que entre a Encargues:
+Los tres repos, rama `claude/nice-hypatia-w94whl`:
 
-- **Sitio** (`NodoSurPage/functions/_lib/bot.js`, `pedidoDesdeBot`): aceptar `gramos` (entero 1–50000) en un ítem, en
-  vez de `cantidad`, y guardarlo.
-- **App** (`Nodo-Sur-Pos/lib/domain/bot_whatsapp.dart`): `ItemPedidoBot` con `gramos` opcional, y en
-  `apartadosDePedido` usar esos gramos para un pesable en vez de `cantidad * 1000`.
-- **Ojo (2026-10-10): la app ya tiene release publicado** (beta 1.0.0+2157). Una app vieja que reciba un ítem sin
-  `cantidad` lo va a leer mal: el sitio no puede mandarle gramos a una app que no los entiende (por ejemplo, que la app
-  diga su versión al pedir los pedidos, o que el sitio guarde los gramos aparte y siga mandando `cantidad` a las viejas).
-  Planearlo antes de tocar.
+- **Sitio** (`NodoSurPage`, `pedidoDesdeBot`): acepta `gramos` (1 a 50000, precio por kilo) en vez de `cantidad`. Solo si
+  todas las apps de la sucursal que leyeron pedidos en 30 días avisaron que los entienden (`?gramos=1`, tabla
+  `bot_lectores`) y al menos una lo hizo. Si no, 400 `gramos_no_soportado`.
+- **App** (`Nodo-Sur-Pos`, `bot_whatsapp.dart`): `ItemPedidoBot.gramos`, `apartadosDePedido` aparta esos gramos, el total
+  orientativo por `subtotalPesable` y la pantalla dice "250 g de Jamón cocido". Pide los pedidos con `?gramos=1`.
+- **Bot**: si el sitio rechaza los gramos, sigue como antes (kilos enteros como cantidad, o el pedido entero por WhatsApp,
+  estado `a_mano`) y vuelve a probar a la hora, sin reiniciar.
 
-Cuando el sitio acepte gramos, el bot los usa solo (se vuelve a probar con gramos cada vez que arranca).
+Orden para publicar: el sitio y el bot se pueden publicar ya (sin apps nuevas, todo sigue por WhatsApp). Los gramos
+empiezan a entrar a Encargues en cada sucursal apenas sus apps leen los pedidos con la versión nueva.
 
 ## 4. Visto al pasar (2026-10-10), sin tocar
 
