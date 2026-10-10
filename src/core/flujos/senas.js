@@ -1,4 +1,9 @@
 // Verificación de señas: OCR + reglas. Devuelve mensajes para clienta y dueña.
+//
+// Un comprobante leído NUNCA confirma el turno solo (Nodo Sur, decisión 12 de docs/PLAN-SERVICIOS.md): una foto se puede
+// editar, y el OCR no sabe si la plata llegó. Una seña se confirma sola únicamente cuando cruza con Mercado Pago (el pago del
+// link de seña, o la transferencia en los cobros reales de la cuenta; etapa 5). Acá las reglas solo ordenan lo que ve la
+// dueña: si todo coincide se lo dice, y si algo no, le dice qué. En los dos casos aprueba ella con !ok.
 const ocr = require('../ocr');
 const qSenas = require('../../db/consultas/senas');
 const qTurnos = require('../../db/consultas/turnos');
@@ -17,23 +22,21 @@ function procesarComprobante(config, clienta, turnoId, msj) {
   const textoOcr = ocr.extraerTexto(msj.rutaImagen) || msj.texto || '';
   const datos = ocr.parsear(textoOcr);
 
-  // 2) Reglas de verificación
-  let estado = 'verificado';
+  // 2) Reglas de verificación: todas terminan en "a revisar"; cambia lo que se le dice a la dueña.
+  const estado = 'a_revisar';
   let motivo = null;
 
   if (!textoOcr.trim()) {
-    estado = 'a_revisar'; motivo = 'No se pudo leer el comprobante';
+    motivo = 'No se pudo leer el comprobante';
   } else if (datos.nroOperacion && qSenas.existeOperacion(datos.nroOperacion)) {
-    estado = 'a_revisar'; motivo = `Comprobante DUPLICADO (operación ${datos.nroOperacion} ya usada)`;
+    motivo = `Comprobante DUPLICADO (operación ${datos.nroOperacion} ya usada)`;
     datos.nroOperacion = null; // no pisamos el UNIQUE existente
   } else if (!datos.nroOperacion) {
-    estado = 'a_revisar'; motivo = 'No se encontró número de operación';
+    motivo = 'No se encontró número de operación';
   } else if (datos.monto == null || datos.monto < sena.monto_esperado) {
-    estado = 'a_revisar';
     motivo = `Monto detectado ($${datos.monto ?? '?'}) menor a la seña ($${sena.monto_esperado})`;
   } else if (config.senas.titular &&
              !ocr.normalizar(datos.destinatario).includes(ocr.normalizar(config.senas.titular))) {
-    estado = 'a_revisar';
     motivo = `Destinatario "${datos.destinatario || '?'}" no coincide con "${config.senas.titular}"`;
   }
 
@@ -43,22 +46,13 @@ function procesarComprobante(config, clienta, turnoId, msj) {
     rutaImagen: msj.rutaImagen, ocrTexto: textoOcr, motivo, por: 'ocr',
   });
 
-  if (estado === 'verificado') {
-    qTurnos.cambiarEstado(turnoId, 'confirmado');
-    salientes.push({
-      para: clienta.telefono,
-      texto: `¡Listo! Seña recibida ✅\nTu turno quedó confirmado:\n📅 ${fechas.diaLindo(turno.inicio.slice(0, 10))} a las ${turno.inicio.slice(11)}\n${config.textos.emoji} ${turno.servicio}\n\nTe mandamos un recordatorio un día antes. ¡Te esperamos!`,
-    });
-    salientes.push(notif.turnoSenado(config, turno, datos, msj.rutaImagen));
-    salientes.push(...notif.invitacionCalendario(config, qTurnos.porId(turnoId)));
-    salientes.push(...notif.tarjetaContacto(config, clienta, turno));
-  } else {
-    salientes.push({
-      para: clienta.telefono,
-      texto: `Recibimos tu comprobante 🙌\nLo estamos verificando y te confirmamos el turno enseguida.`,
-    });
-    salientes.push(notif.senaARevisar(config, turno, motivo, msj.rutaImagen));
-  }
+  salientes.push({
+    para: clienta.telefono,
+    texto: `Recibimos tu comprobante 🙌\nLo estamos verificando y te confirmamos el turno enseguida.`,
+  });
+  salientes.push(motivo
+    ? notif.senaARevisar(config, turno, motivo, msj.rutaImagen)
+    : notif.senaParaAprobar(config, turno, datos, msj.rutaImagen));
 
   return { salientes, estadoFinal: estado };
 }

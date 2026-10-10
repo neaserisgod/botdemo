@@ -79,8 +79,8 @@ const { crearAdaptador } = require(`./adaptadores/${nombreAdaptador}`);
 // Sin Nodo Sur no hay a dónde mandar los pedidos (queda en no hacer nada).
 let mandarPedidosYa = () => {};
 const adaptador = crearAdaptador(config, {
-  alRecibir: (msj) => {
-    const salientes = motor.procesarMensaje(msj);
+  alRecibir: async (msj) => {
+    const salientes = await motor.procesarMensaje(msj);
     // Un pedido recién confirmado sale a Nodo Sur ya, no en la vuelta de cada 10 minutos: el local lo tiene que ver mientras
     // el cliente espera la respuesta. Si falla, queda en la bandeja para la vuelta siguiente.
     mandarPedidosYa();

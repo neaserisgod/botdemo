@@ -1,3 +1,5 @@
+// Asincrónico: el motor devuelve promesas (la conversación de turnos espera la red al reservar, etapa 5 de Nodo Sur).
+(async () => {
 // Frases reales, escritas como se escriben por WhatsApp, y lo que el bot tiene que hacer con cada una, por rubro.
 // Es lo que mantiene a prueba el diccionario (src/core/diccionario/): cada palabra nueva tiene que pasar por acá, y
 // cada chat real que salga mal suma su frase. Empezó con las ~70 de la sonda del 2026-10-09.
@@ -66,11 +68,11 @@ const nombreDia = (d) => d.nombre.replace('miercoles', 'miércoles').replace('sa
 
 let n = 0, fallas = 0;
 // Una conversación de un cliente nuevo. `espera` mira la última respuesta: { incluye, no, silencio, aviso, sinAviso, estado, y }.
-function caso(nombre, mensajes, espera, prep) {
+async function caso(nombre, mensajes, espera, prep) {
   const de = `54911660${String(++n).padStart(5, '0')}`;
   if (prep) prep(de);
   let r = [];
-  for (const m of [].concat(mensajes)) r = motor.procesarMensaje({ de, texto: m });
+  for (const m of [].concat(mensajes)) r = (await motor.procesarMensaje({ de, texto: m }));
   const texto = r.filter((s) => s.para === de).map((s) => s.texto).join('\n');
   const aviso = r.some((s) => s.para === config.numero_duena);
   const problemas = [];
@@ -96,190 +98,191 @@ const conTurno = (servicioId) => (de) => {
   turnoId = qTurnos.crear(c.id, s.id, `${D1.ymd} 10:00`, fechas.sumarMinutos(`${D1.ymd} 10:00`, s.duracion_min), 'confirmado');
 };
 
-const COMUNES = () => {
+const COMUNES = async () => {
   console.log('\n— Lo que vale para todos los rubros —');
-  caso('"graxx" es un gracias', 'graxx', { incluye: 'Gracias a vos' });
-  caso('"gracias genia!" es un gracias', 'gracias genia!', { incluye: 'Gracias a vos' });
-  caso('"okk" es un gracias', 'okk', { incluye: 'Gracias a vos' });
-  caso('"👍🏻" (con tono de piel) es un gracias', '👍🏻', { incluye: 'Gracias a vos' });
-  caso('"mil gracias!! 🙌" es un gracias', 'mil gracias!! 🙌', { incluye: 'Gracias a vos' });
-  caso('"jajaja": silencio', 'jajaja', { silencio: true });
-  caso('"jsjsjs": silencio', 'jsjsjs', { silencio: true });
-  caso('"q onda" es un saludo', 'q onda', { incluye: '¿Qué necesitás?' });
-  caso('"buen día! cómo va?" es un saludo', 'buen día! cómo va?', { incluye: '¿Qué necesitás?' });
-  caso('"holaaa" es un saludo', 'holaaa', { incluye: '¿Qué necesitás?' });
-  caso('"aceptan mercado pago?" contesta lo configurado', 'che una pregunta, aceptan mercado pago?', { incluye: 'Mercado Pago', sinAviso: true });
-  caso('"se puede pagar con tarjeta?" también', 'se puede pagar con tarjeta?', { incluye: 'Mercado Pago' });
-  caso('"necesito hablar con alguien" pasa a una persona', 'necesito hablar con alguien', { aviso: true, incluye: 'le aviso' });
-  caso('"sos un bot?" pasa a una persona', 'sos un bot?', { aviso: true });
-  caso('"menuu" vuelve al menú', ['hola', 'menuu'], { incluye: 'Volvamos al principio' });
-  caso('una pregunta que cargó el negocio ("tienen wifi?")', 'tienen wifi?', { incluye: 'hay wifi' });
+  await caso('"graxx" es un gracias', 'graxx', { incluye: 'Gracias a vos' });
+  await caso('"gracias genia!" es un gracias', 'gracias genia!', { incluye: 'Gracias a vos' });
+  await caso('"okk" es un gracias', 'okk', { incluye: 'Gracias a vos' });
+  await caso('"👍🏻" (con tono de piel) es un gracias', '👍🏻', { incluye: 'Gracias a vos' });
+  await caso('"mil gracias!! 🙌" es un gracias', 'mil gracias!! 🙌', { incluye: 'Gracias a vos' });
+  await caso('"jajaja": silencio', 'jajaja', { silencio: true });
+  await caso('"jsjsjs": silencio', 'jsjsjs', { silencio: true });
+  await caso('"q onda" es un saludo', 'q onda', { incluye: '¿Qué necesitás?' });
+  await caso('"buen día! cómo va?" es un saludo', 'buen día! cómo va?', { incluye: '¿Qué necesitás?' });
+  await caso('"holaaa" es un saludo', 'holaaa', { incluye: '¿Qué necesitás?' });
+  await caso('"aceptan mercado pago?" contesta lo configurado', 'che una pregunta, aceptan mercado pago?', { incluye: 'Mercado Pago', sinAviso: true });
+  await caso('"se puede pagar con tarjeta?" también', 'se puede pagar con tarjeta?', { incluye: 'Mercado Pago' });
+  await caso('"necesito hablar con alguien" pasa a una persona', 'necesito hablar con alguien', { aviso: true, incluye: 'le aviso' });
+  await caso('"sos un bot?" pasa a una persona', 'sos un bot?', { aviso: true });
+  await caso('"menuu" vuelve al menú', ['hola', 'menuu'], { incluye: 'Volvamos al principio' });
+  await caso('una pregunta que cargó el negocio ("tienen wifi?")', 'tienen wifi?', { incluye: 'hay wifi' });
 };
 
-const TURNOS_COMUNES = () => {
+const TURNOS_COMUNES = async () => {
   console.log('\n— Turnos: cambiar, llegar tarde, cancelar —');
-  caso('"quiero cambiar el turno" sin turno: no hay ninguno', 'quiero cambiar el turno', { incluye: 'No encontré ningún turno tuyo' });
-  caso('"quiero cambiar el turno": ofrece otro día del mismo servicio', 'quiero cambiar el turno', { incluye: ['Cambiamos tu turno', '¿Qué día'], estado: 'eligiendo_dia' }, conTurno(1));
-  caso(`"no puedo ir el ${D1.nombre}, me lo pasás para el ${D2.nombre}?" lo cambia (no lo cancela)`, `no puedo ir el ${nombreDia(D1)}, me lo pasas para el ${nombreDia(D2)}?`,
+  await caso('"quiero cambiar el turno" sin turno: no hay ninguno', 'quiero cambiar el turno', { incluye: 'No encontré ningún turno tuyo' });
+  await caso('"quiero cambiar el turno": ofrece otro día del mismo servicio', 'quiero cambiar el turno', { incluye: ['Cambiamos tu turno', '¿Qué día'], estado: 'eligiendo_dia' }, conTurno(1));
+  await caso(`"no puedo ir el ${D1.nombre}, me lo pasás para el ${D2.nombre}?" lo cambia (no lo cancela)`, `no puedo ir el ${nombreDia(D1)}, me lo pasas para el ${nombreDia(D2)}?`,
     { incluye: ['Cambiamos tu turno', 'Horarios libres'], no: 'Cancelo' }, conTurno(1));
-  caso('cambiarlo de punta a punta mueve el mismo turno', [`me lo pasas para el ${D2.nombre}?`, '1', '1'],
+  await caso('cambiarlo de punta a punta mueve el mismo turno', [`me lo pasas para el ${D2.nombre}?`, '1', '1'],
     { incluye: 'quedó para', y: () => qTurnos.porId(turnoId).inicio.startsWith(D2.ymd) && qTurnos.porId(turnoId).estado === 'confirmado' }, conTurno(1));
-  caso('"no llego a las 10, puedo a las 11?" lo cambia a las 11', 'no llego a las 10, puedo a las 11?',
+  await caso('"no llego a las 10, puedo a las 11?" lo cambia a las 11', 'no llego a las 10, puedo a las 11?',
     { incluye: ['11:00', 'repasemos'], no: 'Cancelo' }, conTurno(1));
-  caso('"llego 10 min tarde": gracias y le avisa al negocio', 'llego 10 min tarde', { incluye: 'Gracias por avisar', aviso: true }, conTurno(1));
-  caso('"voy demorada, perdón!" también', 'voy demorada, perdón!', { incluye: 'Gracias por avisar', aviso: true }, conTurno(1));
-  caso('"no quiero cancelar" no cancela', 'no quiero cancelar, ahi voy', { no: '¿Cancelo', incluye: 'Gracias por confirmar' }, conTurno(1));
-  caso('"me lo cancelas porfa" cancela', 'me lo cancelas porfa', { incluye: '¿Cancelo tu turno' }, conTurno(1));
-  caso('"tenes algo el finde?" es querer un turno', 'tenes algo el finde?', { incluye: '¿Qué servicio querés?' });
-  caso('"la semana que viene a la tarde" es querer un turno', 'la semana que viene a la tarde', { incluye: '¿Qué servicio querés?' });
-  caso('"dsp del mediodia" es querer un turno', 'dsp del mediodia', { incluye: '¿Qué servicio querés?' });
-  caso('"tenes lugar mañana?" es querer un turno', 'tenes lugar mañana?', { incluye: '¿Qué servicio querés?' });
-  caso('"a que hora tenes turno mañana?" es querer un turno (no el horario del local)', 'a que hora tenes turno mañana?', { incluye: '¿Qué servicio querés?' });
-  caso('"a que hora abren el sabado?": horarios', 'a que hora abren el sabado?', { incluye: 'Horarios' });
-  caso('"otro dia paso" no es cambiar un turno', 'otro dia paso', { no: 'turno tuyo para cambiar' });
-  caso('"mejor el kapping"/"mejor el corte" sin turno sigue como reserva', `mejor el ${config.textos.ejemplo_servicio}`, { incluye: '¿Qué día' });
-  caso('"como pago la seña?": el alias', 'como pago la seña?', { incluye: 'Alias', sinAviso: true });
-  caso('"tienen estacionamiento?" (sin respuesta): el menú, y queda anotado', 'tienen estacionamiento?', { incluye: '¿Qué necesitás?' });
-  caso('la dueña ve lo que no se entendió', [], {}, () => {});
-  const r = motor.procesarMensaje({ de: config.numero_duena, texto: 'que no entendiste?' }).map((s) => s.texto).join('\n');
+  await caso('"llego 10 min tarde": gracias y le avisa al negocio', 'llego 10 min tarde', { incluye: 'Gracias por avisar', aviso: true }, conTurno(1));
+  await caso('"voy demorada, perdón!" también', 'voy demorada, perdón!', { incluye: 'Gracias por avisar', aviso: true }, conTurno(1));
+  await caso('"no quiero cancelar" no cancela', 'no quiero cancelar, ahi voy', { no: '¿Cancelo', incluye: 'Gracias por confirmar' }, conTurno(1));
+  await caso('"me lo cancelas porfa" cancela', 'me lo cancelas porfa', { incluye: '¿Cancelo tu turno' }, conTurno(1));
+  await caso('"tenes algo el finde?" es querer un turno', 'tenes algo el finde?', { incluye: '¿Qué servicio querés?' });
+  await caso('"la semana que viene a la tarde" es querer un turno', 'la semana que viene a la tarde', { incluye: '¿Qué servicio querés?' });
+  await caso('"dsp del mediodia" es querer un turno', 'dsp del mediodia', { incluye: '¿Qué servicio querés?' });
+  await caso('"tenes lugar mañana?" es querer un turno', 'tenes lugar mañana?', { incluye: '¿Qué servicio querés?' });
+  await caso('"a que hora tenes turno mañana?" es querer un turno (no el horario del local)', 'a que hora tenes turno mañana?', { incluye: '¿Qué servicio querés?' });
+  await caso('"a que hora abren el sabado?": horarios', 'a que hora abren el sabado?', { incluye: 'Horarios' });
+  await caso('"otro dia paso" no es cambiar un turno', 'otro dia paso', { no: 'turno tuyo para cambiar' });
+  await caso('"mejor el kapping"/"mejor el corte" sin turno sigue como reserva', `mejor el ${config.textos.ejemplo_servicio}`, { incluye: '¿Qué día' });
+  await caso('"como pago la seña?": el alias', 'como pago la seña?', { incluye: 'Alias', sinAviso: true });
+  await caso('"tienen estacionamiento?" (sin respuesta): el menú, y queda anotado', 'tienen estacionamiento?', { incluye: '¿Qué necesitás?' });
+  await caso('la dueña ve lo que no se entendió', [], {}, () => {});
+  const r = (await motor.procesarMensaje({ de: config.numero_duena, texto: 'que no entendiste?' })).map((s) => s.texto).join('\n');
   if (r.includes('estacionamiento')) console.log('  ✔ "qué no entendiste": la dueña ve "tienen estacionamiento?"');
   else { fallas++; console.log(`  ✘ FALLÓ: "qué no entendiste" no muestra lo de estacionamiento → ${r.slice(0, 200)}`); }
 };
 
 const PRUEBAS = {
-  unas() {
-    COMUNES();
-    TURNOS_COMUNES();
+  async unas() {
+    await COMUNES();
+    await TURNOS_COMUNES();
     console.log('\n— Uñas —');
-    caso('"hola quiero un semi": pregunta manos o pies', 'hola quiero un semi', { incluye: ['Semipermanente manos', 'Semipermanente pies'], no: 'Kapping' });
-    caso('"cuanto sale el kapping?": ese precio, no la lista', 'cuanto sale el kapping?', { incluye: ['Kapping rubber', '$22000'], no: 'Esculpidas' });
-    caso('"quiero esculpidas acrilicas"', 'quiero esculpidas acrilicas', { incluye: ['Esculpidas en polygel', '¿Qué día'] });
-    caso('"alguien me dice el precio del semi?": el precio, sin pasar a una persona', 'alguien me dice el precio del semi?', { incluye: '$18000', sinAviso: true });
-    caso('"q precio tiene la manicura?": semi de manos', 'q precio tiene la manicura?', { incluye: ['Semipermanente manos', '$18000'], no: 'pies' });
-    caso('"hacen pedicura?": semi de pies', 'hacen pedicura?', { incluye: 'Semipermanente pies' });
-    caso('"me haces las uñas?" es querer un turno', 'me haces las uñas?', { incluye: '¿Qué servicio querés?' });
-    caso('"capping" con c', 'quiero capping', { incluye: 'Kapping rubber' });
-    caso('"me sacas el esmalte?": retiro', 'me sacas el esmalte?', { incluye: 'Retiro' });
-    caso('"pestañas": lifting', 'quiero hacerme las pestañas', { incluye: 'Lifting de pestañas' });
-    caso('"precio del kapping?" y "si": arranca la reserva', ['precio del kapping?', 'si'], { incluye: ['Kapping rubber', '¿Qué día'] });
-    caso(`"semi de manos el ${D1.nombre} a las 3": 15:00`, `semi de manos el ${nombreDia(D1)} a las 3`, { incluye: '15:00', no: '03:00' });
-    caso(`"semi de manos el ${D1.nombre} a las 10 de la mañana": 10:00`, `semi de manos el ${nombreDia(D1)} a las 10 de la mañana`, { incluye: '10:00' });
-    caso(`"semi de manos el ${D1.nombre} a la tarde": solo horarios de la tarde`, `semi de manos el ${nombreDia(D1)} a la tarde`, { incluye: ['15:00', 'Horarios libres'], no: '09:00' });
+    await caso('"hola quiero un semi": pregunta manos o pies', 'hola quiero un semi', { incluye: ['Semipermanente manos', 'Semipermanente pies'], no: 'Kapping' });
+    await caso('"cuanto sale el kapping?": ese precio, no la lista', 'cuanto sale el kapping?', { incluye: ['Kapping rubber', '$22000'], no: 'Esculpidas' });
+    await caso('"quiero esculpidas acrilicas"', 'quiero esculpidas acrilicas', { incluye: ['Esculpidas en polygel', '¿Qué día'] });
+    await caso('"alguien me dice el precio del semi?": el precio, sin pasar a una persona', 'alguien me dice el precio del semi?', { incluye: '$18000', sinAviso: true });
+    await caso('"q precio tiene la manicura?": semi de manos', 'q precio tiene la manicura?', { incluye: ['Semipermanente manos', '$18000'], no: 'pies' });
+    await caso('"hacen pedicura?": semi de pies', 'hacen pedicura?', { incluye: 'Semipermanente pies' });
+    await caso('"me haces las uñas?" es querer un turno', 'me haces las uñas?', { incluye: '¿Qué servicio querés?' });
+    await caso('"capping" con c', 'quiero capping', { incluye: 'Kapping rubber' });
+    await caso('"me sacas el esmalte?": retiro', 'me sacas el esmalte?', { incluye: 'Retiro' });
+    await caso('"pestañas": lifting', 'quiero hacerme las pestañas', { incluye: 'Lifting de pestañas' });
+    await caso('"precio del kapping?" y "si": arranca la reserva', ['precio del kapping?', 'si'], { incluye: ['Kapping rubber', '¿Qué día'] });
+    await caso(`"semi de manos el ${D1.nombre} a las 3": 15:00`, `semi de manos el ${nombreDia(D1)} a las 3`, { incluye: '15:00', no: '03:00' });
+    await caso(`"semi de manos el ${D1.nombre} a las 10 de la mañana": 10:00`, `semi de manos el ${nombreDia(D1)} a las 10 de la mañana`, { incluye: '10:00' });
+    await caso(`"semi de manos el ${D1.nombre} a la tarde": solo horarios de la tarde`, `semi de manos el ${nombreDia(D1)} a la tarde`, { incluye: ['15:00', 'Horarios libres'], no: '09:00' });
   },
 
-  barberia() {
-    COMUNES();
-    TURNOS_COMUNES();
+  async barberia() {
+    await COMUNES();
+    await TURNOS_COMUNES();
     console.log('\n— Barbería —');
-    caso('"quiero cortarme el pelo"', 'quiero cortarme el pelo', { incluye: ['Corte clásico', '¿Qué día'] });
-    caso('"me rapas?"', 'me rapas?', { incluye: 'Corte clásico' });
-    caso('"un rebaje"', 'un rebaje', { incluye: 'Corte clásico' });
-    caso('"corte para nene"', 'corte para nene', { incluye: 'Corte clásico' });
-    caso('"quiero hacerme la barba": pregunta cuál', 'quiero hacerme la barba', { incluye: ['Corte + barba', 'Perfilado de barba'], estado: 'eligiendo_servicio' });
-    caso('"me perfilas la barba?"', 'me perfilas la barba?', { incluye: ['Perfilado de barba', '¿Qué día'] });
-    caso('"corte y barba"', 'corte y barba', { incluye: 'Corte + barba' });
-    caso('"cuanto el corte con barba": ese precio, no la reserva', 'cuanto el corte con barba', { incluye: ['Corte + barba', '$17000'], no: '¿Qué día' });
-    caso('"hacen mechitas?": platinado', 'hacen mechitas?', { incluye: 'Platinado' });
-    caso('"decoloracion cuanto sale?": precio del platinado', 'decoloracion cuanto sale?', { incluye: ['Platinado', '$38000'] });
-    caso('"taper fade"', 'taper fade', { incluye: 'Fade / degradé' });
-    caso('"afeitada con navaja"', 'afeitada con navaja', { incluye: 'Afeitado con navaja' });
-    caso(`"quiero un corte el ${D1.nombre} a las 5": 17:00 (no las 5 de la mañana)`, `quiero un corte el ${nombreDia(D1)} a las 5`, { incluye: '17:00' });
-    caso(`"un corte el ${D1.nombre} tipo 4 y media": 16:30`, `un corte el ${nombreDia(D1)} tipo 4 y media`, { incluye: '16:30' });
+    await caso('"quiero cortarme el pelo"', 'quiero cortarme el pelo', { incluye: ['Corte clásico', '¿Qué día'] });
+    await caso('"me rapas?"', 'me rapas?', { incluye: 'Corte clásico' });
+    await caso('"un rebaje"', 'un rebaje', { incluye: 'Corte clásico' });
+    await caso('"corte para nene"', 'corte para nene', { incluye: 'Corte clásico' });
+    await caso('"quiero hacerme la barba": pregunta cuál', 'quiero hacerme la barba', { incluye: ['Corte + barba', 'Perfilado de barba'], estado: 'eligiendo_servicio' });
+    await caso('"me perfilas la barba?"', 'me perfilas la barba?', { incluye: ['Perfilado de barba', '¿Qué día'] });
+    await caso('"corte y barba"', 'corte y barba', { incluye: 'Corte + barba' });
+    await caso('"cuanto el corte con barba": ese precio, no la reserva', 'cuanto el corte con barba', { incluye: ['Corte + barba', '$17000'], no: '¿Qué día' });
+    await caso('"hacen mechitas?": platinado', 'hacen mechitas?', { incluye: 'Platinado' });
+    await caso('"decoloracion cuanto sale?": precio del platinado', 'decoloracion cuanto sale?', { incluye: ['Platinado', '$38000'] });
+    await caso('"taper fade"', 'taper fade', { incluye: 'Fade / degradé' });
+    await caso('"afeitada con navaja"', 'afeitada con navaja', { incluye: 'Afeitado con navaja' });
+    await caso(`"quiero un corte el ${D1.nombre} a las 5": 17:00 (no las 5 de la mañana)`, `quiero un corte el ${nombreDia(D1)} a las 5`, { incluye: '17:00' });
+    await caso(`"un corte el ${D1.nombre} tipo 4 y media": 16:30`, `un corte el ${nombreDia(D1)} tipo 4 y media`, { incluye: '16:30' });
   },
 
-  almacen() {
-    COMUNES();
-    COMERCIO();
+  async almacen() {
+    await COMUNES();
+    await COMERCIO();
     console.log('\n— Almacén: pedidos —');
-    caso('"pedido" + "dos cocas": pregunta cuál, y anota 2', ['pedido', 'dos cocas', '1'], { incluye: 'Anotado: 2 × Coca Cola 2,25 L' });
-    caso('"media docena de huevos": los de 6', ['pedido', 'media docena de huevos'], { incluye: 'Anotado: 1 × Huevos x 6' });
-    caso('"una docena de huevos": los de 12', ['pedido', 'una docena de huevos'], { incluye: 'Anotado: 1 × Huevos x 12' });
-    caso('"7up" es un producto, no 7 unidades', ['pedido', '7up'], { incluye: 'Anotado: 1 × Seven Up' });
-    caso('"9 de oro" es un producto, no 9 unidades', ['pedido', '9 de oro'], { incluye: 'Anotado: 1 × Galletitas 9 de Oro' });
-    caso('"3 9 de oro": 3 paquetes', ['pedido', '3 9 de oro'], { incluye: 'Anotado: 3 × Galletitas 9 de Oro' });
-    caso('"un fernet y 2 cocas": los dos', ['pedido', 'un fernet y 2 cocas'], { incluye: ['1 × Fernet', '¿Cuál de estos'] });
-    caso('"alfajores x 3"', ['pedido', 'alfajores x 3'], { incluye: 'Anotado: 3 × Alfajor Jorgito' });
-    caso('"un par de alfajores"', ['pedido', 'un par de alfajores'], { incluye: 'Anotado: 2 × Alfajor Jorgito' });
+    await caso('"pedido" + "dos cocas": pregunta cuál, y anota 2', ['pedido', 'dos cocas', '1'], { incluye: 'Anotado: 2 × Coca Cola 2,25 L' });
+    await caso('"media docena de huevos": los de 6', ['pedido', 'media docena de huevos'], { incluye: 'Anotado: 1 × Huevos x 6' });
+    await caso('"una docena de huevos": los de 12', ['pedido', 'una docena de huevos'], { incluye: 'Anotado: 1 × Huevos x 12' });
+    await caso('"7up" es un producto, no 7 unidades', ['pedido', '7up'], { incluye: 'Anotado: 1 × Seven Up' });
+    await caso('"9 de oro" es un producto, no 9 unidades', ['pedido', '9 de oro'], { incluye: 'Anotado: 1 × Galletitas 9 de Oro' });
+    await caso('"3 9 de oro": 3 paquetes', ['pedido', '3 9 de oro'], { incluye: 'Anotado: 3 × Galletitas 9 de Oro' });
+    await caso('"un fernet y 2 cocas": los dos', ['pedido', 'un fernet y 2 cocas'], { incluye: ['1 × Fernet', '¿Cuál de estos'] });
+    await caso('"alfajores x 3"', ['pedido', 'alfajores x 3'], { incluye: 'Anotado: 3 × Alfajor Jorgito' });
+    await caso('"un par de alfajores"', ['pedido', 'un par de alfajores'], { incluye: 'Anotado: 2 × Alfajor Jorgito' });
     console.log('\n— Almacén: lo que viene en paquete no se fracciona —');
-    caso('"2 kg de yerba": 2 paquetes de 1 kg', ['pedido', '2 kg de yerba'], { incluye: 'Anotado: 2 × Yerba Playadito 1 kg' });
-    caso('"medio kilo de yerba": viene en paquete', ['pedido', 'medio kilo de yerba'], { incluye: 'viene en paquete', no: '500 g' });
-    caso('"1kg de pan" (pan suelto): 1 kg, con precio', ['pedido', '1kg de pan'], { incluye: 'Anotado: 1 kg de Pan francés — $2.500' });
+    await caso('"2 kg de yerba": 2 paquetes de 1 kg', ['pedido', '2 kg de yerba'], { incluye: 'Anotado: 2 × Yerba Playadito 1 kg' });
+    await caso('"medio kilo de yerba": viene en paquete', ['pedido', 'medio kilo de yerba'], { incluye: 'viene en paquete', no: '500 g' });
+    await caso('"1kg de pan" (pan suelto): 1 kg, con precio', ['pedido', '1kg de pan'], { incluye: 'Anotado: 1 kg de Pan francés — $2.500' });
   },
 
-  kiosco() {
-    COMUNES();
-    COMERCIO();
+  async kiosco() {
+    await COMUNES();
+    await COMERCIO();
     console.log('\n— Kiosco —');
-    caso('"cuanto los marlboro"', 'cuanto los marlboro', { incluye: 'Cigarrillos Marlboro' });
-    caso('"un atado de puchos"', 'un atado de puchos', { incluye: 'Cigarrillos Marlboro' });
-    caso('"tenes algun alfajor?"', 'tenes algun alfajor?', { incluye: 'Alfajor Jorgito' });
+    await caso('"cuanto los marlboro"', 'cuanto los marlboro', { incluye: 'Cigarrillos Marlboro' });
+    await caso('"un atado de puchos"', 'un atado de puchos', { incluye: 'Cigarrillos Marlboro' });
+    await caso('"tenes algun alfajor?"', 'tenes algun alfajor?', { incluye: 'Alfajor Jorgito' });
   },
 
-  fiambreria() {
-    COMUNES();
-    COMERCIO();
+  async fiambreria() {
+    await COMUNES();
+    await COMERCIO();
     console.log('\n— Fiambrería: lo que se pesa —');
-    caso('"cuanto esta el jamon?": el precio por kilo', 'cuanto esta el jamon?', { incluye: 'Jamón cocido Paladini — $15.000 el kilo' });
-    caso('"1/4 de jamon": 250 g, con precio', ['pedido', '1/4 de jamon'], { incluye: 'Anotado: 250 g de Jamón cocido Paladini — $3.750' });
-    caso('"un cuarto de jamon"', ['pedido', 'un cuarto de jamon'], { incluye: '250 g de Jamón cocido Paladini' });
-    caso('"200 de jamon"', ['pedido', '200 de jamon'], { incluye: '200 g de Jamón cocido Paladini — $3.000' });
-    caso('"200 jamon" (como en la caja): 200 g', ['pedido', '200 jamon'], { incluye: '200 g de Jamón cocido Paladini' });
-    caso('"medio de cremoso"', ['pedido', 'medio de cremoso'], { incluye: '500 g de Queso cremoso — $4.500' });
-    caso('"medio cremoso"', ['pedido', 'medio cremoso'], { incluye: '500 g de Queso cremoso' });
-    caso('"medio de queso barra"', ['pedido', 'medio de queso barra'], { incluye: '500 g de Queso barra — $5.500' });
-    caso('"200 gramos de queso cremoso"', ['pedido', '200 gramos de queso cremoso'], { incluye: '200 g de Queso cremoso' });
-    caso('"300g de jamon cocido"', ['pedido', '300g de jamon cocido'], { incluye: '300 g de Jamón cocido Paladini' });
-    caso('"kilo y medio de cremoso"', ['pedido', 'kilo y medio de cremoso'], { incluye: '1,5 kg de Queso cremoso — $13.500' });
-    caso('"medio kilo de queso": cuál queso, y el peso se mantiene', ['pedido', 'medio kilo de queso', '1'], { incluye: '500 g de Queso barra' });
-    caso('"jamon" sin cuánto: pregunta, con el precio por kilo', ['pedido', 'jamon'], { incluye: ['¿Cuánto *Jamón cocido Paladini* querés?', '$15.000 el kilo'], estado: 'eligiendo_peso' });
-    caso('y "1/4" lo anota', ['pedido', 'jamon', '1/4'], { incluye: '250 g de Jamón cocido Paladini' });
-    caso('y "200" son gramos', ['pedido', 'jamon', '200'], { incluye: '200 g de Jamón' });
-    caso('y "1" es un kilo', ['pedido', 'jamon', '1'], { incluye: '1 kg de Jamón' });
-    caso('"2 jamon": 2 qué, pregunta', ['pedido', '2 jamon'], { incluye: '¿Cuánto *Jamón' });
-    caso('varios renglones de mostrador', ['pedido', '1/4 de jamon\n200 de salame\nmedio de cremoso'],
+    await caso('"cuanto esta el jamon?": el precio por kilo', 'cuanto esta el jamon?', { incluye: 'Jamón cocido Paladini — $15.000 el kilo' });
+    await caso('"1/4 de jamon": 250 g, con precio', ['pedido', '1/4 de jamon'], { incluye: 'Anotado: 250 g de Jamón cocido Paladini — $3.750' });
+    await caso('"un cuarto de jamon"', ['pedido', 'un cuarto de jamon'], { incluye: '250 g de Jamón cocido Paladini' });
+    await caso('"200 de jamon"', ['pedido', '200 de jamon'], { incluye: '200 g de Jamón cocido Paladini — $3.000' });
+    await caso('"200 jamon" (como en la caja): 200 g', ['pedido', '200 jamon'], { incluye: '200 g de Jamón cocido Paladini' });
+    await caso('"medio de cremoso"', ['pedido', 'medio de cremoso'], { incluye: '500 g de Queso cremoso — $4.500' });
+    await caso('"medio cremoso"', ['pedido', 'medio cremoso'], { incluye: '500 g de Queso cremoso' });
+    await caso('"medio de queso barra"', ['pedido', 'medio de queso barra'], { incluye: '500 g de Queso barra — $5.500' });
+    await caso('"200 gramos de queso cremoso"', ['pedido', '200 gramos de queso cremoso'], { incluye: '200 g de Queso cremoso' });
+    await caso('"300g de jamon cocido"', ['pedido', '300g de jamon cocido'], { incluye: '300 g de Jamón cocido Paladini' });
+    await caso('"kilo y medio de cremoso"', ['pedido', 'kilo y medio de cremoso'], { incluye: '1,5 kg de Queso cremoso — $13.500' });
+    await caso('"medio kilo de queso": cuál queso, y el peso se mantiene', ['pedido', 'medio kilo de queso', '1'], { incluye: '500 g de Queso barra' });
+    await caso('"jamon" sin cuánto: pregunta, con el precio por kilo', ['pedido', 'jamon'], { incluye: ['¿Cuánto *Jamón cocido Paladini* querés?', '$15.000 el kilo'], estado: 'eligiendo_peso' });
+    await caso('y "1/4" lo anota', ['pedido', 'jamon', '1/4'], { incluye: '250 g de Jamón cocido Paladini' });
+    await caso('y "200" son gramos', ['pedido', 'jamon', '200'], { incluye: '200 g de Jamón' });
+    await caso('y "1" es un kilo', ['pedido', 'jamon', '1'], { incluye: '1 kg de Jamón' });
+    await caso('"2 jamon": 2 qué, pregunta', ['pedido', '2 jamon'], { incluye: '¿Cuánto *Jamón' });
+    await caso('varios renglones de mostrador', ['pedido', '1/4 de jamon\n200 de salame\nmedio de cremoso'],
       { incluye: ['250 g de Jamón cocido', '200 g de Salame Milán', '500 g de Queso cremoso'] });
-    caso('"1/4 de jamon y 2 cocas": el jamón, y pregunta qué coca', ['pedido', '1/4 de jamon y 2 cocas'], { incluye: ['250 g', '¿Cuál de estos'] });
-    caso('"jamon, 2 alfajores": pregunta cuánto jamón y sigue con los alfajores', ['pedido', 'jamon, 2 alfajores', '1/4'],
+    await caso('"1/4 de jamon y 2 cocas": el jamón, y pregunta qué coca', ['pedido', '1/4 de jamon y 2 cocas'], { incluye: ['250 g', '¿Cuál de estos'] });
+    await caso('"jamon, 2 alfajores": pregunta cuánto jamón y sigue con los alfajores', ['pedido', 'jamon, 2 alfajores', '1/4'],
       { incluye: ['250 g de Jamón', '2 × Alfajor'] });
-    caso('el resumen suma lo pesado con su precio', ['pedido', '1/4 de jamon', 'alfajor', 'listo', 'Sofi'],
+    await caso('el resumen suma lo pesado con su precio', ['pedido', '1/4 de jamon', 'alfajor', 'listo', 'Sofi'],
       { incluye: ['250 g de Jamón cocido Paladini — $3.750', '1 × Alfajor Jorgito — $900', 'Total aproximado: $4.650', 'puede variar'] });
-    caso('al confirmar, lo pesado va en gramos',
+    await caso('al confirmar, lo pesado va en gramos',
       ['pedido', '1/4 de jamon', 'alfajor', 'listo', 'Sofi', '1'], { incluye: 'Le pasé tu pedido',
         y: () => { const p = qPedidos.porEnviar().pop(); return p && p.datos.items.some((x) => x.gid && x.gramos === 250) && p.datos.items.some((x) => x.cantidad === 1); } });
-    caso('solo cosas pesadas: igual se puede pedir', ['pedido', '1/4 de jamon', 'listo', 'Sofi'], { incluye: ['250 g de Jamón', '*1* — Confirmar'] });
+    await caso('solo cosas pesadas: igual se puede pedir', ['pedido', '1/4 de jamon', 'listo', 'Sofi'], { incluye: ['250 g de Jamón', '*1* — Confirmar'] });
   },
 };
 
-function COMERCIO() {
+async function COMERCIO() {
   console.log('\n— Comercio: consultas —');
-  caso('"hay birra?"', 'hay birra?', { incluye: 'Cerveza Quilmes' });
-  caso('"tenes cocacola?"', 'tenes cocacola?', { incluye: 'Coca Cola 2,25 L' });
-  caso('"precio de la gaseosa"', 'precio de la gaseosa', { incluye: 'Coca Cola' });
-  caso('"a cuanto esta el pan"', 'a cuanto esta el pan', { incluye: 'Pan francés' });
-  caso('"panes?" (plural)', 'panes?', { incluye: 'Pan francés' });
-  caso('"alfajores?" (plural)', 'alfajores?', { incluye: 'Alfajor Jorgito' });
-  caso('"tienen puchos?"', 'tienen puchos?', { incluye: 'Cigarrillos Marlboro' });
-  caso('"dos cocas" (sin decir pedido): las cocas', 'dos cocas', { incluye: 'Coca Cola' });
-  caso('"papel higienico"', 'tenes papel higienico?', { incluye: 'Higienol' });
-  caso('"hay coca de 1,5?": la de 1,5 L', 'hay coca de 1,5?', { incluye: 'Coca Cola Zero 1,5 L', no: '2,25' });
-  caso('"tenes queso? alguien me atiende": el queso y la opción de una persona', 'tenes queso? alguien me atiende', { incluye: ['Queso cremoso', 'escribí *4*'], sinAviso: true });
-  caso('pedido "jamon y queso" (se pesan): cuánto jamón primero, después cuál queso', ['pedido', 'jamon y queso', '1/4'], { incluye: ['250 g de Jamón cocido', '¿Cuál de estos', 'Queso cremoso'] });
-  caso('pedido "fernet y alfajor": los dos', ['pedido', 'fernet y alfajor'], { incluye: ['1 × Fernet', '1 × Alfajor'] });
-  caso('pedido "2 alfajores y una coca zero": los dos', ['pedido', '2 alfajores y una coca zero'], { incluye: ['2 × Alfajor', '1 × Coca Cola Zero'] });
-  caso('"alguien me atiende? quiero saber si tienen leche": la leche, sin pasar a una persona',
+  await caso('"hay birra?"', 'hay birra?', { incluye: 'Cerveza Quilmes' });
+  await caso('"tenes cocacola?"', 'tenes cocacola?', { incluye: 'Coca Cola 2,25 L' });
+  await caso('"precio de la gaseosa"', 'precio de la gaseosa', { incluye: 'Coca Cola' });
+  await caso('"a cuanto esta el pan"', 'a cuanto esta el pan', { incluye: 'Pan francés' });
+  await caso('"panes?" (plural)', 'panes?', { incluye: 'Pan francés' });
+  await caso('"alfajores?" (plural)', 'alfajores?', { incluye: 'Alfajor Jorgito' });
+  await caso('"tienen puchos?"', 'tienen puchos?', { incluye: 'Cigarrillos Marlboro' });
+  await caso('"dos cocas" (sin decir pedido): las cocas', 'dos cocas', { incluye: 'Coca Cola' });
+  await caso('"papel higienico"', 'tenes papel higienico?', { incluye: 'Higienol' });
+  await caso('"hay coca de 1,5?": la de 1,5 L', 'hay coca de 1,5?', { incluye: 'Coca Cola Zero 1,5 L', no: '2,25' });
+  await caso('"tenes queso? alguien me atiende": el queso y la opción de una persona', 'tenes queso? alguien me atiende', { incluye: ['Queso cremoso', 'escribí *4*'], sinAviso: true });
+  await caso('pedido "jamon y queso" (se pesan): cuánto jamón primero, después cuál queso', ['pedido', 'jamon y queso', '1/4'], { incluye: ['250 g de Jamón cocido', '¿Cuál de estos', 'Queso cremoso'] });
+  await caso('pedido "fernet y alfajor": los dos', ['pedido', 'fernet y alfajor'], { incluye: ['1 × Fernet', '1 × Alfajor'] });
+  await caso('pedido "2 alfajores y una coca zero": los dos', ['pedido', '2 alfajores y una coca zero'], { incluye: ['2 × Alfajor', '1 × Coca Cola Zero'] });
+  await caso('"alguien me atiende? quiero saber si tienen leche": la leche, sin pasar a una persona',
     'alguien me atiende? quiero saber si tienen leche', { incluye: 'Leche La Serenísima', sinAviso: true });
-  caso('"alguien me atiende?" a secas: pasa a una persona', 'alguien me atiende?', { aviso: true });
-  caso('"hacen envios?": se retira en el local', 'hacen envios?', { incluye: 'retirar en el local' });
-  caso('"mandan a domicilio?": se retira en el local', 'mandan a domicilio?', { incluye: 'retirar en el local' });
-  caso('"estan abiertos?": horarios', 'estan abiertos?', { incluye: 'Horarios' });
-  caso('"hasta que hora estan?": horarios', 'hasta que hora estan?', { incluye: 'Horarios' });
-  caso('"hay sushi?": no encontré, y queda anotado', 'hay sushi?', { incluye: 'No encontré' });
-  const r = motor.procesarMensaje({ de: config.numero_duena, texto: 'qué no entendiste' }).map((s) => s.texto).join('\n');
+  await caso('"alguien me atiende?" a secas: pasa a una persona', 'alguien me atiende?', { aviso: true });
+  await caso('"hacen envios?": se retira en el local', 'hacen envios?', { incluye: 'retirar en el local' });
+  await caso('"mandan a domicilio?": se retira en el local', 'mandan a domicilio?', { incluye: 'retirar en el local' });
+  await caso('"estan abiertos?": horarios', 'estan abiertos?', { incluye: 'Horarios' });
+  await caso('"hasta que hora estan?": horarios', 'hasta que hora estan?', { incluye: 'Horarios' });
+  await caso('"hay sushi?": no encontré, y queda anotado', 'hay sushi?', { incluye: 'No encontré' });
+  const r = (await motor.procesarMensaje({ de: config.numero_duena, texto: 'qué no entendiste' })).map((s) => s.texto).join('\n');
   if (r.includes('sushi')) console.log('  ✔ "qué no entendiste": el dueño ve "hay sushi?"');
   else { fallas++; console.log(`  ✘ FALLÓ: "qué no entendiste" no muestra lo del sushi → ${r.slice(0, 200)}`); }
 }
 
 console.log(`\n═══ ${config.negocio.rubro} ═══`);
-PRUEBAS[rubro]();
+await PRUEBAS[rubro]();
 console.log(fallas ? `\n❌ ${rubro}: ${fallas} frases fallaron` : `\n✅ ${rubro}: todas las frases OK`);
 process.exit(fallas ? 1 : 0);
+})().catch((e) => { console.error(e); process.exit(1); });

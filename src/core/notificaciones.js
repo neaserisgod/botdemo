@@ -54,6 +54,16 @@ function senaARevisar(config, turno, motivo, rutaImagen) {
   };
 }
 
+// El comprobante coincide en todo (monto, operación, destinatario), pero una foto no prueba que la plata llegó: lo aprueba la
+// dueña (decisión 12 de Nodo Sur).
+function senaParaAprobar(config, turno, datos, rutaImagen) {
+  return {
+    para: config.numero_duena,
+    imagenRuta: rutaImagen,
+    texto: `💰 *Seña para aprobar* — turno #${turno.id}\n${fechas.diaLindo(turno.inicio.slice(0, 10))} ${turno.inicio.slice(11)} — ${turno.servicio}\n${config.textos.cliente_mayuscula}: ${turno.clienta_nombre || turno.telefono}\nEl comprobante coincide: $${datos.monto} (op. ${datos.nroOperacion}). Fijate que haya entrado y respondé *!ok ${turno.id}* para confirmar el turno o *!no ${turno.id}* para rechazarlo.`,
+  };
+}
+
 function senaVencida(config, turno) {
   return {
     para: config.numero_duena,
@@ -152,6 +162,7 @@ function tarjetaContacto(config, clienta, turno) {
 }
 
 module.exports = {
+  senaParaAprobar,
   duracion,
   turnoSenado, senaARevisar, senaVencida, turnoConfirmado,
   cancelacion, derivacion, pregunta, turnoMovido, demora, agendaDiaria, resumenSemanal, linea,

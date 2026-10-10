@@ -1,3 +1,5 @@
+// Asincrónico: el motor devuelve promesas (la conversación de turnos espera la red al reservar, etapa 5 de Nodo Sur).
+(async () => {
 // Plantillas por rubro: una barbería no puede hablar como un salón de uñas.
 // Corre una charla entera con la plantilla de barbería (cliente y dueño) y
 // chequea que no se cuele nada del rubro de uñas, que cada negocio pueda pisar
@@ -68,36 +70,36 @@ const motor = crearMotor(config);
 const CLIENTE = '5492944333333';
 const DUENO = config.numero_duena;
 const todo = [];
-function decir(de, texto, extra) {
-  const salientes = motor.procesarMensaje({ de, texto, ...extra });
+async function decir(de, texto, extra) {
+  const salientes = (await motor.procesarMensaje({ de, texto, ...extra }));
   todo.push(...salientes);
   return salientes;
 }
 const textoPara = (salientes, quien) => salientes.filter((s) => s.para === quien).map((s) => s.texto).join('\n');
 
-let r = decir(CLIENTE, 'hola');
+let r = (await decir(CLIENTE, 'hola'));
 chequear('menú con 💈', textoPara(r, CLIENTE).includes('Reservar un turno 💈'));
-r = decir(CLIENTE, '1');
+r = (await decir(CLIENTE, '1'));
 chequear('lista los servicios de barbería', textoPara(r, CLIENTE).includes('Corte clásico') && textoPara(r, CLIENTE).includes('Platinado'));
-decir(CLIENTE, 'menu');
-r = decir(CLIENTE, 'quiero un fade');
+await decir(CLIENTE, 'menu');
+r = (await decir(CLIENTE, 'quiero un fade'));
 chequear('"un fade" encuentra Fade / degradé (alias)', textoPara(r, CLIENTE).includes('*Fade / degradé*'));
-decir(CLIENTE, 'menu');
-r = decir(CLIENTE, 'quiero turno para corte y barba');
+await decir(CLIENTE, 'menu');
+r = (await decir(CLIENTE, 'quiero turno para corte y barba'));
 chequear('"corte y barba" gana sobre el alias "corte"', textoPara(r, CLIENTE).includes('*Corte + barba*'));
-decir(CLIENTE, 'menu');
-r = decir(CLIENTE, 'quiero un corte');
+await decir(CLIENTE, 'menu');
+r = (await decir(CLIENTE, 'quiero un corte'));
 chequear('"un corte" es Corte clásico', textoPara(r, CLIENTE).includes('*Corte clásico*'));
 
 // Turno sin seña, de punta a punta (por número, sin depender del texto libre).
-decir(CLIENTE, 'menu');
-decir(CLIENTE, '1');
-decir(CLIENTE, '1');            // corte clásico
-decir(CLIENTE, '1');            // primer día
-decir(CLIENTE, '1');            // primer horario
-r = decir(CLIENTE, 'Lauti');
+await decir(CLIENTE, 'menu');
+await decir(CLIENTE, '1');
+await decir(CLIENTE, '1');            // corte clásico
+await decir(CLIENTE, '1');            // primer día
+await decir(CLIENTE, '1');            // primer horario
+r = (await decir(CLIENTE, 'Lauti'));
 chequear('resumen con 💈', textoPara(r, CLIENTE).includes('💈 Corte clásico'));
-r = decir(CLIENTE, '1');
+r = (await decir(CLIENTE, '1'));
 chequear('turno confirmado con 💈', textoPara(r, CLIENTE).includes('💈 Corte clásico'));
 chequear('aviso al dueño dice "Cliente:"', textoPara(r, DUENO).includes('Cliente: Lauti'));
 chequear('cliente nuevo, en masculino', textoPara(r, DUENO).includes('es cliente nuevo. Tocá el archivo para guardarlo'));
@@ -112,20 +114,20 @@ const recs = recordatorios.tick(config);
 todo.push(...recs);
 chequear('recordatorio con 💈', recs.some((s) => s.texto.includes('💈 Corte clásico')));
 
-r = decir(CLIENTE, 'necesito hablar con el barbero');
+r = (await decir(CLIENTE, 'necesito hablar con el barbero'));
 chequear('"hablar con el barbero" deriva a una persona', textoPara(r, CLIENTE).includes('le aviso al barbero'));
 
 console.log('\n— 4. Lo que escribe el dueño —');
-r = decir(DUENO, 'ayuda');
+r = (await decir(DUENO, 'ayuda'));
 chequear('ayuda con el ejemplo de barbería', textoPara(r, DUENO).includes('el corte ahora sale 13000'));
 chequear('ayuda habla de "los clientes"', textoPara(r, DUENO).includes('a TODOS los clientes'));
-r = decir(DUENO, 'precios');
+r = (await decir(DUENO, 'precios'));
 chequear('precios con el ejemplo de barbería', textoPara(r, DUENO).includes('el corte ahora sale 13000'));
-r = decir(DUENO, 'avisale a todos que mañana abrimos tarde');
+r = (await decir(DUENO, 'avisale a todos que mañana abrimos tarde'));
 chequear('"avisale a todos" arma el aviso masivo', textoPara(r, DUENO).includes('mañana abrimos tarde'));
 chequear('y habla de clientes', /\*1 cliente\*/.test(textoPara(r, DUENO)));
-decir(DUENO, 'no');
-r = decir(DUENO, 'pasame los contactos');
+await decir(DUENO, 'no');
+r = (await decir(DUENO, 'pasame los contactos'));
 chequear('contactos: "1 contacto de clientes"', textoPara(r, DUENO).includes('Te paso *1 contacto* de clientes'));
 
 console.log('\n— 5. Nada del salón de uñas se cuela en la barbería —');
@@ -134,3 +136,4 @@ chequear(`ningún mensaje con 💅, "clienta", "kapping" ni "la dueña"${colados
 
 console.log(fallas ? `\n❌ ${fallas} chequeos de plantillas fallaron` : '\n✅ Plantillas OK');
 process.exit(fallas ? 1 : 0);
+})().catch((e) => { console.error(e); process.exit(1); });

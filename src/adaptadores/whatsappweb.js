@@ -47,7 +47,7 @@ function crearAdaptador(config, hooks) {
         productoId = msg.rawData.productId || null;
       }
 
-      const salientes = hooks.alRecibir({ de, texto: msg.body || '', rutaImagen, productoId });
+      const salientes = await hooks.alRecibir({ de, texto: msg.body || '', rutaImagen, productoId });
       await enviarTodos(salientes);
     } catch (e) {
       console.error('Error procesando mensaje:', e.message);

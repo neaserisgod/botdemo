@@ -141,7 +141,7 @@ const ITEMS = [
   console.log('\n— 4. Un pedido de ida y vuelta —');
   const motor = crearMotor(config);
   const CLIENTE = '5492944200001';
-  for (const t of ['pedido', '2 yerba', 'listo', 'Sofi', '1']) motor.procesarMensaje({ de: CLIENTE, texto: t });
+  for (const t of ['pedido', '2 yerba', 'listo', 'Sofi', '1']) await motor.procesarMensaje({ de: CLIENTE, texto: t });
   chequear('el pedido confirmado queda en la bandeja', qPedidos.porEnviar().length === 1);
   chequear('se manda a Nodo Sur', (await sinc.mandarBandeja()) === 1 && sitio.pedidos.length === 1);
   const enSitio = sitio.pedidos[0];
@@ -162,15 +162,15 @@ const ITEMS = [
   chequear('el cursor de pedidos queda guardado', cuenta.leer().cursorPedidos === enSitio.actualizado);
 
   console.log('\n— 4b. Lo que se pesa —');
-  const pedir = (de, ...textos) => { for (const t of ['pedido', ...textos, 'listo', 'Sofi', '1']) motor.procesarMensaje({ de, texto: t }); };
+  const pedir = async (de, ...textos) => { for (const t of ['pedido', ...textos, 'listo', 'Sofi', '1']) await motor.procesarMensaje({ de, texto: t }); };
   const recibidosAntes = sitio.pedidos.length;
-  pedir('5492944200002', '1 kilo de jamon', '1 yerba');
+  await pedir('5492944200002', '1 kilo de jamon', '1 yerba');
   await sinc.mandarBandeja();
   const kilo = sitio.pedidos[recibidosAntes];
   chequear('el sitio de hoy no sabe de gramos: los kilos enteros van como cantidad (la app la toma en kilos)',
     kilo && kilo.items.some((x) => x.gid === 'g-jamon' && x.cantidad === 1 && x.gramos === undefined));
   enviados.length = 0;
-  pedir('5492944200003', '1/4 de jamon', '2 yerba');
+  await pedir('5492944200003', '1/4 de jamon', '2 yerba');
   await sinc.mandarBandeja();
   chequear('250 g no entra en el sitio de hoy: no se manda a medias', sitio.pedidos.length === recibidosAntes + 1);
   chequear('le llega entero al local por WhatsApp, para prepararlo a mano', enviados.length === 1 && enviados[0].para === config.numero_duena
@@ -179,7 +179,7 @@ const ITEMS = [
   sitio.aceptaGramos = true;
   const sincNuevo = crearSincronizador({ config, cliente: crearCliente({ sitio: SITIO, token: sitio.token }), recargarConfig: () => [],
     enviar: async (x) => { enviados.push(...x); return x; }, log: { log: () => {}, error: () => {} } });
-  pedir('5492944200004', '1/4 de jamon');
+  await pedir('5492944200004', '1/4 de jamon');
   await sincNuevo.mandarBandeja();
   const gramos = sitio.pedidos[sitio.pedidos.length - 1];
   chequear('con un sitio que acepta gramos: va en gramos, con el precio por kilo', gramos.items.length === 1

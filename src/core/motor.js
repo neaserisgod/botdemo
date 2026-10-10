@@ -4,13 +4,31 @@
 //
 // Mensaje entrante:  { de, texto, rutaImagen?, productoId? }
 // Mensaje saliente:  { para, texto, imagenRuta? }
+//
+// Asincrónico (Nodo Sur, docs/PLAN-SERVICIOS.md etapa 5): la conversación de turnos va a reservar el horario contra el
+// servidor, por red. Por eso los mensajes de un MISMO número se procesan de a uno y en orden (una cola por número): dos
+// mensajes seguidos de la misma persona no se pisan el estado de la charla mientras el primero espera la red.
 const qClientas = require('../db/consultas/clientas');
 const maquina = require('./maquina');
 const comercio = require('./comercio');
 const duena = require('./duena');
 
 function crearMotor(config) {
+  const colas = new Map();
+
+  // Devuelve una promesa con los mensajes salientes.
   function procesarMensaje(msj) {
+    const de = msj.de;
+    const previa = colas.get(de) || Promise.resolve();
+    const esta = previa.then(() => procesarAhora(msj));
+    const fin = esta.catch(() => {});
+    colas.set(de, fin);
+    // La cola de un número que ya no tiene nada pendiente se suelta, así el mapa no crece con cada número que escribió.
+    fin.then(() => { if (colas.get(de) === fin) colas.delete(de); });
+    return esta;
+  }
+
+  async function procesarAhora(msj) {
     // La dueña se identifica por número y tiene su propio set de comandos.
     if (msj.de === config.numero_duena) {
       return duena.procesar(config, msj);

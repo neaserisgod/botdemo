@@ -1,3 +1,5 @@
+// Asincrónico: el motor devuelve promesas (la conversación de turnos espera la red al reservar, etapa 5 de Nodo Sur).
+(async () => {
 // Batería de escenarios "hostiles" — todo lo que puede pasar cuando el copy
 // llegue a los grupos y entre gente de verdad. DB propia, no toca nada.
 const fs = require('fs');
@@ -40,10 +42,10 @@ function foto(caption) {
   return { rutaImagen: ruta, texto: caption };
 }
 // Lleva a una clienta hasta esperando_comprobante y devuelve el id de turno
-function reservarConSena(tel, nombre) {
-  decir(tel, 'hola'); decir(tel, '1'); decir(tel, '1'); // semipermanente
-  decir(tel, '1'); decir(tel, '1');                     // primer día y hora libres
-  decir(tel, nombre); decir(tel, '1');                  // confirma → pide seña
+async function reservarConSena(tel, nombre) {
+  await decir(tel, 'hola'); await decir(tel, '1'); await decir(tel, '1'); // semipermanente
+  await decir(tel, '1'); await decir(tel, '1');                     // primer día y hora libres
+  await decir(tel, nombre); await decir(tel, '1');                  // confirma → pide seña
   const t = db.obtener().prepare(
     "SELECT t.id FROM turnos t JOIN clientas c ON c.id=t.clienta_id WHERE c.telefono=? ORDER BY t.id DESC LIMIT 1"
   ).get(tel);
@@ -53,36 +55,36 @@ function reservarConSena(tel, nombre) {
 let r, id;
 
 console.log('— A. Señas: todos los caminos feos —');
-id = reservarConSena('5492944000101', 'Ana');
-r = decir('5492944000101', null, { ...foto('Transferencia $ 3.000 Para Maria Ejemplo operación 111111') });
+id = await reservarConSena('5492944000101', 'Ana');
+r = (await decir('5492944000101', null, { ...foto('Transferencia $ 3.000 Para Maria Ejemplo operación 111111') }));
 chequear('monto corto → a_revisar con motivo', qSenas.porTurno(id).estado === 'a_revisar'
   && txt(r, DUENA).includes('menor a la seña'));
-r = decir(DUENA, `!no ${id}`);
+r = (await decir(DUENA, `!no ${id}`));
 chequear('!no rechaza, cancela turno y avisa a la clienta',
   qTurnos.porId(id).estado === 'cancelado' && r.some((s) => s.para === '5492944000101'));
 
-id = reservarConSena('5492944000102', 'Bea');
-r = decir('5492944000102', null, { ...foto('Transferencia $ 5.000 Para Maria Ejemplo, gracias') });
+id = await reservarConSena('5492944000102', 'Bea');
+r = (await decir('5492944000102', null, { ...foto('Transferencia $ 5.000 Para Maria Ejemplo, gracias') }));
 chequear('sin nº de operación → a_revisar', qSenas.porTurno(id).estado === 'a_revisar'
   && txt(r, DUENA).includes('operación'));
-decir(DUENA, `!ok ${id}`);
+await decir(DUENA, `!ok ${id}`);
 chequear('!ok lo levanta igual', qTurnos.porId(id).estado === 'confirmado');
 
-id = reservarConSena('5492944000103', 'Cami');
-r = decir('5492944000103', null, { ...foto('Transferencia $ 5.000 Para Juan Perez operación 222222') });
+id = await reservarConSena('5492944000103', 'Cami');
+r = (await decir('5492944000103', null, { ...foto('Transferencia $ 5.000 Para Juan Perez operación 222222') }));
 chequear('destinatario ajeno → a_revisar', qSenas.porTurno(id).estado === 'a_revisar'
   && txt(r, DUENA).includes('no coincide'));
-decir(DUENA, `!no ${id}`);
+await decir(DUENA, `!no ${id}`);
 
-id = reservarConSena('5492944000104', 'Dai');
-r = decir('5492944000104', 'te mando en un rato');
+id = await reservarConSena('5492944000104', 'Dai');
+r = (await decir('5492944000104', 'te mando en un rato'));
 chequear('texto sin foto: re-pide el comprobante', txt(r, '5492944000104').includes('comprobante'));
-r = decir('5492944000104', '0');
+r = (await decir('5492944000104', '0'));
 chequear('se arrepiente con 0: cancela y avisa a la dueña',
   qTurnos.porId(id).estado === 'cancelado' && r.some((s) => s.para === DUENA));
 
 console.log('— B. Seña vencida libera el horario —');
-id = reservarConSena('5492944000105', 'Eli');
+id = await reservarConSena('5492944000105', 'Eli');
 const turnoAntes = qTurnos.porId(id);
 db.obtener().prepare("UPDATE senas SET vence_en = '2020-01-01 00:00' WHERE turno_id = ?").run(id);
 r = recordatorios.tick(config);
@@ -93,19 +95,23 @@ chequear('el horario quedó libre de nuevo', libresDespues.includes(turnoAntes.i
 
 console.log('— C. Carrera: dos clientas, mismo horario —');
 // F llega hasta confirmar SIN confirmar; G le gana el lugar; F confirma tarde
-decir('5492944000106', 'hola'); decir('5492944000106', '1'); decir('5492944000106', '1');
-decir('5492944000106', '1'); r = decir('5492944000106', '1'); decir('5492944000106', 'Flor');
+await decir('5492944000106', 'hola'); await decir('5492944000106', '1'); await decir('5492944000106', '1');
+await decir('5492944000106', '1'); r = (await decir('5492944000106', '1')); await decir('5492944000106', 'Flor');
 // F está en "confirmando". G reserva el mismo primer slot:
-decir('5492944000107', 'hola'); decir('5492944000107', '1'); decir('5492944000107', '1');
-decir('5492944000107', '1'); decir('5492944000107', '1'); decir('5492944000107', 'Gime');
-decir('5492944000107', '1'); // G crea el turno (pendiente_sena) → ocupa el slot
-r = decir('5492944000106', '1'); // F confirma tarde
+await decir('5492944000107', 'hola'); await decir('5492944000107', '1'); await decir('5492944000107', '1');
+await decir('5492944000107', '1'); await decir('5492944000107', '1'); await decir('5492944000107', 'Gime');
+await decir('5492944000107', '1'); // G crea el turno (pendiente_sena) → ocupa el slot
+r = (await decir('5492944000106', '1')); // F confirma tarde
 chequear('doble reserva bloqueada con aviso', txt(r, '5492944000106').includes('acaban de reservar'));
 
 console.log('— D. Recordatorio → cancelar → horario libre —');
 // G todavía debe la seña; la pagamos para poder recordar y cancelar
-r = decir('5492944000107', null, { ...foto('Transferencia $ 5.000 Para Maria Ejemplo operación 333333') });
-chequear('seña de G verificada', qSenas.existeOperacion('333333'));
+r = (await decir('5492944000107', null, { ...foto('Transferencia $ 5.000 Para Maria Ejemplo operación 333333') }));
+chequear('el comprobante de G quedó guardado', qSenas.existeOperacion('333333'));
+// Coincide en todo, pero lo aprueba la dueña (decisión 12 de Nodo Sur).
+const idG = db.obtener().prepare("SELECT t.id FROM turnos t JOIN clientas c ON c.id=t.clienta_id WHERE c.telefono=? ORDER BY t.id DESC LIMIT 1").get('5492944000107').id;
+r = (await decir(DUENA, `!ok ${idG}`));
+chequear('con el !ok de la dueña, el turno de G queda confirmado', qTurnos.porId(idG).estado === 'confirmado');
 // Acercamos el turno a dentro de 12 hs: si el próximo día abierto está a más
 // de 24 hs (sábado a la tarde, domingo cerrado), no habría recordatorio y el
 // test fallaría por la agenda, no por un bug.
@@ -117,85 +123,85 @@ db.obtener().prepare(`
 `).run(en12, fechas.sumarMinutos(en12, 60), '5492944000107');
 const enviados = recordatorios.tick(config);
 chequear('recordatorio sale para turnos de mañana', enviados.some((s) => s.para === '5492944000107'));
-r = decir('5492944000107', 'no voy a poder ir, cancelame');
+r = (await decir('5492944000107', 'no voy a poder ir, cancelame'));
 chequear('lenguaje natural dispara cancelación', txt(r, '5492944000107').includes('¿Cancelo'));
-r = decir('5492944000107', '1');
+r = (await decir('5492944000107', '1'));
 chequear('cancela y notifica a la dueña', r.some((s) => s.para === DUENA));
 
 console.log('— E. Comandos de dueña con errores —');
-r = decir(DUENA, '!turno 999');
+r = (await decir(DUENA, '!turno 999'));
 chequear('!turno inexistente avisa', txt(r, DUENA).includes('No encontré'));
-r = decir(DUENA, '!ok 999');
+r = (await decir(DUENA, '!ok 999'));
 chequear('!ok inexistente avisa', txt(r, DUENA).includes('No encontré'));
-r = decir(DUENA, `!ok ${id}`); // seña de B ya resuelta (vencida)
+r = (await decir(DUENA, `!ok ${id}`)); // seña de B ya resuelta (vencida)
 chequear('!ok sobre seña no pendiente avisa', txt(r, DUENA).includes('no tiene'));
-r = decir(DUENA, '!cualquiercosa');
+r = (await decir(DUENA, '!cualquiercosa'));
 chequear('comando desconocido → ayuda', txt(r, DUENA).includes('Escribime como te salga'));
-r = decir(DUENA, '!precio 1 abc');
+r = (await decir(DUENA, '!precio 1 abc'));
 chequear('!precio con monto inválido avisa cómo se hace', txt(r, DUENA).includes('No entendí qué precio'));
-r = decir(DUENA, '!anular 999');
+r = (await decir(DUENA, '!anular 999'));
 chequear('!anular inexistente avisa', txt(r, DUENA).includes('No encontré'));
 
 console.log('— E2. La dueña escribiendo en lenguaje natural —');
 // Turno nuevo para jugar con él
 const CN = '5492944000110';
-decir(CN, 'hola'); decir(CN, '1'); decir(CN, '4'); // retiro: sin seña
-decir(CN, '1'); decir(CN, '1'); decir(CN, 'Nati'); decir(CN, '1');
+await decir(CN, 'hola'); await decir(CN, '1'); await decir(CN, '4'); // retiro: sin seña
+await decir(CN, '1'); await decir(CN, '1'); await decir(CN, 'Nati'); await decir(CN, '1');
 const idNat = db.obtener().prepare(
   "SELECT t.id FROM turnos t JOIN clientas c ON c.id=t.clienta_id WHERE c.telefono=? ORDER BY t.id DESC LIMIT 1"
 ).get(CN).id;
 
-r = decir(DUENA, '¿qué tengo hoy?');
+r = (await decir(DUENA, '¿qué tengo hoy?'));
 chequear('"qué tengo hoy" → agenda del día', txt(r, DUENA).includes('Agenda de hoy'));
-r = decir(DUENA, 'cómo viene la semana');
+r = (await decir(DUENA, 'cómo viene la semana'));
 chequear('"cómo viene la semana" → resumen semanal', txt(r, DUENA).includes('Semana'));
-r = decir(DUENA, `quién es el turno ${idNat}`);
+r = (await decir(DUENA, `quién es el turno ${idNat}`));
 chequear('"quién es el turno N" → detalle', txt(r, DUENA).includes('Nati'));
-r = decir(DUENA, 'el kapping ahora sale 31000');
+r = (await decir(DUENA, 'el kapping ahora sale 31000'));
 chequear('cambio de precio hablado', txt(r, DUENA).includes('31000'));
-r = decir(DUENA, 'precios');
+r = (await decir(DUENA, 'precios'));
 chequear('"precios" → lista', txt(r, DUENA).includes('Kapping'));
 
 // Acción destructiva: pide confirmación antes de tocar nada
-r = decir(DUENA, `anulá el turno ${idNat}`);
+r = (await decir(DUENA, `anulá el turno ${idNat}`));
 chequear('anular hablado PIDE confirmación', txt(r, DUENA).includes('¿Confirmás'));
 chequear('y todavía NO anuló nada', qTurnos.porId(idNat).estado !== 'anulado');
-r = decir(DUENA, 'no');
+r = (await decir(DUENA, 'no'));
 chequear('"no" cancela la acción', txt(r, DUENA).includes('no hice nada')
   && qTurnos.porId(idNat).estado !== 'anulado');
-decir(DUENA, `borrá el ${idNat}`);
-r = decir(DUENA, 'dale');
+await decir(DUENA, `borrá el ${idNat}`);
+r = (await decir(DUENA, 'dale'));
 chequear('"dale" confirma y anula', qTurnos.porId(idNat).estado === 'anulado');
 chequear('le avisa a la clienta', r.some((s) => s.para === CN));
 
 // El comando con ! sigue siendo directo, sin confirmación
 const CN2 = '5492944000111';
-decir(CN2, 'hola'); decir(CN2, '1'); decir(CN2, '4');
-decir(CN2, '1'); decir(CN2, '1'); decir(CN2, 'Pili'); decir(CN2, '1');
+await decir(CN2, 'hola'); await decir(CN2, '1'); await decir(CN2, '4');
+await decir(CN2, '1'); await decir(CN2, '1'); await decir(CN2, 'Pili'); await decir(CN2, '1');
 const idCmd = db.obtener().prepare(
   "SELECT t.id FROM turnos t JOIN clientas c ON c.id=t.clienta_id WHERE c.telefono=? ORDER BY t.id DESC LIMIT 1"
 ).get(CN2).id;
-decir(DUENA, `!anular ${idCmd}`);
+await decir(DUENA, `!anular ${idCmd}`);
 chequear('!anular ejecuta directo (sin confirmación)', qTurnos.porId(idCmd).estado === 'anulado');
 
-r = decir(DUENA, 'anulá un turno');
+r = (await decir(DUENA, 'anulá un turno'));
 chequear('sin número, pregunta cuál', txt(r, DUENA).includes('Decime el número'));
-r = decir(DUENA, 'ayuda');
+r = (await decir(DUENA, 'ayuda'));
 chequear('ayuda lista ejemplos hablados', txt(r, DUENA).includes('qué tengo hoy'));
 
 console.log('— E3. Aviso masivo a clientas —');
 const cuantas = db.obtener().prepare(
   'SELECT COUNT(*) n FROM clientas WHERE telefono NOT IN (?, ?)'
 ).get(DUENA, config.numero_soporte).n;
-r = decir(DUENA, 'aviso el viernes cerramos a las 15');
+r = (await decir(DUENA, 'aviso el viernes cerramos a las 15'));
 chequear('pide confirmación y dice a cuántas va', txt(r, DUENA).includes('¿Lo mando?')
   && txt(r, DUENA).includes(`${cuantas} clienta`));
 chequear('todavía no le mandó nada a nadie', r.every((s) => s.para === DUENA));
-r = decir(DUENA, 'no');
+r = (await decir(DUENA, 'no'));
 chequear('"no" cancela el aviso', txt(r, DUENA).includes('no hice nada'));
 
-decir(DUENA, 'aviso promo de la semana: 20% off');
-r = decir(DUENA, 'dale');
+await decir(DUENA, 'aviso promo de la semana: 20% off');
+r = (await decir(DUENA, 'dale'));
 const aClientas = r.filter((s) => s.para !== DUENA);
 chequear('manda a todas las clientas', aClientas.length === cuantas);
 chequear('el mensaje lleva el nombre del negocio', aClientas[0].texto.includes(config.negocio.nombre));
@@ -206,15 +212,15 @@ chequear('la dueña recibe aviso de inicio y de fin',
   r[0].para === DUENA && r[r.length - 1].texto.includes('Aviso enviado'));
 chequear('el aviso NO le llega a la dueña ni a soporte',
   !aClientas.some((s) => s.para === DUENA || s.para === config.numero_soporte));
-r = decir(DUENA, 'aviso');
+r = (await decir(DUENA, 'aviso'));
 chequear('"aviso" sin texto no dispara nada', !txt(r, DUENA).includes('¿Lo mando?'));
 
 console.log('— E4. Turnos al calendario (.ics) —');
 const cal = require('../src/core/calendario');
 const CC = '5492944000120';
-decir(CC, 'hola'); decir(CC, '1'); decir(CC, '4');
-decir(CC, '1'); decir(CC, '1'); decir(CC, 'Lu');
-r = decir(CC, '1'); // confirma turno sin seña
+await decir(CC, 'hola'); await decir(CC, '1'); await decir(CC, '4');
+await decir(CC, '1'); await decir(CC, '1'); await decir(CC, 'Lu');
+r = (await decir(CC, '1')); // confirma turno sin seña
 const conIcs = r.find((s) => s.adjunto);
 chequear('al confirmar, la dueña recibe el .ics', !!conIcs && conIcs.para === DUENA);
 chequear('el adjunto es un .ics', conIcs.adjunto.nombre.endsWith('.ics')
@@ -240,9 +246,9 @@ chequear('se puede desactivar por config',
 
 console.log('— E5. Contacto de la clienta a la agenda (.vcf) —');
 const CV = '5492944000130';
-decir(CV, 'hola'); decir(CV, '1'); decir(CV, '4');
-decir(CV, '1'); decir(CV, '1'); decir(CV, 'Sofía Gutiérrez');
-r = decir(CV, '1');
+await decir(CV, 'hola'); await decir(CV, '1'); await decir(CV, '4');
+await decir(CV, '1'); await decir(CV, '1'); await decir(CV, 'Sofía Gutiérrez');
+r = (await decir(CV, '1'));
 const vcf = r.find((s) => s.adjunto && s.adjunto.mime === 'text/vcard');
 chequear('clienta nueva: manda el .vcf a la dueña', !!vcf && vcf.para === DUENA);
 const textoVcf = fs.readFileSync(vcf.adjunto.ruta, 'utf8');
@@ -251,12 +257,12 @@ chequear('lleva el teléfono con +', textoVcf.includes('TEL;TYPE=CELL:+' + CV));
 chequear('vCard bien formada', textoVcf.startsWith('BEGIN:VCARD') && textoVcf.includes('END:VCARD'));
 chequear('el nombre del archivo conserva tildes', vcf.adjunto.nombre.includes('í'));
 // Segundo turno de la misma: no repite
-decir(CV, 'hola'); decir(CV, '1'); decir(CV, '4'); decir(CV, '1'); decir(CV, '2');
-r = decir(CV, '1');
+await decir(CV, 'hola'); await decir(CV, '1'); await decir(CV, '4'); await decir(CV, '1'); await decir(CV, '2');
+r = (await decir(CV, '1'));
 chequear('NO repite el contacto en el segundo turno',
   !r.some((s) => s.adjunto && s.adjunto.mime === 'text/vcard'));
 // Exportar todas
-r = decir(DUENA, 'pasame los contactos');
+r = (await decir(DUENA, 'pasame los contactos'));
 chequear('exporta todas las clientas', r[0].adjunto && r[0].adjunto.nombre === 'clientas.vcf');
 const todas = fs.readFileSync(r[0].adjunto.ruta, 'utf8');
 chequear('el archivo tiene varias tarjetas',
@@ -267,53 +273,53 @@ chequear('no incluye a la dueña ni a soporte',
 console.log('— E6. "menú": volver al principio desde cualquier estado —');
 const CM = '5492944000140';
 // Desde eligiendo_servicio
-decir(CM, 'hola'); decir(CM, '1');
-r = decir(CM, 'menú');
+await decir(CM, 'hola'); await decir(CM, '1');
+r = (await decir(CM, 'menú'));
 chequear('desde eligiendo_servicio vuelve al menú', txt(r, CM).includes('¿Qué necesitás?'));
 // Desde eligiendo_dia
-decir(CM, '1'); decir(CM, '1');
-r = decir(CM, 'volver');
+await decir(CM, '1'); await decir(CM, '1');
+r = (await decir(CM, 'volver'));
 chequear('"volver" también sirve', txt(r, CM).includes('¿Qué necesitás?'));
 // Desde eligiendo_hora
-decir(CM, '1'); decir(CM, '1'); decir(CM, '1');
-r = decir(CM, 'empezar de nuevo');
+await decir(CM, '1'); await decir(CM, '1'); await decir(CM, '1');
+r = (await decir(CM, 'empezar de nuevo'));
 chequear('"empezar de nuevo" también', txt(r, CM).includes('¿Qué necesitás?'));
 // Desde pidiendo_nombre
-decir(CM, '1'); decir(CM, '1'); decir(CM, '1'); decir(CM, '1');
-r = decir(CM, 'menu');
+await decir(CM, '1'); await decir(CM, '1'); await decir(CM, '1'); await decir(CM, '1');
+r = (await decir(CM, 'menu'));
 chequear('desde pidiendo_nombre también', txt(r, CM).includes('¿Qué necesitás?'));
 chequear('y limpia lo que había elegido',
   JSON.parse(db.obtener().prepare('SELECT datos_conv FROM clientas WHERE telefono = ?').get(CM).datos_conv).servicioId === undefined);
 // Esperando comprobante: NO lo saca del flujo, le recuerda que debe la seña
 const CM2 = '5492944000141';
-decir(CM2, 'hola'); decir(CM2, '1'); decir(CM2, '1');
-decir(CM2, '1'); decir(CM2, '1'); decir(CM2, 'Vicky'); decir(CM2, '1');
-r = decir(CM2, 'menú');
+await decir(CM2, 'hola'); await decir(CM2, '1'); await decir(CM2, '1');
+await decir(CM2, '1'); await decir(CM2, '1'); await decir(CM2, 'Vicky'); await decir(CM2, '1');
+r = (await decir(CM2, 'menú'));
 chequear('esperando seña: avisa en vez de salir', txt(r, CM2).includes('esperando la seña'));
 chequear('el turno sigue reservado',
   db.obtener().prepare("SELECT COUNT(*) n FROM turnos t JOIN clientas c ON c.id=t.clienta_id WHERE c.telefono=? AND t.estado='pendiente_sena'").get(CM2).n === 1);
-r = decir(CM2, '0');
+r = (await decir(CM2, '0'));
 chequear('con 0 sí cancela y libera', txt(r, CM2).includes('cancelé'));
 
 console.log('— F. FAQ y saludos con typos —');
 const C = '5492944000108';
-r = decir(C, 'presios porfa?');
+r = (await decir(C, 'presios porfa?'));
 chequear('FAQ precios con typo', txt(r, C).includes('Precios'));
-r = decir(C, 'ubicasion?');
+r = (await decir(C, 'ubicasion?'));
 chequear('FAQ ubicación con typo', txt(r, C).includes(config.negocio.direccion));
-r = decir(C, 'holis');
+r = (await decir(C, 'holis'));
 chequear('"holis" saluda con menú', txt(r, C).includes('¿Qué necesitás?'));
-r = decir(C, 'buen diaa!!');
+r = (await decir(C, 'buen diaa!!'));
 chequear('"buen diaa!!" también', txt(r, C).includes('¿Qué necesitás?'));
 
 console.log('— G. Catálogo y rarezas —');
-r = decir('5492944000109', '', { productoId: 'no-existe-en-db' });
+r = (await decir('5492944000109', '', { productoId: 'no-existe-en-db' }));
 chequear('producto desconocido → ofrece la lista de servicios', txt(r, '5492944000109').includes('¿Qué servicio'));
-r = decir('5492944000109', '👍👍👍');
+r = (await decir('5492944000109', '👍👍👍'));
 chequear('solo emojis de ok → cortesía o menú, no error', r.length >= 0);
-r = decir('5492944000109', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+r = (await decir('5492944000109', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'));
 chequear('texto basura no rompe', r.length > 0);
-r = decir(config.numero_soporte, 'hola');
+r = (await decir(config.numero_soporte, 'hola'));
 chequear('mi número de soporte no entra al flujo', r.length === 0);
 
 console.log('— H2. Parser con OCR real de Mercado Pago —');
@@ -352,17 +358,17 @@ chequear('fecha ya pasada de este mes salta al mes que viene',
 
 // Solo día u hora sueltos ya cuentan como intención de reservar
 const C10 = '5492944001010';
-r = decir(C10, 'se puede el sabado 10 hs?');
+r = (await decir(C10, 'se puede el sabado 10 hs?'));
 chequear('día/hora sin la palabra "turno" arranca la reserva', txt(r, C10).includes('¿Qué servicio'));
 
 console.log('— J. Estrés: 40 clientas reservando en paralelo —');
 let creados = 0, rebotados = 0;
 for (let k = 0; k < 40; k++) {
   const tel = `54929440020${String(k).padStart(2, '0')}`;
-  decir(tel, 'hola'); decir(tel, '1'); decir(tel, '4'); // retiro (30 min, sin seña)
-  decir(tel, '1'); decir(tel, '1');
-  decir(tel, `Clienta${k}`);
-  const res = decir(tel, '1');
+  await decir(tel, 'hola'); await decir(tel, '1'); await decir(tel, '4'); // retiro (30 min, sin seña)
+  await decir(tel, '1'); await decir(tel, '1');
+  await decir(tel, `Clienta${k}`);
+  const res = (await decir(tel, '1'));
   if (txt(res, tel).includes('Turno confirmado')) creados++;
   else if (txt(res, tel).includes('acaban de reservar')) rebotados++;
 }
@@ -391,3 +397,4 @@ chequear('resumen semanal se genera', r[0].para === DUENA);
 console.log(`\n${fallas === 0 ? `✅ ${n} escenarios OK` : `❌ ${fallas} de ${n} fallaron`}`);
 fs.unlinkSync(RUTA_DB);
 process.exit(fallas === 0 ? 0 : 1);
+})().catch((e) => { console.error(e); process.exit(1); });

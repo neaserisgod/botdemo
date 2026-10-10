@@ -262,7 +262,7 @@ function crearAdaptador(config, hooks) {
     // Ítem del catálogo tocado por la clienta
     const productoId = m.productMessage?.product?.productId || null;
 
-    const salientes = hooks.alRecibir({ de, texto, rutaImagen, productoId });
+    const salientes = await hooks.alRecibir({ de, texto, rutaImagen, productoId });
     await enviarTodos(salientes);
   }
 

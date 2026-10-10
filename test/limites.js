@@ -1,3 +1,5 @@
+// Asincrónico: el motor devuelve promesas (la conversación de turnos espera la red al reservar, etapa 5 de Nodo Sur).
+(async () => {
 // Suite 3: bordes de agenda, persistencia del estado y consistencia de datos.
 // Lo que no se ve en el flujo feliz pero rompe en producción.
 const fs = require('fs');
@@ -74,73 +76,73 @@ chequear('no hay días disponibles más allá del límite configurado',
 
 console.log('— L. Persistencia del estado (reinicio del bot a mitad de flujo) —');
 const C1 = '5492944003001';
-decir(C1, 'hola'); decir(C1, '1'); decir(C1, '1'); // quedó en eligiendo_dia
+await decir(C1, 'hola'); await decir(C1, '1'); await decir(C1, '1'); // quedó en eligiendo_dia
 const guardada = qClientas.porTelefono(C1);
 chequear('el estado se guardó en la DB', guardada.estado_conv === 'eligiendo_dia');
 chequear('los datos parciales también', JSON.parse(guardada.datos_conv).servicioId === 1);
 // Simulamos reinicio: motor nuevo, lee el estado de la DB
 const motor2 = crearMotor(config);
-r = motor2.procesarMensaje({ de: C1, texto: '1' });
+r = (await motor2.procesarMensaje({ de: C1, texto: '1' }));
 chequear('después del reinicio sigue donde estaba', txt(r, C1).includes('horarios libres'));
 
 const C2 = '5492944003002';
-decir(C2, 'hola'); decir(C2, '1');
+await decir(C2, 'hola'); await decir(C2, '1');
 db.obtener().prepare("UPDATE clientas SET datos_conv = 'esto no es json' WHERE telefono = ?").run(C2);
 let rompio = false;
-try { r = decir(C2, '1'); } catch { rompio = true; }
+try { r = (await decir(C2, '1')); } catch { rompio = true; }
 chequear('datos_conv corrupto no tumba el bot', !rompio);
 
 console.log('— M. Cambios de configuración a mitad de flujo —');
 const C3 = '5492944003003';
-decir(C3, 'hola'); decir(C3, '1'); decir(C3, '2'); // eligió Kapping
+await decir(C3, 'hola'); await decir(C3, '1'); await decir(C3, '2'); // eligió Kapping
 db.obtener().prepare('UPDATE servicios SET activo = 0 WHERE id = 2').run();
-r = decir(C3, '1'); // sigue eligiendo día del servicio ya desactivado
+r = (await decir(C3, '1')); // sigue eligiendo día del servicio ya desactivado
 chequear('servicio desactivado a mitad de flujo no rompe', Array.isArray(r) && r.length > 0);
 db.obtener().prepare('UPDATE servicios SET activo = 1 WHERE id = 2').run();
 
 const C4 = '5492944003004';
-decir(C4, 'hola'); decir(C4, '1'); decir(C4, '1');
-decir(C4, '1'); decir(C4, '1'); decir(C4, 'Dana');
-decir(DUENA, '!precio 1 99000'); // la dueña cambia el precio mientras charlan
-r = decir(C4, '1'); // confirma
+await decir(C4, 'hola'); await decir(C4, '1'); await decir(C4, '1');
+await decir(C4, '1'); await decir(C4, '1'); await decir(C4, 'Dana');
+await decir(DUENA, '!precio 1 99000'); // la dueña cambia el precio mientras charlan
+r = (await decir(C4, '1')); // confirma
 chequear('cambio de precio a mitad de flujo no rompe la reserva',
   txt(r, C4).includes('seña') || txt(r, C4).includes('confirmado'));
-decir(DUENA, '!precio 1 18000');
+await decir(DUENA, '!precio 1 18000');
 
 console.log('— N. Derivación a humano: entra y sale —');
 const C5 = '5492944003005';
-decir(C5, 'hola');
-decir(C5, 'necesito hablar con alguien');
+await decir(C5, 'hola');
+await decir(C5, 'necesito hablar con alguien');
 chequear('quedó derivada', qClientas.estaDerivada(qClientas.porTelefono(C5)));
-r = decir(C5, 'hola?');
+r = (await decir(C5, 'hola?'));
 chequear('el bot no contesta mientras está derivada', r.length === 0);
 // Vencemos la derivación a mano (pasaron las 12 hs)
 db.obtener().prepare("UPDATE clientas SET derivada_hasta = '2020-01-01 00:00' WHERE telefono = ?").run(C5);
-r = decir(C5, 'hola');
+r = (await decir(C5, 'hola'));
 chequear('cuando vence la derivación vuelve a atender', txt(r, C5).includes('¿Qué necesitás?'));
 
 console.log('— O. Fotos y comprobantes fuera de lugar —');
 const C6 = '5492944003006';
-decir(C6, 'hola');
-r = decir(C6, null, { ...foto('Transferencia $ 5.000 operación 555555') });
+await decir(C6, 'hola');
+r = (await decir(C6, null, { ...foto('Transferencia $ 5.000 operación 555555') }));
 chequear('foto sin turno pendiente no rompe ni descuenta nada', Array.isArray(r));
 chequear('no se creó ninguna seña fantasma',
   db.obtener().prepare('SELECT COUNT(*) n FROM senas WHERE nro_operacion = ?').get('555555').n === 0);
 
 // Dos fotos seguidas para el mismo turno
 const C7 = '5492944003007';
-decir(C7, 'hola'); decir(C7, '1'); decir(C7, '1'); decir(C7, '1');
-decir(C7, '1'); decir(C7, 'Eva'); decir(C7, '1');
-decir(C7, null, { ...foto('Transferencia $ 5.000 Para Maria Ejemplo operación 777001') });
-r = decir(C7, null, { ...foto('Transferencia $ 5.000 Para Maria Ejemplo operación 777002') });
+await decir(C7, 'hola'); await decir(C7, '1'); await decir(C7, '1'); await decir(C7, '1');
+await decir(C7, '1'); await decir(C7, 'Eva'); await decir(C7, '1');
+await decir(C7, null, { ...foto('Transferencia $ 5.000 Para Maria Ejemplo operación 777001') });
+r = (await decir(C7, null, { ...foto('Transferencia $ 5.000 Para Maria Ejemplo operación 777002') }));
 chequear('segunda foto sobre turno ya confirmado no duplica turnos',
   db.obtener().prepare("SELECT COUNT(*) n FROM turnos t JOIN clientas c ON c.id=t.clienta_id WHERE c.telefono=? AND t.estado IN ('pendiente_sena','confirmado')").get(C7).n === 1);
 
 console.log('— P. Recordatorios: los que NO deben salir —');
 db.obtener().prepare("UPDATE turnos SET recordatorio_enviado = 1").run(); // limpiamos ruido previo
 const C8 = '5492944003008';
-decir(C8, 'hola'); decir(C8, '1'); decir(C8, '1'); decir(C8, '1');
-decir(C8, '1'); decir(C8, 'Fer'); decir(C8, '1'); // queda pendiente_sena
+await decir(C8, 'hola'); await decir(C8, '1'); await decir(C8, '1'); await decir(C8, '1');
+await decir(C8, '1'); await decir(C8, 'Fer'); await decir(C8, '1'); // queda pendiente_sena
 const salientes = recordatorios.tick(config);
 chequear('turno pendiente de seña NO recibe recordatorio',
   !salientes.some((s) => s.para === C8 && s.texto.includes('recordamos')));
@@ -164,27 +166,40 @@ chequear('turno a 5 días NO recibe recordatorio todavía',
 
 console.log('— Q. Agenda vacía y comandos sobre la nada —');
 db.obtener().prepare("UPDATE turnos SET estado = 'cancelado'").run();
-r = decir(DUENA, '!hoy');
+r = (await decir(DUENA, '!hoy'));
 chequear('!hoy sin turnos avisa lindo', txt(r, DUENA).includes('Sin turnos'));
-r = decir(DUENA, '!semana');
+r = (await decir(DUENA, '!semana'));
 chequear('!semana sin turnos avisa lindo', txt(r, DUENA).includes('Sin turnos'));
 const C9 = '5492944003009';
-decir(C9, 'hola');
-r = decir(C9, 'confirmo');
+await decir(C9, 'hola');
+r = (await decir(C9, 'confirmo'));
 chequear('CONFIRMO sin turno no rompe', Array.isArray(r) && r.length > 0);
-r = decir(C9, 'quiero cancelar');
+r = (await decir(C9, 'quiero cancelar'));
 chequear('cancelar sin turno avisa que no hay nada', txt(r, C9).includes('No encontré'));
 
 console.log('— R. Nombres raros —');
 const C11 = '5492944003011';
-decir(C11, 'hola'); decir(C11, '1'); decir(C11, '1'); decir(C11, '1'); decir(C11, '1');
-r = decir(C11, '💅✨');
+await decir(C11, 'hola'); await decir(C11, '1'); await decir(C11, '1'); await decir(C11, '1'); await decir(C11, '1');
+r = (await decir(C11, '💅✨'));
 chequear('nombre de solo emojis: repregunta', txt(r, C11).includes('nombre'));
-r = decir(C11, 'M');
+r = (await decir(C11, 'M'));
 chequear('nombre de 1 letra: repregunta', txt(r, C11).includes('nombre'));
-r = decir(C11, 'María José Fernández de la Torre');
+r = (await decir(C11, 'María José Fernández de la Torre'));
 chequear('nombre largo válido lo acepta', txt(r, C11).includes('María José'));
 
-console.log(`\n${fallas === 0 ? `✅ ${n} chequeos OK` : `❌ ${fallas} de ${n} fallaron`}`);
 fs.unlinkSync(RUTA_DB);
+console.log('— Cola por número (el motor es asincrónico) —');
+{
+  // Dos mensajes de la misma persona que llegan juntos: el segundo espera al primero y lee el estado que dejó.
+  const CQ = '5492944000990';
+  const [a, b] = await Promise.all([decir(CQ, 'hola'), decir(CQ, '1')]);
+  chequear('el primero contesta el menú', txt(a, CQ).includes('¿Qué necesitás?'));
+  chequear('el segundo ya ve el menú elegido: la lista de servicios', txt(b, CQ).includes('¿Qué servicio querés?'));
+  // Personas distintas no se esperan entre sí, y un error en un mensaje no traba la cola de esa persona.
+  const [c, d] = await Promise.all([decir('5492944000991', 'hola'), decir('5492944000992', 'hola')]);
+  chequear('dos personas a la vez: las dos tienen su menú', txt(c, '5492944000991').includes('¿Qué necesitás?') && txt(d, '5492944000992').includes('¿Qué necesitás?'));
+}
+
+console.log(`\n${fallas === 0 ? `✅ ${n} chequeos OK` : `❌ ${fallas} de ${n} fallaron`}`);
 process.exit(fallas === 0 ? 0 : 1);
+})().catch((e) => { console.error(e); process.exit(1); });

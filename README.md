@@ -170,7 +170,7 @@ inicio ──► eligiendo_servicio ──► eligiendo_dia ──► eligiendo_
   └─ 2 mensajes sin entender → deriva a humano      ┌────┴────────┐
      (calla 12 hs, la dueña atiende a mano)    con seña        sin seña
                                           esperando_comprobante  confirmado
-                                           │ foto → OCR → verificado / a_revisar
+                                           │ foto → OCR → a_revisar → !ok → verificado
                                            └ 2 hs sin foto → vencido (libera el slot)
 ```
 
@@ -197,8 +197,12 @@ Lo mismo que hace el instalador de un comando (arriba), paso a paso:
 
 1. Turno queda `pendiente_sena`; la clienta recibe alias, monto y plazo.
 2. Manda la foto → OCR (Tesseract nativo, español) → regex saca monto, destinatario, nº de operación y fecha.
-3. Todo cierra → `verificado`, turno confirmado, la dueña recibe la foto con los datos.
-4. Algo no cierra (monto corto, destinatario ajeno, operación repetida — `UNIQUE` en la DB) → `a_revisar`; la dueña resuelve diciendo _"aprobá la 7"_ o _"rechazá la 7"_ (o con `!ok 7` / `!no 7`).
+3. **Siempre queda `a_revisar`: una foto no confirma sola** (una foto se edita, y el OCR no sabe si la plata llegó). Si todo
+   cierra, la dueña recibe la foto con "el comprobante coincide"; si algo no (monto corto, destinatario ajeno, operación
+   repetida — `UNIQUE` en la DB), con el motivo. Resuelve diciendo _"aprobá la 7"_ o _"rechazá la 7"_ (o `!ok 7` / `!no 7`).
+4. Con Nodo Sur, una seña se va a confirmar sola solo cuando cruce con Mercado Pago (el pago del link de seña).
+
+
 5. Sin comprobante en 2 hs → `vencido`, el horario se libera y avisa a las dos.
 
 Nunca se pierde una seña: lo que el OCR no entiende va a revisión manual, no se descarta.

@@ -1,3 +1,5 @@
+// Asincrónico: el motor devuelve promesas (la conversación de turnos espera la red al reservar, etapa 5 de Nodo Sur).
+(async () => {
 // Un comercio (almacén): precio y si hay, ubicación y horarios, y pedidos para retirar en el local que quedan en la
 // bandeja para Nodo Sur. Decisiones del dueño en Nodo-Sur-Pos/docs/PLAN-BOT.md (2026-10-09).
 // Con la hora de Argentina, como en el celular: con UTC (la de las PCs de prueba) la pausa andaba de casualidad.
@@ -36,7 +38,7 @@ chequear('pausa de 1 hora por defecto', config.pausa_minutos === 60);
 
 console.log('\n— 2. Sin catálogo todavía —');
 const C1 = '5492944100001';
-let r = decir(C1, 'cuanto sale la coca?');
+let r = (await decir(C1, 'cuanto sale la coca?'));
 chequear('avisa que no tiene la lista y ofrece una persona', textoPara(r, C1).includes('Todavía no tengo cargada la lista'));
 
 catalogo.fijar([
@@ -47,42 +49,42 @@ catalogo.fijar([
 ]);
 
 console.log('\n— 3. Consultas —');
-r = decir(C1, 'hola');
+r = (await decir(C1, 'hola'));
 chequear('menú de comercio con 🛒 y pedido para retirar', textoPara(r, C1).includes('Consultar precios 🛒') && textoPara(r, C1).includes('Hacer un pedido para retirar'));
-r = decir(C1, '¿cuánto sale la yerba?');
+r = (await decir(C1, '¿cuánto sale la yerba?'));
 chequear('precio con miles y centavos, y que hay', textoPara(r, C1).includes('Yerba Playadito 1 kg — $5.200,50 ✅'));
 chequear('aclara que el precio es de hoy', textoPara(r, C1).includes('Precios de hoy, pueden cambiar'));
-r = decir(C1, 'tienen pan lactal?');
+r = (await decir(C1, 'tienen pan lactal?'));
 chequear('sin stock lo dice', textoPara(r, C1).includes('Pan lactal Bimbo — $2.800 ❌ sin stock'));
-r = decir(C1, 'tienen coca');
+r = (await decir(C1, 'tienen coca'));
 chequear('varias coincidencias: las dos cocas', textoPara(r, C1).includes('Coca Cola 2,25 L') && textoPara(r, C1).includes('Coca Cola Zero'));
-r = decir(C1, '¿tienen fernet?');
+r = (await decir(C1, '¿tienen fernet?'));
 chequear('lo que no está: "no encontré", sin contar como no entendido', textoPara(r, C1).includes('No encontré ese producto'));
-r = decir(C1, '¿dónde están?');
+r = (await decir(C1, '¿dónde están?'));
 chequear('ubicación y horarios', textoPara(r, C1).includes('Mitre 150') && textoPara(r, C1).includes('Horarios'));
 
 console.log('\n— 4. Un pedido de punta a punta —');
 const C2 = '5492944100002';
-r = decir(C2, 'quiero hacer un pedido');
+r = (await decir(C2, 'quiero hacer un pedido'));
 chequear('arranca el pedido, para retirar', textoPara(r, C2).includes('retires en el local'));
-r = decir(C2, '2 yerba');
+r = (await decir(C2, '2 yerba'));
 chequear('anota cantidad y subtotal', textoPara(r, C2).includes('Anotado: 2 × Yerba Playadito 1 kg — $10.401'));
-r = decir(C2, 'pan lactal');
+r = (await decir(C2, 'pan lactal'));
 chequear('sin stock no lo agrega', textoPara(r, C2).includes('No hay stock de *Pan lactal Bimbo*'));
-r = decir(C2, 'coca');
+r = (await decir(C2, 'coca'));
 chequear('varias: pregunta cuál', textoPara(r, C2).includes('¿Cuál de estos?'));
-r = decir(C2, '2');
+r = (await decir(C2, '2'));
 chequear('elige la segunda', textoPara(r, C2).includes('Anotado: 1 × Coca Cola Zero 2,25 L'));
-r = decir(C2, 'yerba x1');
+r = (await decir(C2, 'yerba x1'));
 chequear('lo repetido se suma', textoPara(r, C2).includes('Anotado: 1 × Yerba'));
-r = decir(C2, 'listo');
+r = (await decir(C2, 'listo'));
 chequear('pide el nombre', textoPara(r, C2).includes('¿A nombre de quién'));
-r = decir(C2, 'Sofi');
+r = (await decir(C2, 'Sofi'));
 const resumen = textoPara(r, C2);
 chequear('resumen con 3 yerbas y la coca', resumen.includes('• 3 × Yerba Playadito 1 kg — $15.601,50') && resumen.includes('• 1 × Coca Cola Zero'));
 chequear('total, retiro y aviso de precio', resumen.includes('Total aproximado: $19.201,50') && resumen.includes('retirás en el local') && resumen.includes('Precios de hoy'));
 chequear('todavía no hay nada en la bandeja', qPedidos.porEnviar().length === 0);
-r = decir(C2, '1');
+r = (await decir(C2, '1'));
 chequear('confirma y dice que le avisa', textoPara(r, C2).includes('Le pasé tu pedido al local'));
 const bandeja = qPedidos.porEnviar();
 chequear('queda en la bandeja, por enviar', bandeja.length === 1 && bandeja[0].estado === 'por_enviar');
@@ -104,70 +106,71 @@ chequear('rechazado: le ofrece una persona', comercio.avisoDePedido(config, p, '
 
 console.log('\n— 6. Cancelar, cantidades y lo raro —');
 const C3 = '5492944100003';
-decir(C3, 'pedido');
-r = decir(C3, 'listo');
+await decir(C3, 'pedido');
+r = (await decir(C3, 'listo'));
 chequear('"listo" sin nada anotado no manda nada', textoPara(r, C3).includes('Todavía no anotaste nada'));
-r = decir(C3, '0');
+r = (await decir(C3, '0'));
 chequear('0 cancela', textoPara(r, C3).includes('no anoté nada'));
 chequear('cantidadYProducto: "2 coca", "coca x3", "coca"', JSON.stringify([comercio.cantidadYProducto('2 coca'), comercio.cantidadYProducto('coca x3'), comercio.cantidadYProducto('coca')])
   === JSON.stringify([{ cantidad: 2, busqueda: 'coca' }, { cantidad: 3, busqueda: 'coca' }, { cantidad: 1, busqueda: 'coca' }]));
-decir(C3, 'pedido');
-r = decir(C3, 'menu');
+await decir(C3, 'pedido');
+r = (await decir(C3, 'menu'));
 chequear('"menú" sale del pedido', textoPara(r, C3).includes('¿Qué necesitás?'));
 
 console.log('\n— 7. La pausa —');
 const C4 = '5492944100004';
-decir(C4, 'hola');
+await decir(C4, 'hola');
 motor.pausar(C4);
-chequear('cuando el dueño contesta a mano, el bot se calla en ese chat', decir(C4, 'tienen coca?').length === 0);
+chequear('cuando el dueño contesta a mano, el bot se calla en ese chat', (await decir(C4, 'tienen coca?')).length === 0);
 const vence = qClientas.porTelefono(C4).derivada_hasta;
 const minutos = (new Date(`${vence.replace(' ', 'T')}Z`) - Date.now()) / 60000; // se guarda en UTC
 chequear('por una hora (config.pausa_minutos)', minutos > 55 && minutos <= 61);
 motor.pausar(DUENO);
 chequear('pausar al dueño mismo no hace nada', !qClientas.porTelefono(DUENO));
 const C5 = '5492944100005';
-r = decir(C5, 'necesito hablar con alguien');
+r = (await decir(C5, 'necesito hablar con alguien'));
 chequear('pedir una persona: le avisa al dueño que el bot se calla 1 hora', textoPara(r, DUENO).includes('por 1 hora') && textoPara(r, C5).includes('le aviso al local'));
-chequear('y después el bot no le contesta (chat real, 2026-10-09: le mandaba el menú)', decir(C5, 'hola?').length === 0);
+chequear('y después el bot no le contesta (chat real, 2026-10-09: le mandaba el menú)', (await decir(C5, 'hola?')).length === 0);
 
 console.log('\n— 7b. Lo que mostró el primer chat real (2026-10-09) —');
 const C6 = '5492944100006';
-decir(C6, 'hola');
-r = decir(C6, '1');
+await decir(C6, 'hola');
+r = (await decir(C6, '1'));
 chequear('"1" pide el producto', textoPara(r, C6).includes('Decime qué producto buscás'));
-r = decir(C6, 'fernet branca');
+r = (await decir(C6, 'fernet branca'));
 chequear('después de "1", lo que no está dice "no encontré" (no el menú)', textoPara(r, C6).includes('No encontré') && !textoPara(r, C6).includes('¿Qué necesitás?'));
-r = decir(C6, 'yerba');
+r = (await decir(C6, 'yerba'));
 chequear('y se puede seguir consultando sin volver a poner "1"', textoPara(r, C6).includes('Yerba Playadito 1 kg — $5.200,50 ✅'));
-r = decir(C6, 'coca 2.25l');
+r = (await decir(C6, 'coca 2.25l'));
 chequear('"2.25l" encuentra "2,25 L" (medidas escritas distinto)', textoPara(r, C6).includes('Coca Cola 2,25 L'));
-r = decir(C6, 'yerba 1kg');
+r = (await decir(C6, 'yerba 1kg'));
 chequear('"1kg" encuentra "1 kg"', textoPara(r, C6).includes('Yerba Playadito 1 kg'));
-r = decir(C6, 'graciias');
+r = (await decir(C6, 'graciias'));
 chequear('"graciias" (con un error) es un gracias, no el menú', textoPara(r, C6).includes('Gracias a vos'));
 
 const C7 = '5492944100007';
-decir(C7, 'pedido');
-r = decir(C7, '2 yerba\n1 coca zero 2.25 l\npure de papas');
+await decir(C7, 'pedido');
+r = (await decir(C7, '2 yerba\n1 coca zero 2.25 l\npure de papas'));
 chequear('varios productos en un mensaje: anota cada uno', textoPara(r, C7).includes('2 × Yerba Playadito 1 kg') && textoPara(r, C7).includes('1 × Coca Cola Zero 2,25 L'));
 chequear('y dice cuál no encontró, sin perder los otros', textoPara(r, C7).includes('No encontré "pure de papas"'));
-r = decir(C7, '1 yerba\ncoca\n3 coca zero');
+r = (await decir(C7, '1 yerba\ncoca\n3 coca zero'));
 chequear('uno con varias opciones en el medio: pregunta cuál', textoPara(r, C7).includes('1 × Yerba') && textoPara(r, C7).includes('¿Cuál de estos'));
-r = decir(C7, '1');
+r = (await decir(C7, '1'));
 chequear('al elegir, sigue con lo que faltaba de ese mensaje', textoPara(r, C7).includes('1 × Coca Cola 2,25 L') && textoPara(r, C7).includes('3 × Coca Cola Zero 2,25 L'));
-decir(C7, 'listo');
-decir(C7, 'Sofi');
-r = decir(C7, '1');
+await decir(C7, 'listo');
+await decir(C7, 'Sofi');
+r = (await decir(C7, '1'));
 const ultimo = qPedidos.porEnviar().pop();
 const cant = (gid) => (ultimo.datos.items.find((x) => x.gid === gid) || {}).cantidad;
 chequear('el pedido junta todo: 3 yerbas, 1 coca y 4 coca zero', cant('g-yerba') === 3 && cant('g-coca') === 1 && cant('g-coca-z') === 4);
 
 console.log('\n— 8. Lo del dueño en un comercio —');
-r = decir(DUENO, 'qué tengo hoy');
+r = (await decir(DUENO, 'qué tengo hoy'));
 chequear('los comandos de turnos le dicen que los pedidos están en la app', textoPara(r, DUENO).includes('Encargues'));
-r = decir(DUENO, 'ayuda');
+r = (await decir(DUENO, 'ayuda'));
 chequear('la ayuda de comercio: aviso y contactos', textoPara(r, DUENO).includes('mensaje a TODOS los clientes') && !textoPara(r, DUENO).includes('turno'));
 chequear('no manda agenda diaria ni resumen semanal', recordatorios.agendaDiaria(config).length === 0 && recordatorios.resumenSemanal(config).length === 0);
 
 console.log(fallas ? `\n❌ ${fallas} chequeos de comercio fallaron` : '\n✅ Comercio OK');
 process.exit(fallas ? 1 : 0);
+})().catch((e) => { console.error(e); process.exit(1); });

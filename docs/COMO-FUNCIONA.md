@@ -119,7 +119,7 @@ inicio ──► eligiendo_servicio ──► eligiendo_dia ──► eligiendo_
   ├─ "confirmo"       → responde el recordatorio  con seña      sin seña
   └─ 2 sin entender   → deriva a humano      esperando_comprobante  ✔ confirmado
                                                   │
-                                    foto → OCR → ✔ verificado | ⚠ a_revisar
+                                    foto → OCR → ⚠ a_revisar → !ok → ✔ verificado
                                     2 hs sin foto → ✘ vencido (libera el horario)
 ```
 
@@ -194,7 +194,10 @@ Es la parte más delicada, porque hay plata de por medio.
 1. La clienta confirma → el turno se crea como `pendiente_sena` y **ya ocupa el horario** (para que nadie se lo saque mientras paga).
 2. Recibe alias, titular, monto y plazo (2 hs por defecto).
 3. Manda la foto → se baja a disco → Tesseract la lee → regex extraen **monto, destinatario, número de operación y fecha**.
-4. Se aplican las reglas. Si pasa todas → `verificado`, turno confirmado, la dueña recibe la foto con los datos. Si falla alguna → `a_revisar`.
+4. Se aplican las reglas y la seña queda **siempre** `a_revisar`: **una foto no confirma el turno sola** (2026-10-10, decisión
+   12 de Nodo Sur: una foto se edita y el OCR no sabe si la plata llegó). Si pasa todas, la dueña recibe la foto con "el
+   comprobante coincide"; si falla alguna, con el motivo. En los dos casos aprueba ella (`!ok 7`). Con Nodo Sur, la seña se
+   va a confirmar sola solo cuando cruce con Mercado Pago.
 5. Si a las 2 hs no llegó nada → `vencido`, el horario se libera y se les avisa a las dos.
 
 **Las reglas que mandan una seña a revisión:**

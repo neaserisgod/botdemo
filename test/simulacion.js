@@ -1,3 +1,5 @@
+// Asincrónico: el motor devuelve promesas (la conversación de turnos espera la red al reservar, etapa 5 de Nodo Sur).
+(async () => {
 // Simulación de punta a punta contra el núcleo, sin WhatsApp.
 // Cubre: reserva con seña → comprobante OK → comprobante duplicado (a_revisar)
 // → !ok de la dueña → recordatorio → cancelación → FAQ → derivación → catálogo.
@@ -30,8 +32,8 @@ function chequear(nombre, cond) {
   else { console.log(`  ✘ FALLÓ: ${nombre}`); fallas++; }
 }
 
-function decir(de, texto, extra) {
-  const salientes = motor.procesarMensaje({ de, texto, ...extra });
+async function decir(de, texto, extra) {
+  const salientes = (await motor.procesarMensaje({ de, texto, ...extra }));
   for (const s of salientes) {
     console.log(`    [bot → ${s.para === DUENA ? 'DUEÑA' : s.para}] ${s.texto.split('\n')[0]}`);
   }
@@ -48,49 +50,55 @@ const textoPara = (salientes, quien) =>
   salientes.filter((s) => s.para === quien).map((s) => s.texto).join('\n');
 
 console.log('\n— 1. Reserva con seña (flujo feliz) —');
-let r = decir(CLIENTA, 'hola');
+let r = (await decir(CLIENTA, 'hola'));
 chequear('saluda con menú', textoPara(r, CLIENTA).includes('1'));
-r = decir(CLIENTA, '1');
+r = (await decir(CLIENTA, '1'));
 chequear('lista servicios', textoPara(r, CLIENTA).includes('Semipermanente'));
-r = decir(CLIENTA, '1'); // semipermanente
+r = (await decir(CLIENTA, '1')); // semipermanente
 chequear('ofrece días', textoPara(r, CLIENTA).includes('¿Qué día'));
-r = decir(CLIENTA, '1');
+r = (await decir(CLIENTA, '1'));
 chequear('ofrece horarios', /\*1\* — \d\d:\d\d/.test(textoPara(r, CLIENTA)));
-r = decir(CLIENTA, '1');
+r = (await decir(CLIENTA, '1'));
 chequear('pide nombre', textoPara(r, CLIENTA).includes('nombre'));
-r = decir(CLIENTA, 'Carla');
+r = (await decir(CLIENTA, 'Carla'));
 chequear('resumen con seña', textoPara(r, CLIENTA).includes('Seña'));
-r = decir(CLIENTA, '1');
+r = (await decir(CLIENTA, '1'));
 chequear('pide comprobante con alias', textoPara(r, CLIENTA).includes(config.senas.alias_mp));
 const turno1 = qTurnos.porId(1);
 chequear('turno 1 pendiente_sena', turno1.estado === 'pendiente_sena');
 
-console.log('\n— 2. Comprobante válido (OCR por caption) —');
-r = decir(CLIENTA, null, { ...fotoFake(
-  `Transferencia enviada $ 5.000 Para Maria Ejemplo Número de operación 900001 12/08/2026`) });
-chequear('turno confirmado', qTurnos.porId(1).estado === 'confirmado');
+console.log('\n— 2. Comprobante que coincide en todo (OCR por caption): igual lo aprueba la dueña —');
+// Nodo Sur, decisión 12: una foto no prueba que la plata llegó. Una seña se confirma sola solo si cruza con Mercado Pago.
+r = (await decir(CLIENTA, null, { ...fotoFake(
+  `Transferencia enviada $ 5.000 Para Maria Ejemplo Número de operación 900001 12/08/2026`) }));
+chequear('el turno NO se confirma solo', qTurnos.porId(1).estado === 'pendiente_sena');
+chequear('la seña queda para aprobar', qSenas.porTurno(1).estado === 'a_revisar');
+chequear('a la clienta: lo estamos verificando', textoPara(r, CLIENTA).includes('Lo estamos verificando'));
+chequear('a la dueña, con la foto: coincide y cómo aprobarla', r.some((s) => s.para === DUENA && s.imagenRuta)
+  && textoPara(r, DUENA).includes('El comprobante coincide') && textoPara(r, DUENA).includes('!ok 1'));
+r = (await decir(DUENA, '!ok 1'));
+chequear('!ok confirma el turno', qTurnos.porId(1).estado === 'confirmado');
 chequear('seña verificada', qSenas.porTurno(1).estado === 'verificado');
-chequear('avisa a la dueña con foto', r.some((s) => s.para === DUENA && s.imagenRuta));
 
 console.log('\n— 3. Segunda clienta, comprobante DUPLICADO → a_revisar → !ok —');
-decir(CLIENTA2, 'hola'); decir(CLIENTA2, '1'); decir(CLIENTA2, '1');
-decir(CLIENTA2, '1'); decir(CLIENTA2, '2'); // otro horario
-decir(CLIENTA2, 'Sofía');
-decir(CLIENTA2, '1');
-r = decir(CLIENTA2, null, { ...fotoFake(
-  `Transferencia $ 5.000 Para Maria Ejemplo operación 900001`) }); // misma operación!
+await decir(CLIENTA2, 'hola'); await decir(CLIENTA2, '1'); await decir(CLIENTA2, '1');
+await decir(CLIENTA2, '1'); await decir(CLIENTA2, '2'); // otro horario
+await decir(CLIENTA2, 'Sofía');
+await decir(CLIENTA2, '1');
+r = (await decir(CLIENTA2, null, { ...fotoFake(
+  `Transferencia $ 5.000 Para Maria Ejemplo operación 900001`) })); // misma operación!
 chequear('seña quedó a_revisar', qSenas.porTurno(2).estado === 'a_revisar');
 chequear('dueña recibe motivo DUPLICADO', textoPara(r, DUENA).includes('DUPLICADO'));
-r = decir(DUENA, '!ok 2');
+r = (await decir(DUENA, '!ok 2'));
 chequear('!ok confirma el turno', qTurnos.porId(2).estado === 'confirmado');
 chequear('le avisa a la clienta', r.some((s) => s.para === CLIENTA2));
 
 console.log('\n— 4. Comandos de la dueña —');
-r = decir(DUENA, '!semana');
+r = (await decir(DUENA, '!semana'));
 chequear('!semana lista ambos turnos', textoPara(r, DUENA).includes('#1') && textoPara(r, DUENA).includes('#2'));
-r = decir(DUENA, '!turno 1');
+r = (await decir(DUENA, '!turno 1'));
 chequear('!turno 1 muestra detalle', textoPara(r, DUENA).includes('Carla'));
-r = decir(DUENA, '!precio 1 20000');
+r = (await decir(DUENA, '!precio 1 20000'));
 chequear('!precio cambia precio', textoPara(r, DUENA).includes('20000'));
 
 console.log('\n— 5. Recordatorios (catch-up) —');
@@ -114,69 +122,69 @@ chequear('si no se confirmó el envío, lo reintenta',
 // Así lo hace src/index.js: marca recién cuando el adaptador confirma
 enviados.filter((s) => s.turnoId).forEach((s) => qTurnos.marcarRecordatorioEnviado(s.turnoId));
 chequear('confirmado el envío, no lo repite', recordatorios.tick(config).length === 0);
-r = decir(CLIENTA, 'confirmo');
+r = (await decir(CLIENTA, 'confirmo'));
 chequear('registra CONFIRMO', textoPara(r, CLIENTA).toLowerCase().includes('confirmar'));
 
 console.log('\n— 6. Cancelación de clienta —');
-r = decir(CLIENTA2, 'cancelar');
+r = (await decir(CLIENTA2, 'cancelar'));
 chequear('pregunta antes de cancelar', textoPara(r, CLIENTA2).includes('1'));
-r = decir(CLIENTA2, '1');
+r = (await decir(CLIENTA2, '1'));
 chequear('turno cancelado', qTurnos.porId(2).estado === 'cancelado');
 chequear('avisa a la dueña', r.some((s) => s.para === DUENA));
 
 console.log('\n— 7. FAQ + derivación —');
-r = decir(CLIENTA, 'cuánto sale el kapping?');
+r = (await decir(CLIENTA, 'cuánto sale el kapping?'));
 chequear('FAQ precios', textoPara(r, CLIENTA).includes('Kapping'));
-r = decir(CLIENTA, 'dónde están?');
+r = (await decir(CLIENTA, 'dónde están?'));
 chequear('FAQ ubicación', textoPara(r, CLIENTA).includes(config.negocio.direccion));
-decir(CLIENTA, '1'); // entra a elegir servicio
-decir(CLIENTA, 'zzz'); // 1er no entendido
-r = decir(CLIENTA, 'zzz'); // 2do → deriva
+await decir(CLIENTA, '1'); // entra a elegir servicio
+await decir(CLIENTA, 'zzz'); // 1er no entendido
+r = (await decir(CLIENTA, 'zzz')); // 2do → deriva
 chequear('deriva a humano y cita el texto', textoPara(r, DUENA).includes('zzz'));
-r = motor.procesarMensaje({ de: CLIENTA, texto: 'hola' });
+r = (await motor.procesarMensaje({ de: CLIENTA, texto: 'hola' }));
 chequear('bot calla mientras está derivada', r.length === 0);
 
 console.log('\n— 8. Catálogo (productMessage) —');
 const db2 = require('../src/db').obtener();
 db2.prepare("UPDATE servicios SET catalogo_id = 'cat-777' WHERE id = 3").run();
-r = decir('5492944333333', '', { productoId: 'cat-777' });
+r = (await decir('5492944333333', '', { productoId: 'cat-777' }));
 chequear('arranca directo desde el ítem del catálogo', textoPara(r, '5492944333333').includes('Soft gel'));
 
 console.log('\n— 9. Cortesía y mensajes sin texto —');
 const C4 = '5492944444444';
-decir(C4, 'hola');
-r = decir(C4, 'gracias!!');
+await decir(C4, 'hola');
+r = (await decir(C4, 'gracias!!'));
 chequear('cortesía: respuesta corta, sin menú', !textoPara(r, C4).includes('¿Qué necesitás?'));
-r = motor.procesarMensaje({ de: C4, texto: '' }); // sticker/audio
+r = (await motor.procesarMensaje({ de: C4, texto: '' })); // sticker/audio
 chequear('sin texto: silencio total', r.length === 0);
 
 console.log('\n— 10. Selección múltiple y número en frase —');
 const C5 = '5492944555555';
-decir(C5, 'hola'); decir(C5, '1');
-r = decir(C5, '1 y 3');
+await decir(C5, 'hola'); await decir(C5, '1');
+r = (await decir(C5, '1 y 3'));
 chequear('dos números: pide de a uno', textoPara(r, C5).includes('De a uno'));
-r = decir(C5, 'el 2 porfa');
+r = (await decir(C5, 'el 2 porfa'));
 chequear('número dentro de frase: elige Kapping', textoPara(r, C5).includes('Kapping'));
 
 console.log('\n— 11. Lenguaje natural (nlu.js) —');
-r = decir(C4, 'quiero sacar un turno para soft gel');
+r = (await decir(C4, 'quiero sacar un turno para soft gel'));
 chequear('intención + servicio por nombre: salta a días', textoPara(r, C4).includes('Soft gel') && textoPara(r, C4).includes('¿Qué día'));
-decir(C4, '1');      // día → lista de horarios
-r = decir(C4, '1');  // hora → pide nombre
+await decir(C4, '1');      // día → lista de horarios
+r = (await decir(C4, '1'));  // hora → pide nombre
 chequear('pide nombre', textoPara(r, C4).includes('nombre'));
-r = decir(C4, 'cuanto sale?'); // pregunta en lugar de nombre
+r = (await decir(C4, 'cuanto sale?')); // pregunta en lugar de nombre
 chequear('no toma una pregunta como nombre', textoPara(r, C4).includes('nombre'));
-r = decir(C4, 'Vale');
+r = (await decir(C4, 'Vale'));
 chequear('acepta el nombre real', textoPara(r, C4).includes('Vale'));
-decir(C4, '0'); // cancela la reserva → inicio
-r = decir(C4, 'tenes lugar para kaping?'); // intención + typo de servicio
+await decir(C4, '0'); // cancela la reserva → inicio
+r = (await decir(C4, 'tenes lugar para kaping?')); // intención + typo de servicio
 chequear('typo de servicio: entiende Kapping', textoPara(r, C4).includes('Kapping'));
-decir(C5, '0'); // C5 vuelve al menú
-r = decir(C5, 'hay lugar esta semana?');
+await decir(C5, '0'); // C5 vuelve al menú
+r = (await decir(C5, 'hay lugar esta semana?'));
 chequear('"hay lugar" → lista servicios', textoPara(r, C5).includes('Semipermanente'));
 const C6 = '5492944666666';
-decir(C6, 'hola');
-r = decir(C6, 'puede atenderme alguien? es urgente');
+await decir(C6, 'hola');
+r = (await decir(C6, 'puede atenderme alguien? es urgente'));
 chequear('pedido de humano en texto libre: deriva', r.some((s) => s.para === DUENA && s.texto.includes('atención humana')));
 
 console.log('\n— 12. Reserva completa en un solo mensaje —');
@@ -196,23 +204,24 @@ const DIA_OK = proximoDiaAbierto();               // '2026-08-17'
 const DIA_TXT = `${Number(DIA_OK.slice(8))}/${Number(DIA_OK.slice(5, 7))}`; // '17/8'
 
 const C7 = '5492944777777';
-r = decir(C7, `hola queria reservar kapping para el ${DIA_TXT}, si es posible a las 11`);
+r = (await decir(C7, `hola queria reservar kapping para el ${DIA_TXT}, si es posible a las 11`));
 chequear('servicio + día + hora en un mensaje: va directo al nombre',
   textoPara(r, C7).includes('11:00') && textoPara(r, C7).includes('nombre'));
-r = decir(C7, 'Camila');
+r = (await decir(C7, 'Camila'));
 chequear('resumen listo para confirmar', textoPara(r, C7).includes('Kapping') && textoPara(r, C7).includes('11:00'));
-decir(C7, '1'); // confirma → seña
+await decir(C7, '1'); // confirma → seña
 
 const C8 = '5492944888888';
-r = decir(C8, `hola queria reservar para el ${DIA_TXT}`); // sin servicio
+r = (await decir(C8, `hola queria reservar para el ${DIA_TXT}`)); // sin servicio
 chequear('sin servicio: pide servicio y recuerda el día', textoPara(r, C8).includes('¿Qué servicio'));
-r = decir(C8, 'semipermanente');
+r = (await decir(C8, 'semipermanente'));
 chequear('al elegir servicio usa el día guardado', textoPara(r, C8).includes('Horarios libres') || textoPara(r, C8).includes('no tengo lugar'));
 
 const C9 = '5492944999999';
-r = decir(C9, `quiero kapping el ${DIA_TXT} a las 11`); // 11:00 la acaba de tomar C7
+r = (await decir(C9, `quiero kapping el ${DIA_TXT} a las 11`)); // 11:00 la acaba de tomar C7
 chequear('hora ocupada: avisa y ofrece las libres', textoPara(r, C9).includes('a las 11:00 no tengo lugar'));
 
 console.log(`\n${fallas === 0 ? '✅ Todo OK' : `❌ ${fallas} chequeos fallaron`}`);
 fs.unlinkSync(RUTA_DB);
 process.exit(fallas === 0 ? 0 : 1);
+})().catch((e) => { console.error(e); process.exit(1); });
