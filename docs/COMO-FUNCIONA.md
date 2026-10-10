@@ -64,7 +64,7 @@ Un **adaptador** traduce entre eso y la librería de turno. Hay tres:
 
 Se elige al arrancar: `node src/index.js --adaptador=baileys`.
 
-Esto es lo que permitió, entre otras cosas, migrar de whatsapp-web.js a Baileys sin tocar una línea de lógica de negocio, y tener 276 tests que corren sin WhatsApp.
+Esto es lo que permitió, entre otras cosas, migrar de whatsapp-web.js a Baileys sin tocar una línea de lógica de negocio, y tener más de 900 chequeos que corren sin WhatsApp.
 
 ---
 
@@ -128,12 +128,14 @@ inicio ──► eligiendo_servicio ──► eligiendo_dia ──► eligiendo_
 
 ### Entender lenguaje natural sin IA (`core/nlu.js` + `core/diccionario/`)
 
-Cuatro técnicas simples. Las palabras viven en `core/diccionario/`, separadas del código que las usa:
+Seis técnicas simples. Las palabras viven en `core/diccionario/`, separadas del código que las usa:
 
 1. **Normalizar** (`diccionario/normalizar.js`): saca tildes, mayúsculas y signos, y escribe de una sola forma lo de chat: `"q"` → que, `"dsp"` → después, `"mñn"` → mañana, `"holaaa"` → hola, `"okk"` → ok, `"👍🏻"` → 👍. `"¿Cuánto sale?"` → `"cuanto sale"`.
 2. **Diccionario común** (`diccionario/comun.js`): las intenciones de cualquier rubro (cambiar el turno, llegar tarde, cancelar, confirmar, pedir una persona, reservar, saludar), la cortesía (un mensaje hecho solo de "gracias", "genia", "mil", "dale"…), volver al menú y los temas de siempre (cómo se paga, envíos, horarios, ubicación). El orden importa: *"no puedo ir el viernes, ¿me lo pasás para el sábado?"* tiene que dar `reprogramar`, no `cancelar`; *"no quiero cancelar"*, `confirmar`.
 3. **Diccionario del rubro** (`diccionario/rubros.js`): cómo se pide cada servicio (`"manicura"` → semipermanente manos, `"rebaje"` → corte, `"mechitas"` → platinado) y cada producto (`"birra"` → cerveza, `"puchos"` → cigarrillos). Si el cliente nombra un servicio a medias (*"un semi"*), pregunta cuál.
 4. **Distancia de edición de 1**: tolera un typo por palabra en palabras de 5+ letras. Por eso `"kaping"` encuentra Kapping y `"graciias"` es un gracias.
+5. **Verbos de acá** (`diccionario/verbos.js`): con el pronombre pegado, en voseo y los irregulares de todos los días. `"anulámelo"` es anular, `"posponelo"` es posponer, `"tenés"`/`"tendrán"` es tener. No reescribe el texto: arma los infinitivos posibles de una palabra y solo los compara contra una clave que ya es un verbo, así `"pasas de uva"` sigue siendo pasas.
+6. **Corrector cerrado** (`diccionario/corrector.js`): cuando no se encontró nada, cada palabra se corrige contra las del catálogo o los servicios de ESE negocio (nunca contra un diccionario general, que empeoraba: "kapping" → camping), con dos letras de diferencia en palabras largas (`"desorante"` → desodorante, `"semipermante"` → semipermanente) y una en las cortas del catálogo (`"lece"` → leche). Si dos palabras quedan igual de cerca, no adivina. En los servicios solo corrige palabras de 7+ letras: con menos, la charla chocaba (`"dame"` → dama).
 
 Además extrae **fecha y hora** del texto libre: `"mañana"`, `"pasado mañana"`, `"el viernes"`, `"el finde"`, `"la semana que viene"`, `"20/8"`, `"día 25"`, `"a las 11"`, `"16:30"`, `"tipo 4 y media"`, `"4 de la tarde"`, `"a la tarde"`, `"dsp del mediodía"`. *"A las 5"* sin decir de la tarde se lee con el horario del negocio: si a las 5 está cerrado y a las 17 abierto, son las 17. Si el mensaje trae servicio + día + hora, la máquina se saltea esos pasos y va derecho a pedir el nombre.
 
@@ -301,7 +303,7 @@ Al arrancar, `src/config.js` lo valida y, si algo está mal, **no arranca** y ex
 
 ## 12. Tests
 
-Seis suites, 276 chequeos, corren sin WhatsApp con `npm test` (con la configuración de ejemplo: no hace falta `config.json`):
+Ocho suites, más de 900 chequeos, corren sin WhatsApp con `npm test` (con la configuración de ejemplo: no hace falta `config.json`):
 
 - **`simulacion.js`** — el flujo completo: reservar, señar, recordar, cancelar, comandos, FAQ, catálogo, lenguaje natural.
 - **`escenarios.js`** — lo que sale mal: comprobantes con monto corto, destinatario ajeno o duplicados; carreras por el mismo horario; comandos mal usados; 40 clientas reservando en cadena; fuzzing con inyección SQL, textos de 5.000 caracteres y bytes nulos.

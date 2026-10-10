@@ -4,6 +4,8 @@
 // ("quiero kapping" → arranca directo con ese servicio).
 
 const chat = require('./diccionario/normalizar');
+const verbos = require('./diccionario/verbos');
+const { crearCorrector } = require('./diccionario/corrector');
 
 // Quita tildes, mayúsculas y signos, y escribe de una sola forma lo de chat ("q", "dsp", "holaaa"; ver
 // diccionario/normalizar.js): "¿Cuánto sale?" → "cuanto sale", "q precio tiene??" → "que precio tiene".
@@ -50,9 +52,13 @@ function contiene(textoNorm, tokens, clave) {
     return ` ${tokens.map(suena).join(' ')} `.includes(` ${clave.split(' ').map(suena).join(' ')} `);
   }
   const s = suena(clave);
+  // Una clave que es un verbo ("anular", "posponer") calza con cómo se conjuga acá: "anulamelo", "posponelo", "tendrán"
+  // (diccionario/verbos.js), también escrito como suena ("kanselamelo").
+  const verbo = clave.length >= 5 && verbos.esInfinitivo(clave);
   return tokens.some((tok) => tok === clave || (tok.length >= 3 && suena(tok) === s)
     || (clave.length >= 5 && (distancia1(tok, clave) || distancia1(suena(tok), s)))
-    || (clave.length >= 5 && tok.length >= clave.length + 3 && tok.includes(clave)));
+    || (clave.length >= 5 && tok.length >= clave.length + 3 && tok.includes(clave))
+    || (verbo && tok.length >= 5 && verbos.infinitivos(tok).some((i) => i === clave || suena(i) === s)));
 }
 
 // Las intenciones (cambiar, cancelar, confirmar, llegar tarde, pedir una persona, reservar, saludar) están en el
@@ -114,9 +120,33 @@ function interpretar(texto, servicios, sinonimos) {
   for (const [nombre, claves] of INTENCIONES) {
     if (claves.some((c) => contiene(textoNorm, tokens, c))) { intencion = nombre; break; }
   }
-  const servicio = servicios ? servicioPorNombre(texto, servicios, sinonimos) : null;
-  const candidatos = servicios && !servicio ? serviciosMencionados(texto, servicios, sinonimos) : [];
+  let servicio = servicios ? servicioPorNombre(texto, servicios, sinonimos) : null;
+  let candidatos = servicios && !servicio ? serviciosMencionados(texto, servicios, sinonimos) : [];
+  // Ningún servicio: se corrige cada palabra contra las de los servicios de este negocio ("semipermante" →
+  // semipermanente; diccionario/corrector.js) y se prueba de nuevo.
+  if (servicios && !servicio && !candidatos.length) {
+    const corregir = correctorDeServicios(servicios, sinonimos);
+    const corregido = tokens.map((t) => corregir(t) || t).join(' ');
+    if (corregido !== textoNorm) {
+      servicio = servicioPorNombre(corregido, servicios, sinonimos);
+      candidatos = servicio ? [] : serviciosMencionados(corregido, servicios, sinonimos);
+    }
+  }
   return { intencion, servicio, candidatos };
+}
+
+// El vocabulario de los servicios (nombres, alias y el diccionario del rubro), armado una vez por lista de servicios.
+const correctores = new Map();
+function correctorDeServicios(servicios, sinonimos = {}) {
+  const clave = JSON.stringify([servicios.map((s) => [s.nombre, s.alias]), Object.keys(sinonimos).length]);
+  let c = correctores.get(clave);
+  if (!c) {
+    const nombres = servicios.flatMap((s) => [s.nombre, ...String(s.alias || '').split(',')]);
+    c = crearCorrector([...nombres, ...Object.keys(sinonimos), ...Object.values(sinonimos)].flatMap((n) => normalizar(n).split(' ')), { desde: 7 });
+    if (correctores.size > 50) correctores.clear();
+    correctores.set(clave, c);
+  }
+  return c;
 }
 
 // ---------- cortesía, menú, risas, temas ----------

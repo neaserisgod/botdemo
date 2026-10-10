@@ -1,32 +1,26 @@
-# Pendientes del bot (2026-10-09)
+# Pendientes del bot (2026-10-10)
 
-Para retomar en otra sesión. Lo hecho está en `main` (PR #4, #5 y #6): diccionario por rubro, pesables, simulador
-(`bash bot.sh probar`), el pedido entero en el primer mensaje y "el cliente difícil". `npm test` pasa en hora de
-Argentina; en UTC falla `test/simulacion.js` 12 ("servicio + día + hora"), también en `main`: depende de la hora del día.
+Para retomar en otra sesión. Lo hecho está en `main` (PR #4 a #7) y en la rama `claude/nice-hypatia-w94whl`. `npm test`
+pasa en cualquier día y zona horaria (el caso de "mañana" fallaba los sábados: el domingo está cerrado).
 
 **Regla del producto (el dueño):** el cliente escribe mal, apurado, enojado, todo junto y manda audios. El bot tiene que
 entenderlo igual y, si no puede, pasarlo a una persona. Cada caso nuevo va a `test/frases.js`.
 
 ## 1. Un salón con turnos no puede volverse comercio por Nodo Sur — hecho (2026-10-09)
 
-`rubroEntreCapas` (`src/config.js`): si `config.json` es de un rubro con turnos y Nodo Sur manda uno de comercio, se queda
-con el de `config.json` y lo avisa en el registro. Tests en `test/nube.js` (sección 2). Lo de fondo (los rubros con turnos
-en la app) está en la rama de servicios de Nodo-Sur-Pos; el bot suma además `peluqueria` y `estetica`.
+`rubroEntreCapas` (`src/config.js`). Tests en `test/nube.js` (sección 2).
 
-## 2. Corrector contra el vocabulario del negocio + conjugaciones de acá (este repo)
+## 2. Corrector contra el vocabulario del negocio + conjugaciones de acá — hecho (2026-10-10)
 
-Se probó un diccionario general (Hunspell es + Snowball) y **empeora**: corrige "kapping" → camping, "pucho" → pecho,
-"finde" → funde; no conoce el voseo ("tenés", "cancelame"); "turnos" → "tur". No usarlo.
-
-Hacer en `src/core/diccionario/`:
-- **Corrector cerrado:** comparar solo contra lo que existe en ese negocio (palabras de `comun.js`, `rubros.js`, nombres
-  de servicios y del catálogo), con distancia 2 en palabras largas. Ej.: "kerso cremoso" → Queso cremoso (hoy no).
-- **Conjugaciones rioplatenses a mano:** quitar enclíticos y voseo para llegar a la palabra del diccionario:
-  "cancelame / cancelalo / cancelás" → cancelar, "reservame / agendámelo" → reservar, "tenés / tienen / tendrán" → tener.
-
-Ya existe: comparación por sonido (`normalizar.js` `sonido`), letras dadas vuelta y palabras pegadas (`nlu.contiene`).
-Cuidado con los falsos positivos: probar que "cansado de esperar" no sea cancelar y que lo que no está en el catálogo
-siga dando "no encontré".
+- `src/core/diccionario/verbos.js`: "anulámelo", "posponelo", "suspendémelo", "confirmamelo", "agendámelo" (pronombre
+  pegado), voseo y los irregulares ("tienen", "tendrán", "consiguen"). Se usa en `nlu.contiene` contra las claves que son
+  verbos y en `catalogo.palabrasClave` para sacar los verbos de pedir ("¿consiguen fernet?", "¿traerán yerba?").
+- `src/core/diccionario/corrector.js`: solo cuando no se encontró nada, contra las palabras de ese catálogo o esos
+  servicios. "desorante" → desodorante, "lece" → leche, "semipermante" → semipermanente.
+- "kerso cremoso" ya andaba antes (por sonido + una letra); el pendiente estaba desactualizado.
+- Cuidados probados en `test/frases.js`: "cansado de esperar" no es cancelar, "hay pañales?" sigue en "no encontré",
+  "dame"/"onda" no se corrigen a servicios (por eso en servicios corrige desde 7 letras).
+- Lo que todavía no: "jelmans" → Hellmann's (empieza distinto, y la "ll" suena como "y").
 
 ## 3. Pedidos en gramos en Nodo Sur (otros dos repos: NodoSurPage y Nodo-Sur-Pos)
 
@@ -38,7 +32,17 @@ bot manda los kilos enteros como cantidad y un pedido con gramos sueltos (250 g)
 - **Sitio** (`NodoSurPage/functions/_lib/bot.js`, `pedidoDesdeBot`): aceptar `gramos` (entero 1–50000) en un ítem, en
   vez de `cantidad`, y guardarlo.
 - **App** (`Nodo-Sur-Pos/lib/domain/bot_whatsapp.dart`): `ItemPedidoBot` con `gramos` opcional, y en
-  `apartadosDePedido` usar esos gramos para un pesable en vez de `cantidad * 1000`. La app todavía no tiene release
-  publicado: buen momento para cambiar el contrato.
+  `apartadosDePedido` usar esos gramos para un pesable en vez de `cantidad * 1000`.
+- **Ojo (2026-10-10): la app ya tiene release publicado** (beta 1.0.0+2157). Una app vieja que reciba un ítem sin
+  `cantidad` lo va a leer mal: el sitio no puede mandarle gramos a una app que no los entiende (por ejemplo, que la app
+  diga su versión al pedir los pedidos, o que el sitio guarde los gramos aparte y siga mandando `cantidad` a las viejas).
+  Planearlo antes de tocar.
 
 Cuando el sitio acepte gramos, el bot los usa solo (se vuelve a probar con gramos cada vez que arranca).
+
+## 4. Visto al pasar (2026-10-10), sin tocar
+
+- `catalogo.buscar`: "jabon" encuentra Jamón cocido y "pala" encuentra Paladini (una letra de diferencia y prefijo). Ya
+  pasaba antes del corrector. Si molesta en un chat real, que el prefijo pida 4+ letras y la letra de diferencia no
+  valga cuando cambia la consonante del medio.
+- `src/index.js` (lock y limpieza de archivos viejos) usa `data/` fijo en vez de `DIR_DATOS`.

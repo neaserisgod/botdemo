@@ -68,7 +68,7 @@ Escaneás el QR (o usás código, ver abajo) y ya está funcionando. `config.jso
 | `npm run baileys` | Producción y pruebas reales (sin Chromium, anda en el celu) |
 | `npm run consola` | Probar el flujo entero sin WhatsApp |
 | `npm run demo` | whatsapp-web.js (alternativa en PC, usa Chromium) |
-| `npm test` | Las 6 suites de tests (276 chequeos) |
+| `npm test` | Las 8 suites de tests (más de 900 chequeos) |
 
 En modo consola: `/soy <numero>` cambia de remitente (usá el `numero_duena` del config para probar los comandos `!`), `/foto <texto>` simula un comprobante, `/producto <id>` simula el catálogo.
 
@@ -223,7 +223,7 @@ Nunca se pierde una seña: lo que el OCR no entiende va a revisión manual, no s
 
 ## Tests
 
-`npm test` corre seis suites (276 chequeos): flujo completo, escenarios hostiles (señas falsas, carreras por el mismo horario, comandos mal usados, fuzzing), límites (bordes de agenda, persistencia, configuración cambiada a mitad de flujo), plantillas (una charla entera de barbería sin nada del salón de uñas, textos propios, la base de un celu instalado antes), comercio (consultas, un pedido de punta a punta, sin stock, la pausa) y Nodo Sur (vincular, configuración, catálogo y pedidos contra un sitio simulado). Corren con la configuración de ejemplo, sin `config.json`, y con los dos motores de SQLite.
+`npm test` corre ocho suites (más de 900 chequeos): flujo completo, escenarios hostiles (señas falsas, carreras por el mismo horario, comandos mal usados, fuzzing), límites (bordes de agenda, persistencia, configuración cambiada a mitad de flujo), plantillas (una charla entera de barbería sin nada del salón de uñas, textos propios, la base de un celu instalado antes), comercio (consultas, un pedido de punta a punta, sin stock, la pausa) Nodo Sur (vincular, configuración, catálogo y pedidos contra un sitio simulado), frases reales por rubro (`test/frases.js`) y el simulador. Corren con la configuración de ejemplo, sin `config.json`, y con los dos motores de SQLite.
 
 ## Prender, apagar y reiniciar (en el celu)
 

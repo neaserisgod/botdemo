@@ -168,6 +168,14 @@ const TURNOS_COMUNES = () => {
   caso('"voy demorada, perdón!" también', 'voy demorada, perdón!', { incluye: 'Gracias por avisar', aviso: true }, conTurno(1));
   caso('"no quiero cancelar" no cancela', 'no quiero cancelar, ahi voy', { no: '¿Cancelo', incluye: 'Gracias por confirmar' }, conTurno(1));
   caso('"me lo cancelas porfa" cancela', 'me lo cancelas porfa', { incluye: '¿Cancelo tu turno' }, conTurno(1));
+  // Los verbos como se escriben acá, con el pronombre pegado (diccionario/verbos.js).
+  caso('"anulamelo" cancela', 'anulamelo porfa', { incluye: '¿Cancelo tu turno' }, conTurno(1));
+  caso('"suspendémelo" cancela', 'suspendémelo, surgió algo', { incluye: '¿Cancelo tu turno' }, conTurno(1));
+  caso('"kanselamelo" (como suena) cancela', 'kanselamelo', { incluye: '¿Cancelo tu turno' }, conTurno(1));
+  caso('"posponelo" lo cambia', 'posponelo porfa', { incluye: 'Cambiamos tu turno', no: 'Cancelo' }, conTurno(1));
+  caso('"confirmamelo" confirma', 'confirmamelo', { incluye: 'Gracias por confirmar' }, conTurno(1));
+  caso('"cansado de esperar" no es cancelar', 'estoy cansado de esperar', { no: '¿Cancelo' }, conTurno(1));
+  caso('"agendámelo para el finde" es querer un turno', 'agendámelo para el finde', { incluye: '¿Qué servicio querés?' });
   caso('"tenes algo el finde?" es querer un turno', 'tenes algo el finde?', { incluye: '¿Qué servicio querés?' });
   caso('"la semana que viene a la tarde" es querer un turno', 'la semana que viene a la tarde', { incluye: '¿Qué servicio querés?' });
   caso('"dsp del mediodia" es querer un turno', 'dsp del mediodia', { incluye: '¿Qué servicio querés?' });
@@ -237,6 +245,7 @@ const PRUEBAS = {
     caso('"hacen pedicura?": semi de pies', 'hacen pedicura?', { incluye: 'Semipermanente pies' });
     caso('"me haces las uñas?" es querer un turno', 'me haces las uñas?', { incluye: '¿Qué servicio querés?' });
     caso('"capping" con c', 'quiero capping', { incluye: 'Kapping rubber' });
+    caso('"semipermante" (dos letras de menos): pregunta manos o pies', 'quiero semipermante', { incluye: ['Semipermanente manos', 'Semipermanente pies'] });
     caso('"me sacas el esmalte?": retiro', 'me sacas el esmalte?', { incluye: 'Retiro' });
     caso('"pestañas": lifting', 'quiero hacerme las pestañas', { incluye: 'Lifting de pestañas' });
     caso('"precio del kapping?" y "si": arranca la reserva', ['precio del kapping?', 'si'], { incluye: ['Kapping rubber', '¿Qué día'] });
@@ -283,6 +292,7 @@ const PRUEBAS = {
     caso('"me queres teñir las raices?": color', 'me queres teñir las raices?', { incluye: 'Color' });
     caso('"tapar las canas cuanto sale?": precio del color', 'tapar las canas cuanto sale?', { incluye: ['Color', '$30000'] });
     caso('"hacen balayage?"', 'hacen balayage?', { incluye: 'Mechas / balayage' });
+    caso('"balayahs" (mal escrito)', 'quiero balayahs', { incluye: 'Mechas / balayage' });
     caso('"unos reflejos"', 'quiero unos reflejos', { incluye: 'Mechas / balayage' });
     caso('"queratina" con q', 'cuanto sale la queratina?', { incluye: ['Alisado con keratina', '$55000'] });
     caso('"un alisado progresivo"', 'quiero un alisado progresivo', { incluye: 'Alisado con keratina' });
@@ -401,6 +411,15 @@ function COMERCIO() {
   caso('"papel higienico"', 'tenes papel higienico?', { incluye: 'Higienol' });
   caso('"tenes yerva?" (con v)', 'tenes yerva?', { incluye: 'Yerba Playadito' });
   caso('"jamon kosido" (como suena)', 'precio del jamon kosido', { incluye: 'Jamón cocido Paladini' });
+  // Corrector cerrado (diccionario/corrector.js): contra las palabras del catálogo, nunca contra un diccionario general.
+  caso('"kerso cremoso"', 'tenes kerso cremoso?', { incluye: 'Queso cremoso' });
+  caso('"lece" (palabra corta, una letra de menos): leche', 'hay lece?', { incluye: 'Leche La Serenísima' });
+  caso('"serenisma"', 'leche serenisma?', { incluye: 'Leche La Serenísima' });
+  caso('"hay pañales?" (no está): no encontré, no lo más parecido', 'hay pañales?', { incluye: 'No encontré' });
+  // Los verbos de pedir, en cualquier forma, no son parte del producto (diccionario/verbos.js).
+  caso('"consiguen fernet?"', 'consiguen fernet?', { incluye: 'Fernet Branca' });
+  caso('"traerán yerba?"', 'traerán yerba?', { incluye: 'Yerba Playadito' });
+  caso('"me vendés una birra?"', 'me vendés una birra?', { incluye: 'Cerveza Quilmes' });
   caso('"TENES COCA" en mayúsculas', 'TENES COCA', { incluye: 'Coca Cola' });
   caso('"hay coca de 1,5?": la de 1,5 L', 'hay coca de 1,5?', { incluye: 'Coca Cola Zero 1,5 L', no: '2,25' });
   caso('"tenes queso? alguien me atiende": el queso y la opción de una persona', 'tenes queso? alguien me atiende', { incluye: ['Queso cremoso', 'escribí *4*'], sinAviso: true });

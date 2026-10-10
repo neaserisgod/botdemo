@@ -2,6 +2,8 @@
 // su `gid`, nombre, precio en centavos y si hay stock. Nada de costos ni cantidades. Vive en memoria; `nube/` lo baja,
 // lo guarda en data/catalogo.json (para arrancar sin internet) y lo carga con `fijar`.
 const nlu = require('./nlu');
+const verbos = require('./diccionario/verbos');
+const { crearCorrector } = require('./diccionario/corrector');
 
 let items = [];
 let actualizado = null;
@@ -18,9 +20,14 @@ function medidas(texto) {
   }).replace(/\b(\d+)[.,](\d+)\b/g, '$1d$2');
 }
 
+let vocabulario = new Set();
+let corregir = () => null;
+
 function fijar(nuevos, cuando = null) {
   items = (nuevos || []).map((x) => ({ ...x, _norm: nlu.normalizar(medidas(x.nombre)) }));
   actualizado = cuando;
+  vocabulario = new Set(items.flatMap((x) => x._norm.split(' ')));
+  corregir = crearCorrector(vocabulario);
 }
 
 const todos = () => items;
@@ -45,9 +52,16 @@ const VACIAS = new Set([
   'como', 'va', 'andas', 'estas', 'onda', 'tal', 'alguien', 'atiende', 'atienden', 'hablar', 'persona', 'favor', 'holis',
 ]);
 
+// Verbos de pedir y preguntar, en cualquier forma: "¿consiguen fernet?", "¿traerán leche?", "¿me vendés…?"
+// (diccionario/verbos.js). Una palabra que está en el catálogo no se toma como verbo: "pasas de uva" no es "pasar".
+const VERBOS_VACIOS = new Set(['tener', 'haber', 'vender', 'traer', 'conseguir', 'quedar', 'querer', 'necesitar', 'buscar',
+  'pasar', 'mandar', 'dar', 'decir', 'saber', 'poder', 'pedir', 'llevar', 'preparar', 'separar', 'guardar', 'anotar',
+  'reservar', 'encargar', 'agregar', 'sumar', 'cortar', 'venir', 'estar', 'llegar', 'entrar']);
+const esVerboVacio = (p) => !vocabulario.has(p) && verbos.infinitivos(p).some((i) => VERBOS_VACIOS.has(i));
+
 // Lo que identifica al producto en lo que escribió el cliente.
 function palabrasClave(texto) {
-  return nlu.normalizar(medidas(texto)).split(' ').filter((p) => p && !VACIAS.has(p));
+  return nlu.normalizar(medidas(texto)).split(' ').filter((p) => p && !VACIAS.has(p) && !esVerboVacio(p));
 }
 
 // ¿La palabra del cliente está en el nombre? Igual, como comienzo de una palabra del nombre ("galle" → galletitas) o
@@ -76,10 +90,17 @@ const calza = (palabra, tokens, sinonimos = {}) => formas(palabra, sinonimos).so
 function buscar(texto, max = 5, sinonimos = {}) {
   const claves = palabrasClave(texto);
   if (!claves.length) return { resultados: [], total: 0, claves };
-  const encontrados = items.filter((x) => {
+  const conClaves = (cs) => items.filter((x) => {
     const tokens = x._norm.split(' ');
-    return claves.every((p) => calza(p, tokens, sinonimos));
+    return cs.every((p) => calza(p, tokens, sinonimos));
   });
+  let encontrados = conClaves(claves);
+  // Nada: se corrige cada palabra que no calza con ningún producto contra las palabras del catálogo ("desorante" →
+  // desodorante, "lece" → leche; diccionario/corrector.js) y se busca de nuevo. Lo que no está sigue sin aparecer.
+  if (!encontrados.length) {
+    const corregidas = claves.map((p) => (items.some((x) => calza(p, x._norm.split(' '), sinonimos)) ? p : corregir(p) || p));
+    if (corregidas.some((p, i) => p !== claves[i])) encontrados = conClaves(corregidas);
+  }
   encontrados.sort((a, b) => (b.hay - a.hay) || a.nombre.length - b.nombre.length || a.nombre.localeCompare(b.nombre));
   return { resultados: encontrados.slice(0, max), total: encontrados.length, claves };
 }

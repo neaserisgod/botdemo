@@ -48,6 +48,7 @@ const INTENCIONES = [
     'sacar un turno', 'pedir turno', 'pedir hora', 'tenes lugar', 'tienen lugar', 'hay lugar', 'lugarcito', 'tenes algo',
     'tienen algo', 'hay algo', 'hueco', 'disponibilidad', 'disponible', 'cuando podes', 'cuando pueden', 'me atendes',
     'me atienden', 'me haces', 'me podes hacer', 'me pueden hacer', 'hacerme', 'quiero hacerme', 'me quiero hacer',
+    'anotar',
   ]],
   ['saludo', [
     'hola', 'holis', 'buenas', 'buen dia', 'buenos dias', 'buenas tardes', 'buenas noches', 'que tal', 'como estas',
