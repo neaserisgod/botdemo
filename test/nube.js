@@ -56,7 +56,7 @@ const servidor = http.createServer((req, res) => {
     if (u.pathname === '/api/device/ping') { sitio.pings++; return responder(res, 200, { ok: true, ...(sitio.tokenNuevo ? { token: sitio.tokenNuevo } : {}) }); }
     if (u.pathname === '/api/bot/pedido' && req.method === 'POST') {
       sitio.recibidos++;
-      if (!pedidoValido(b)) return responder(res, 400, { error: 'bad_request' });
+      if (!pedidoValido(b)) return responder(res, 400, { error: b.items?.some((x) => x.gramos) ? 'gramos_no_soportado' : 'bad_request' });
       const ya = sitio.pedidos.find((p) => p.pedidoId === b.id);
       if (ya) return responder(res, 200, { ok: true, id: ya.id, repetido: true });
       const p = { id: sitio.pedidos.length + 1, pedidoId: b.id, estado: 'por_confirmar', ...b, actualizado: Date.now() };
@@ -186,13 +186,19 @@ const ITEMS = [
   chequear('le llega entero al local por WhatsApp, para prepararlo a mano', enviados.length === 1 && enviados[0].para === config.numero_duena
     && enviados[0].texto.includes('250 g de Jamón cocido') && enviados[0].texto.includes('2 × Yerba') && enviados[0].texto.includes('5492944200003'));
   chequear('y no queda trabado en la bandeja', qPedidos.porEnviar().length === 0);
+  // Actualizaron la app: el sitio pasa a aceptar gramos. El mismo bot (sin reiniciar) los vuelve a probar a la hora.
   sitio.aceptaGramos = true;
-  const sincNuevo = crearSincronizador({ config, cliente: crearCliente({ sitio: SITIO, token: sitio.token }), recargarConfig: () => [],
-    enviar: async (x) => { enviados.push(...x); return x; }, log: { log: () => {}, error: () => {} } });
   pedir('5492944200004', '1/4 de jamon');
-  await sincNuevo.mandarBandeja();
+  await sinc.mandarBandeja();
+  chequear('recién rechazados, no insiste en cada pedido: sigue por WhatsApp', qPedidos.porEnviar().length === 0 && sitio.pedidos.length === recibidosAntes + 1);
+  const ahoraReal = Date.now;
+  Date.now = () => ahoraReal() + 61 * 60 * 1000;
+  try {
+    pedir('5492944200005', '1/4 de jamon');
+    await sinc.mandarBandeja();
+  } finally { Date.now = ahoraReal; }
   const gramos = sitio.pedidos[sitio.pedidos.length - 1];
-  chequear('con un sitio que acepta gramos: va en gramos, con el precio por kilo', gramos.items.length === 1
+  chequear('una hora después prueba de nuevo, sin reiniciar: va en gramos, con el precio por kilo', gramos.items.length === 1
     && gramos.items[0].gramos === 250 && gramos.items[0].precioCentavos === 1500000 && gramos.items[0].cantidad === undefined);
 
   console.log('\n— 5. Ping, token y lo que sale mal —');
