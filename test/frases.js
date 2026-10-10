@@ -195,7 +195,11 @@ const TURNOS_EN_PASO = () => {
   caso('"jajaja" a mitad: silencio', [...hastaHora, 'jajaja'], { silencio: true });
   caso('"me arrepentí, cancelá" a mitad (sin turno): lo deja', [`quiero ${s1}`, 'cancelalo'], { incluye: 'no reservé nada', estado: 'inicio' });
   caso(`"el ${D1.nombre}" eligiendo el día: ese día`, [`quiero ${s1}`, `el ${nombreDia(D1)}`], { incluye: 'Horarios libres', estado: 'eligiendo_hora' });
-  caso('"mañana" eligiendo el día', [`quiero ${s1}`, 'mañana'], { estado: 'eligiendo_hora' }, () => {});
+  // Si mañana el local está cerrado (un sábado, con el domingo cerrado), lo dice y ofrece otros días: el caso no puede
+  // depender del día en que se corre el test.
+  const manana = fechas.aTexto(new Date(Date.now() + 86400000)).slice(0, 10);
+  caso('"mañana" eligiendo el día', [`quiero ${s1}`, 'mañana'], config.horarios[fechas.nombreDia(manana)]
+    ? { estado: 'eligiendo_hora' } : { estado: 'eligiendo_dia', incluye: 'no tengo lugar' });
   const conNombre = (de) => qClientas.guardarNombre(qClientas.obtenerOCrear(de).id, 'Sofi');
   caso(`"a las 5" eligiendo la hora: las 17`, [`quiero ${s1} el ${nombreDia(D2)}`, 'a las 5'], { incluye: ['repasemos', '17:00'] }, conNombre);
   caso('"16 hs" eligiendo la hora', [`quiero ${s1} el ${nombreDia(D2)}`, '16 hs'], { incluye: ['repasemos', '16:00'] }, conNombre);
