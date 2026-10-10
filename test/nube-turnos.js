@@ -154,6 +154,15 @@ const servidor = http.createServer((req, res) => {
   const viejo = qTurnos.crear(caro, sinSena.id, a('19:00'), a('19:30'), 'cancelado');
   chequear('uno cancelado antes de mandarlo no viaja', (await sinc.mandarTurnos()) === 0 && !sitio.turnos.some((t) => t.id === qTurnos.porId(viejo).nube_id));
 
+  console.log('\n— 6. Los servicios vienen de la app —');
+  const qServicios = require('../src/db/consultas/servicios');
+  db.sembrarServicios([{ ...semi, precio: semi.precio + 2000 }]);
+  const activos = qServicios.activos();
+  chequear('uno borrado en la app deja de ofrecerse; el precio nuevo vale', activos.length === 1 && activos[0].id === semi.id && activos[0].precio === semi.precio + 2000);
+  chequear('el borrado no se pierde (los turnos viejos lo nombran)', qServicios.porId(sinSena.id) && !qServicios.porId(sinSena.id).activo);
+  db.sembrarServicios(config.servicios);
+  chequear('si vuelve, se ofrece de nuevo', qServicios.activos().length === config.servicios.length);
+
   servidor.close();
   console.log(fallas ? `\n❌ ${fallas} chequeos de turnos con Nodo Sur fallaron` : '\n✅ Turnos con Nodo Sur OK');
   process.exit(fallas ? 1 : 0);

@@ -41,11 +41,17 @@ function sembrarServicios(servicios) {
       precio = excluded.precio, sena = excluded.sena, catalogo_id = excluded.catalogo_id,
       alias = excluded.alias
   `);
-  const tx = db.transaction((lista) => lista.forEach((s) => up.run({
-    ...s,
-    catalogo_id: s.catalogo_id ?? '',
-    alias: Array.isArray(s.alias) ? s.alias.join(',') : (s.alias ?? ''),
-  })));
+  // Un servicio que ya no está en la lista (lo borraron en la app de Nodo Sur, o de config.json) deja de ofrecerse. No se borra:
+  // los turnos viejos lo siguen nombrando.
+  const apagarResto = db.prepare(`UPDATE servicios SET activo = CASE WHEN id IN (SELECT value FROM json_each(?)) THEN 1 ELSE 0 END`);
+  const tx = db.transaction((lista) => {
+    lista.forEach((s) => up.run({
+      ...s,
+      catalogo_id: s.catalogo_id ?? '',
+      alias: Array.isArray(s.alias) ? s.alias.join(',') : (s.alias ?? ''),
+    }));
+    if (lista.length) apagarResto.run(JSON.stringify(lista.map((s) => s.id)));
+  });
   tx(servicios);
 }
 
