@@ -81,7 +81,7 @@ chequear('los datos parciales también', JSON.parse(guardada.datos_conv).servici
 // Simulamos reinicio: motor nuevo, lee el estado de la DB
 const motor2 = crearMotor(config);
 r = motor2.procesarMensaje({ de: C1, texto: '1' });
-chequear('después del reinicio sigue donde estaba', txt(r, C1).includes('horarios libres'));
+chequear('después del reinicio sigue donde estaba', /horarios libres/i.test(txt(r, C1)));
 
 const C2 = '5492944003002';
 decir(C2, 'hola'); decir(C2, '1');

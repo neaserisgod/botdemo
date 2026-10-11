@@ -4,6 +4,9 @@
 const cron = require('node-cron');
 const configuracion = require('./config');
 const config = configuracion.cargar(); // valida y avisa si algo está mal
+// El pin del local para "ubicación" (sale a internet si el link de Maps es corto): no frena el arranque.
+const { resolverCoordenadas } = require('./mapa');
+resolverCoordenadas(config);
 const db = require('./db');
 const qTurnos = require('./db/consultas/turnos');
 
@@ -233,6 +236,7 @@ function recargarConfig() {
   if (problemas.length) return problemas;
   db.sembrarServicios(config.servicios || []);
   programarTareas();
+  resolverCoordenadas(config);
   return [];
 }
 

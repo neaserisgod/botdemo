@@ -207,7 +207,7 @@ const C8 = '5492944888888';
 r = decir(C8, `hola queria reservar para el ${DIA_TXT}`); // sin servicio
 chequear('sin servicio: pide servicio y recuerda el día', textoPara(r, C8).includes('¿Qué servicio'));
 r = decir(C8, 'semipermanente');
-chequear('al elegir servicio usa el día guardado', textoPara(r, C8).includes('Horarios libres') || textoPara(r, C8).includes('no tengo lugar'));
+chequear('al elegir servicio usa el día guardado', /horarios libres/i.test(textoPara(r, C8)) || textoPara(r, C8).includes('no tengo lugar'));
 
 const C9 = '5492944999999';
 r = decir(C9, `quiero kapping el ${DIA_TXT} a las 11`); // 11:00 la acaba de tomar C7
