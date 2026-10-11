@@ -57,8 +57,7 @@ function procesar(config, clienta, msj) {
     // Ítem sin mapear en la DB (catalogo_id vacío o viejo): ofrecemos la lista
     // igual — la clienta ya mostró que quiere reservar.
     ctx.datos = {};
-    return responder(ctx, 'eligiendo_servicio',
-      `¡Buenísimo! ¿Qué servicio querés?\n\n${listaServicios(ctx.config)}\n\nRespondé con el número (o *menú* para volver al principio).`);
+    return preguntarServicio(ctx);
   }
 
   // "menú" / "volver" / "empezar de nuevo" funcionan en cualquier estado.
@@ -127,6 +126,20 @@ function menu(ctx, saludo) {
     `${encabezado}¿Qué necesitás?\n\n*1* — Reservar un turno ${ctx.config.textos.emoji}\n*2* — Ver precios\n*3* — Ubicación y horarios\n*4* — Hablar con una persona\n\nRespondé con el número.`);
 }
 
+// Un negocio que todavía no cargó servicios (recién instalado en Nodo Sur Servicios) no ofrece los de ejemplo: pasa la charla a
+// una persona (El dueño, 2026-10-10: aparecían los servicios de demo de uñas). Null si hay servicios.
+function sinServicios(ctx) {
+  if (qServicios.activos().length) return null;
+  ctx.datos = {};
+  return derivarAHumano(ctx, '(quiere un turno o precios, pero todavía no hay servicios cargados en la app)',
+    'Todavía estamos cargando los servicios por acá 🙏 Le aviso a quien atiende y te responde personalmente en un ratito.');
+}
+
+function preguntarServicio(ctx) {
+  return sinServicios(ctx) || responder(ctx, 'eligiendo_servicio',
+    `¡Buenísimo! ¿Qué servicio querés?\n\n${listaServicios(ctx.config)}\n\nRespondé con el número (o *menú* para volver al principio).`);
+}
+
 function listaServicios(config, servicios = qServicios.activos()) {
   return servicios.map(
     (s) => `*${s.id}* — ${s.nombre} (${s.duracion_min} min) $${s.precio}${s.sena ? ` — seña $${s.sena}` : ''}`
@@ -183,10 +196,9 @@ function inicio(ctx) {
   if (op && op <= 4) t = String(op);
   if (t === '1') {
     ctx.datos = {};
-    return responder(ctx, 'eligiendo_servicio',
-      `¡Buenísimo! ¿Qué servicio querés?\n\n${listaServicios(ctx.config)}\n\nRespondé con el número (o *menú* para volver al principio).`);
+    return preguntarServicio(ctx);
   }
-  if (t === '2') return responder(ctx, 'inicio', faq.precios(listaServicios(ctx.config)));
+  if (t === '2') return sinServicios(ctx) || responder(ctx, 'inicio', faq.precios(listaServicios(ctx.config)));
   if (t === '3') return responder(ctx, 'inicio', faq.ubicacionYHorarios(ctx.config));
   if (t === '4') return derivarAHumano(ctx, '(pidió hablar con una persona)');
 
@@ -257,7 +269,7 @@ function entender(ctx, paso = null) {
   if (esPreguntaDePrecio(ctx, t) && !quiereFecha) {
     const precios = `💰 ${nombrados.map((s) => `*${s.nombre}* (${s.duracion_min} min): $${s.precio}${s.sena ? ` — seña $${s.sena}` : ''}`).join('\n')}`;
     if (paso) return seguirEnPaso(ctx, paso, responder(ctx, estado, nombrados.length ? precios : faq.precios(listaServicios(ctx.config))));
-    if (!nombrados.length) return responder(ctx, 'inicio', faq.precios(listaServicios(ctx.config)));
+    if (!nombrados.length) return sinServicios(ctx) || responder(ctx, 'inicio', faq.precios(listaServicios(ctx.config)));
     if (nombrados.length === 1) ctx.datos.ofrecido = nombrados[0].id;
     const cola = nombrados.length === 1
       ? '¿Querés reservarlo? Respondé *sí*, o *2* para ver todos los precios.'
@@ -286,8 +298,7 @@ function entender(ctx, paso = null) {
     // "quería reservar para el viernes a las 10" sin decir el servicio:
     // guardamos día/hora y los usamos apenas elija el servicio.
     ctx.datos = { fh };
-    return responder(ctx, 'eligiendo_servicio',
-      `¡Buenísimo! ¿Qué servicio querés?\n\n${listaServicios(ctx.config)}\n\nRespondé con el número (o *menú* para volver al principio).`);
+    return preguntarServicio(ctx);
   }
 
   return null;
