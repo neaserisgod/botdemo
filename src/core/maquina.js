@@ -151,7 +151,7 @@ function listaServicios(config, servicios = qServicios.activos()) {
 // le pasa la pregunta a la dueña y SIGUE atendiendo: por "¿aceptan tarjeta?" no se calla una hora en ese chat.
 function responderTema(ctx, tm, porDefecto = {}, estado = 'inicio') {
   if (tm.tema === 'pregunta') return responder(ctx, estado, tm.respuesta);
-  if (tm.tema === 'horarios' || tm.tema === 'ubicacion') return responder(ctx, estado, faq.ubicacionYHorarios(ctx.config));
+  if (tm.tema === 'horarios' || tm.tema === 'ubicacion') return faq.conPin(responder(ctx, estado, faq.ubicacionYHorarios(ctx.config)), ctx.config);
   const respuesta = ctx.config.respuestas?.[tm.tema] || porDefecto[tm.tema];
   if (respuesta) return responder(ctx, estado, respuesta);
   return responder(ctx, estado, `Eso te lo confirma ${ctx.config.textos.quien_atiende} por acá en un ratito 🙌 Mientras, si querés otra cosa, escribime.`,
@@ -199,7 +199,7 @@ function inicio(ctx) {
     return preguntarServicio(ctx);
   }
   if (t === '2') return sinServicios(ctx) || responder(ctx, 'inicio', faq.precios(listaServicios(ctx.config)));
-  if (t === '3') return responder(ctx, 'inicio', faq.ubicacionYHorarios(ctx.config));
+  if (t === '3') return faq.conPin(responder(ctx, 'inicio', faq.ubicacionYHorarios(ctx.config)), ctx.config);
   if (t === '4') return derivarAHumano(ctx, '(pidió hablar con una persona)');
 
   return entender(ctx) || enojo(ctx) || (() => {

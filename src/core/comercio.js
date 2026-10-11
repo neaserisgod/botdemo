@@ -79,7 +79,7 @@ function inicio(ctx, estado = 'inicio') {
 
   if (t === '1') return responder(ctx, 'consultando', `Decime qué producto buscás y te paso el precio y si hay ${ctx.config.textos.emoji}\n(por ejemplo: *coca*, *pan lactal*)`);
   if (t === '2') return empezarPedido(ctx);
-  if (t === '3') return responder(ctx, 'inicio', faq.ubicacionYHorarios(ctx.config));
+  if (t === '3') return faq.conPin(responder(ctx, 'inicio', faq.ubicacionYHorarios(ctx.config)), ctx.config);
   if (t === '4') return derivarAHumano(ctx, '(pidió hablar con una persona)');
 
   const norm = nlu.normalizar(t);

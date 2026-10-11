@@ -62,6 +62,8 @@ function construir() {
   if (process.env.BOT_EN_APP) {
     config.servicios = [];
     config.senas = { ...(config.senas || {}), habilitadas: false, alias_mp: '', titular: '' };
+    // Tampoco la dirección ni el link de Maps de ejemplo: si el negocio no los cargó, no se dicen.
+    config.negocio = { ...(config.negocio || {}), direccion: '', ubicacion_maps: '' };
   }
   const capas = [];
   let rubroPropio = null;

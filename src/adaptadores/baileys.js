@@ -4,6 +4,8 @@
 // vincular acá agrega un dispositivo nuevo a la cuenta, no desloguea nada).
 const fs = require('fs');
 const path = require('path');
+const { separarOpciones } = require('../core/opciones');
+const { crearRegistroEncuestas, descifrarVoto } = require('./encuestas');
 
 function crearAdaptador(config, hooks) {
   // Baileys 7 (2026-10-09): con la 6 (ya "legacy") ningún mensaje entrante se podía descifrar ("Bad MAC") desde que
@@ -25,6 +27,9 @@ function crearAdaptador(config, hooks) {
   fs.mkdirSync(dirMedia, { recursive: true });
 
   const logger = pino({ level: 'silent' }); // el ruido de baileys no nos sirve
+  // Menús como encuesta (`core/opciones.js`); `"encuestas": false` en config.json vuelve a los números escritos.
+  const conEncuestas = config.encuestas !== false;
+  const encuestas = crearRegistroEncuestas({ ruta: require('../rutas').enDatos('encuestas.json') });
   let sock = null;
   let cerrando = false;
   let reconectando = false;
@@ -246,7 +251,11 @@ function crearAdaptador(config, hooks) {
     if (remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') return;
     const de = await numeroDe(msg, remoteJid);
 
+    // Tildes azules: la clienta ve que el mensaje se leyó (El dueño, 2026-10-11).
+    sock.readMessages([msg.key]).catch(() => {});
+
     const m = msg.message;
+    if (m.pollUpdateMessage) { await procesarVoto(msg, de); return; }
     const texto = m.conversation
       || m.extendedTextMessage?.text
       || m.imageMessage?.caption
@@ -269,15 +278,84 @@ function crearAdaptador(config, hooks) {
     // Audio o nota de voz: el bot no los escucha, pero le avisa al cliente (ver motor.js).
     const tipo = m.audioMessage ? 'audio' : null;
     const salientes = hooks.alRecibir({ de, texto, rutaImagen, productoId, tipo });
-    await enviarTodos(salientes);
+    await enviarTodos(salientes, { respondiendo: de });
+  }
+
+  // Un voto en una encuesta del bot: vuelve al núcleo como el número de la opción (`adaptadores/encuestas.js`).
+  async function procesarVoto(msg, de) {
+    const pu = msg.message.pollUpdateMessage;
+    const id = pu.pollCreationMessageKey?.id;
+    const encuesta = encuestas.vigente(id, de);
+    if (!encuesta) {
+      // Una encuesta vieja: lo que se elija ahí ya no corresponde a esta parte de la charla.
+      await enviarTodos([{ para: de, texto: 'Esa encuesta ya pasó 😊 Contestame la última, o escribime lo que necesitás.' }], { respondiendo: de });
+      return;
+    }
+    const yo = sock.user || {};
+    const normal = (j) => (j ? baileys.jidNormalizedUser(j) : null);
+    const voto = descifrarVoto(baileys.decryptPollVote, {
+      voto: pu.vote,
+      secreto: encuesta.mensaje?.messageContextInfo?.messageSecret,
+      idEncuesta: id,
+      creadores: [normal(yo.id), normal(yo.lid)],
+      votantes: [msg.key.participant, msg.key.participantAlt, msg.key.remoteJid, msg.key.remoteJidAlt, jidDe(de), `${de}@s.whatsapp.net`].map(normal),
+    });
+    if (!voto) {
+      console.error(`No pude descifrar un voto de ${de} (encuesta ${id})`);
+      await enviarTodos([{ para: de, texto: 'Perdón, no pude leer lo que marcaste 😅 ¿Me lo escribís?' }], { respondiendo: de });
+      return;
+    }
+    const numero = encuestas.votar(id, voto.selectedOptions);
+    if (numero === null) return; // sacó el voto
+    if (process.env.DEPURAR) console.log(`[voto] de=${de} encuesta=${id} opción=${numero}`);
+    const salientes = hooks.alRecibir({ de, texto: String(numero) });
+    await enviarTodos(salientes, { respondiendo: de });
   }
 
   const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // Devuelve los mensajes que SÍ salieron, para que el llamador sepa qué se
   // envió de verdad (lo usan los recordatorios antes de marcarlos).
-  async function enviarTodos(salientes) {
+  // "Escribiendo…" antes de contestar (El dueño, 2026-10-11): un segundo, más si el mensaje es largo, nunca más de dos. Solo
+  // al contestarle a alguien que acaba de escribir: los recordatorios y avisos salen sin esperar.
+  async function escribiendo(jid, texto) {
+    try {
+      await sock.sendPresenceUpdate('composing', jid);
+      await dormir(Math.min(2000, 600 + (texto || '').length * 8));
+    } catch { /* si no se puede mostrar, se contesta igual */ }
+  }
+
+  // El texto de un menú: como encuesta si se puede (`core/opciones.js`), y si la encuesta no sale, como siempre.
+  // `conEncuesta`: a quiénes ya se les mandó una encuesta en esta misma tanda (un texto que viene después en la misma respuesta
+  // no la anula: es parte de lo mismo).
+  async function enviarTexto(jid, s, conEncuesta) {
+    const partes = conEncuestas ? separarOpciones(s.texto) : null;
+    if (!partes) {
+      recordarEnviado(await sock.sendMessage(jid, { text: s.texto }));
+      if (!conEncuesta.has(s.para)) encuestas.olvidar(s.para);
+      return;
+    }
+    if (partes.texto) recordarEnviado(await sock.sendMessage(jid, { text: partes.texto }));
+    try {
+      const r = await sock.sendMessage(jid, {
+        poll: { name: partes.pregunta, values: partes.opciones.map((o) => o.texto), selectableCount: 1 },
+      });
+      recordarEnviado(r);
+      encuestas.registrar(r?.key?.id, s.para, partes.opciones, r?.message);
+      conEncuesta.add(s.para);
+    } catch (e) {
+      console.error(`No salió la encuesta a ${s.para} (${e.message}): mando la lista con números`);
+      const lista = partes.opciones.map((o) => `*${o.numero}* — ${o.texto}`).join('\n');
+      recordarEnviado(await sock.sendMessage(jid, { text: `${partes.pregunta}\n\n${lista}\n\nRespondé con el número.` }));
+      encuestas.olvidar(s.para);
+    }
+  }
+
+  // Devuelve los mensajes que SÍ salieron, para que el llamador sepa qué se
+  // envió de verdad (lo usan los recordatorios antes de marcarlos).
+  async function enviarTodos(salientes, { respondiendo } = {}) {
     const enviados = [];
+    const conEncuesta = new Set();
     for (const s of salientes || []) {
       try {
         // demora: los envíos masivos van espaciados para no disparar el
@@ -285,6 +363,7 @@ function crearAdaptador(config, hooks) {
         if (s.demora) await dormir(s.demora);
 
         const jid = jidDe(s.para);
+        if (respondiendo && s.para === respondiendo) await escribiendo(jid, s.texto);
         if (s.imagenRuta && fs.existsSync(s.imagenRuta)) {
           recordarEnviado(await sock.sendMessage(jid, { image: fs.readFileSync(s.imagenRuta), caption: s.texto }));
         } else if (s.adjunto && fs.existsSync(s.adjunto.ruta)) {
@@ -295,13 +374,25 @@ function crearAdaptador(config, hooks) {
             caption: s.texto,
           }));
         } else {
-          recordarEnviado(await sock.sendMessage(jid, { text: s.texto }));
+          await enviarTexto(jid, s, conEncuesta);
+        }
+        // El pin del local, después de la dirección escrita (`src/mapa.js`).
+        if (s.ubicacion) {
+          try {
+            recordarEnviado(await sock.sendMessage(jid, {
+              location: {
+                degreesLatitude: s.ubicacion.lat, degreesLongitude: s.ubicacion.lng,
+                name: s.ubicacion.nombre, address: s.ubicacion.direccion,
+              },
+            }));
+          } catch (e) { console.error(`No salió el pin del local a ${s.para}:`, e.message); }
         }
         enviados.push(s);
       } catch (e) {
         console.error(`No pude enviar a ${s.para}:`, e.message);
       }
     }
+    if (respondiendo) sock.sendPresenceUpdate('paused', jidDe(respondiendo)).catch(() => {});
     return enviados;
   }
 

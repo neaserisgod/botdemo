@@ -66,6 +66,21 @@ Se elige al arrancar: `node src/index.js --adaptador=baileys`.
 
 Esto es lo que permitió, entre otras cosas, migrar de whatsapp-web.js a Baileys sin tocar una línea de lógica de negocio, y tener más de 900 chequeos que corren sin WhatsApp.
 
+### Lo que pone el adaptador de Baileys (El dueño, 2026-10-11)
+
+El núcleo sigue escribiendo texto; el adaptador lo hace más cómodo en WhatsApp sin que el núcleo se entere:
+
+- **Encuestas**: un menú numerado (`*1* — …`) sale como encuesta (`core/opciones.js`), y el voto vuelve al núcleo como el
+  número de la opción. Solo vale la última encuesta de cada persona, una vez (`adaptadores/encuestas.js`, que también la
+  guarda en `encuestas.json` para que sobreviva a un reinicio). Baileys 7 no descifra los votos solo: se descifran ahí,
+  probando las identidades (número o @lid). Con `"encuestas": false` en config.json, vuelven los números escritos.
+- **"Escribiendo…" y leído**: el mensaje de la clienta queda con tildes azules y antes de contestar se ve "escribiendo…".
+- **Pin del local**: la respuesta de ubicación lleva `ubicacion` (`flujos/faq.js`, `conPin`) si se conocen las coordenadas,
+  que salen del link de Google Maps del negocio (`src/mapa.js`, sigue el link corto de "Compartir").
+
+Además, el núcleo nunca lista más de 10 horarios o días (`maquina.js`, `ofrecerHoras`): con más, van repartidos en el día,
+y la clienta puede escribir otra hora o "a la tarde". En una encuesta entran 12.
+
 ---
 
 ## 4. El viaje de un mensaje, punta a punta
