@@ -14,7 +14,7 @@
     "baileys": "node src/index.js --adaptador=baileys",
     "consola": "node src/index.js --adaptador=consola",
     "probar": "node scripts/probar.js",
-    "test": "node test/simulacion.js && node test/escenarios.js && node test/limites.js && node test/plantillas.js && node test/comercio.js && node test/nube.js && node test/nube-turnos.js && node test/sin-servicios.js && node test/frases.js && node test/probar.js"
+    "test": "node test/simulacion.js && node test/escenarios.js && node test/limites.js && node test/plantillas.js && node test/comercio.js && node test/nube.js && node test/nube-turnos.js && node test/sin-servicios.js && node test/frases.js && node test/opciones.js && node test/muchos-horarios.js && node test/probar.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",

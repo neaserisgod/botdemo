@@ -433,7 +433,9 @@ function elegirServicio(ctx, servicio, fh) {
     return responder(ctx, 'inicio', `Uy, no tengo horarios libres en los próximos días 😔 Escribí *4* si querés coordinar directo con ${ctx.config.textos.quien_atiende}.`);
   }
   ctx.datos.dias = dias;
-  const listaDias = dias.map((d, i) => `*${i + 1}* — ${fechas.diaLindo(d)}`).join('\n');
+  // Como los horarios (MAX_HORAS): hasta 10 días en la lista; uno más lejano se escribe ("el jueves 23", "23/10").
+  const otroDia = dias.length > MAX_HORAS ? `\nSi querés otro día, escribí la fecha (por ejemplo *${Number(dias[dias.length - 1].slice(8))}/${Number(dias[dias.length - 1].slice(5, 7))}*).` : '';
+  const listaDias = `${dias.slice(0, MAX_HORAS).map((d, i) => `*${i + 1}* — ${fechas.diaLindo(d)}`).join('\n')}${otroDia}`;
 
   if (fh.dia) {
     // ¿Pidió una fecha más allá de lo que agendamos?
@@ -448,8 +450,7 @@ function elegirServicio(ctx, servicio, fh) {
         `Uy, el ${fechas.diaLindo(fh.dia)} no tengo lugar para *${servicio.nombre}* 😕 Estos días sí puedo:\n\n${listaDias}\n\nRespondé con el número, *0* para volver o *menú* para empezar de nuevo.`);
     }
     ctx.datos.dia = fh.dia;
-    ctx.datos.horas = horas;
-    const listaHoras = horas.map((h, j) => `*${j + 1}* — ${h}`).join('\n');
+    ctx.datos.libres = horas;
 
     if (fh.hora && horas.includes(fh.hora)) {
       // Vino todo: servicio + día + hora → derecho al nombre o la confirmación
@@ -461,11 +462,9 @@ function elegirServicio(ctx, servicio, fh) {
       return resumenParaConfirmar(ctx);
     }
     if (fh.hora) {
-      return responder(ctx, 'eligiendo_hora',
-        `Uy, a las ${fh.hora} no tengo lugar el ${fechas.diaLindo(fh.dia)} 😕 Ese día puedo:\n\n${listaHoras}\n\nRespondé con el número, *0* para volver o *menú* para empezar de nuevo.`);
+      return ofrecerHoras(ctx, horas, `Uy, a las ${fh.hora} no tengo lugar el ${fechas.diaLindo(fh.dia)} 😕`, { cerca: fh.hora });
     }
-    return responder(ctx, 'eligiendo_hora',
-      `*${servicio.nombre}* el ${fechas.diaLindo(fh.dia)} 👌 Horarios libres:\n\n${listaHoras}\n\nRespondé con el número, *0* para volver o *menú* para empezar de nuevo.`);
+    return ofrecerHoras(ctx, horas, `*${servicio.nombre}* el ${fechas.diaLindo(fh.dia)} 👌`);
   }
 
   return responder(ctx, 'eligiendo_dia',
@@ -509,18 +508,65 @@ function pedirHorarios(ctx, dia) {
   if (!horas.length) return noEntendi(ctx, 'Ese día se acaba de llenar 😅 Elegí otro de la lista.');
 
   ctx.datos.dia = dia;
-  ctx.datos.horas = horas;
-  const lista = horas.map((h, j) => `*${j + 1}* — ${h}`).join('\n');
+  ctx.datos.libres = horas;
+  return ofrecerHoras(ctx, horas, `${fechas.diaLindo(dia)} 👌`);
+}
+
+// ---------- muchos horarios ----------
+// Un día con lugar de 9 a 20 cada 15 minutos son más de 40 horarios: una lista así no se lee, y en una encuesta de WhatsApp
+// entran 12 (El dueño, 2026-10-11: "que si hay muchos horarios disponibles no se mande una lista de 60 opciones"). Nunca se
+// muestran más de MAX_HORAS: si hay más, van repartidos a lo largo del día (en punto, si alcanzan), y abajo se dice que
+// puede escribir otra hora o la parte del día ("a la tarde"). Cualquier hora libre escrita ("10:15") anda siempre, aunque no
+// esté en la lista, y si pide una ocupada se le ofrecen las más cercanas.
+const MAX_HORAS = 10;
+const PARTES = { manana: 'a la mañana', mediodia: 'al mediodía', tarde: 'a la tarde', noche: 'a la noche' };
+
+const aMinutos = (h) => { const [hh, mm] = h.split(':').map(Number); return hh * 60 + mm; };
+
+// Hasta MAX_HORAS repartidos parejo entre el primero y el último; si hay suficientes en punto (10:00), solo esos.
+function repartidas(horas) {
+  if (horas.length <= MAX_HORAS) return horas;
+  const enPunto = horas.filter((h) => h.endsWith(':00'));
+  const base = enPunto.length >= Math.min(4, MAX_HORAS) ? enPunto : horas;
+  if (base.length <= MAX_HORAS) return base;
+  const elegidas = [];
+  for (let i = 0; i < MAX_HORAS; i++) elegidas.push(base[Math.round((i * (base.length - 1)) / (MAX_HORAS - 1))]);
+  return [...new Set(elegidas)];
+}
+
+// Los más cercanos a la hora que pidió (que estaba ocupada), en orden.
+function cercanas(horas, hora, cuantas = 6) {
+  const m = aMinutos(hora);
+  return [...horas].sort((a, b) => Math.abs(aMinutos(a) - m) - Math.abs(aMinutos(b) - m)).slice(0, cuantas).sort();
+}
+
+const OTRA_HORA = 'Si querés otro horario, escribilo (por ejemplo *10:30*) o decime *a la mañana* o *a la tarde*.';
+
+// Ofrece horarios del día sin pasarse de MAX_HORAS. `horas`: entre cuáles elegir (todos los libres, o los de una parte del
+// día); `ctx.datos.libres` sigue siendo todos los libres, para lo que escriba. Con `cerca`, los más cercanos a esa hora.
+function ofrecerHoras(ctx, horas, encabezado, { cerca } = {}) {
+  if (!ctx.datos.libres) ctx.datos.libres = horas;
+  let mostrar = horas;
+  let nota = null;
+  if (horas.length > MAX_HORAS) {
+    mostrar = cerca ? cercanas(horas, cerca) : repartidas(horas);
+    nota = OTRA_HORA;
+  }
+  ctx.datos.horas = mostrar;
+  const lista = mostrar.map((h, j) => `*${j + 1}* — ${h}`).join('\n');
+  const titulo = cerca ? `${encabezado} Lo más cerca que tengo:` : `${encabezado} Horarios libres:`;
   return responder(ctx, 'eligiendo_hora',
-    `${fechas.diaLindo(dia)} — horarios libres:\n\n${lista}\n\nRespondé con el número, *0* para volver o *menú* para empezar de nuevo.`);
+    `${titulo}\n\n${lista}\n\n${nota ? `${nota}\n` : ''}Respondé con el número, *0* para volver o *menú* para empezar de nuevo.`);
 }
 
 function eligiendo_hora(ctx) {
   if (ctx.texto === '0') { ctx.datos = {}; return menu(ctx); }
   const horas = ctx.datos.horas || [];
-  // ¿Escribió la hora directa? "10:30" o "10.30" → buscarla en la lista
+  // Todos los libres del día: la lista puede mostrar solo algunos (MAX_HORAS), pero cualquier hora libre escrita vale.
+  const libres = ctx.datos.libres || horas;
+  // ¿Escribió la hora directa? "10:30" o "10.30" → buscarla entre los libres
   const hLit = ctx.texto.match(/^(\d{1,2})[:.](\d{2})$/);
-  let hora = hLit ? horas.find((h) => h === `${hLit[1].padStart(2, '0')}:${hLit[2]}`) : null;
+  let hora = hLit ? libres.find((h) => h === `${hLit[1].padStart(2, '0')}:${hLit[2]}`) : null;
   // "a las 5", "16 hs", "tipo 4 y media": la hora, no el número de opción ("a las 5" son las 17 si a las 5 no hay).
   // Un número solo ("5") sigue siendo la opción de la lista, que es lo que se le pidió.
   const fh = hLit ? {} : nlu.extraerFechaHora(ctx.msj.texto || '');
@@ -528,11 +574,17 @@ function eligiendo_hora(ctx) {
   if (!hora && fh.hora) {
     const [h, m] = fh.hora.split(':').map(Number);
     const tarde = `${String(h + 12).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    hora = horas.find((x) => x === fh.hora) || (fh.horaAmbigua ? horas.find((x) => x === tarde) : null);
+    hora = libres.find((x) => x === fh.hora) || (fh.horaAmbigua ? libres.find((x) => x === tarde) : null);
     if (!hora) {
-      return responder(ctx, 'eligiendo_hora',
-        `Uy, a esa hora no tengo lugar ese día 😕 Estos horarios sí:\n\n${horas.map((x, j) => `*${j + 1}* — ${x}`).join('\n')}\n\nRespondé con el número, o *0* para volver.`);
+      const pedida = fh.horaAmbigua && aMinutos(fh.hora) < 9 * 60 ? tarde : fh.hora;
+      return ofrecerHoras(ctx, libres, 'Uy, a esa hora no tengo lugar ese día 😕', { cerca: pedida });
     }
+  }
+  // "a la tarde": los de esa parte del día (sin hora no hay número que confundir).
+  if (!hora && fh.franja && !fh.hora) {
+    const enFranja = libres.filter((h) => nlu.enFranja(h, fh.franja));
+    if (enFranja.length) return ofrecerHoras(ctx, enFranja, `${fechas.diaLindo(ctx.datos.dia)}, ${PARTES[fh.franja] || 'en ese rato'} 👌`);
+    return ofrecerHoras(ctx, libres, `${fechas.diaLindo(ctx.datos.dia)} no tengo lugar ${PARTES[fh.franja] || 'en ese rato'} 😕`);
   }
   if (!hora) {
     const nums = numerosDe(ctx.texto);
