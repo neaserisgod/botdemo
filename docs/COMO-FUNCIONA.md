@@ -318,7 +318,7 @@ Al arrancar, `src/config.js` lo valida y, si algo está mal, **no arranca** y ex
 
 ## 12. Tests
 
-Ocho suites, más de 900 chequeos, corren sin WhatsApp con `npm test` (con la configuración de ejemplo: no hace falta `config.json`):
+Catorce suites (la lista en `package.json`), más de 900 chequeos, corren sin WhatsApp con `npm test` (con la configuración de ejemplo: no hace falta `config.json`):
 
 - **`simulacion.js`** — el flujo completo: reservar, señar, recordar, cancelar, comandos, FAQ, catálogo, lenguaje natural.
 - **`escenarios.js`** — lo que sale mal: comprobantes con monto corto, destinatario ajeno o duplicados; carreras por el mismo horario; comandos mal usados; 40 clientas reservando en cadena; fuzzing con inyección SQL, textos de 5.000 caracteres y bytes nulos.
