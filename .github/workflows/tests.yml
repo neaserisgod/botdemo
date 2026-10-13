@@ -1,0 +1,24 @@
+# El bot viaja adentro del APK de Nodo Sur Servicios tal como esté en main: que nada entre a main sin pasar los tests.
+name: tests
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Como en el celular: sin las opcionales (Chromium y better-sqlite3); usa el SQLite de Node.
+      - run: npm ci --omit=optional
+      - run: npm test
