@@ -312,9 +312,18 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
         }
         const local = qTurnos.porNubeId(x.id);
         // No es de este bot, o tiene un cambio propio sin mandar: gana el de acá, que sale en la próxima vuelta.
-        if (!local || local.nube_pendiente) continue;
+        if (!local) continue;
+        // Queda en el registro (Más › Bot de WhatsApp › Ver el registro) para saber qué pasó con cada cambio de la app (El dueño,
+        // 2026-10-13: "al reagendar un turno no notifica a la persona").
+        if (local.nube_pendiente) {
+          log.log(`Nodo Sur: el turno ${local.id} cambió en la app (${x.estado}), pero acá tiene un cambio sin mandar: queda el de acá.`);
+          continue;
+        }
         const aviso = aplicarCambioDeNube(local, x);
-        if (aviso) avisos.push(aviso);
+        if (aviso) {
+          log.log(`Nodo Sur: cambio de la app en el turno ${local.id} (${x.estado}): le aviso al cliente (…${String(aviso.para || '').slice(-4)}).`);
+          avisos.push(aviso);
+        }
       }
       desde = r.hasta ?? desde;
       cuenta.actualizar({ cursorTurnos: desde });
