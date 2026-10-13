@@ -3,4 +3,4 @@
 set -euo pipefail
 [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] || exit 0
 cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}"
-npm install --omit=optional --no-audit --no-fund >/dev/null
+npm install --omit=optional --no-save --no-audit --no-fund >/dev/null
