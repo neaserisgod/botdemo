@@ -14,6 +14,7 @@ const RUTA_DB = path.join(os.tmpdir(), `bot_prueba_${process.pid}.db`);
 process.env.RUTA_DB = RUTA_DB;
 
 const express = require('express');
+require('../src/zona').asegurarZona(); // misma hora que el bot de verdad
 const configuracion = require('../src/config');
 const db = require('../src/db');
 const catalogo = require('../src/core/catalogo');

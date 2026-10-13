@@ -68,7 +68,7 @@ Escaneás el QR (o usás código, ver abajo) y ya está funcionando. `config.jso
 | `npm run baileys` | Producción y pruebas reales (sin Chromium, anda en el celu) |
 | `npm run consola` | Probar el flujo entero sin WhatsApp |
 | `npm run demo` | whatsapp-web.js (alternativa en PC, usa Chromium) |
-| `npm test` | Las 14 suites de tests (más de 900 chequeos) |
+| `npm test` | Las 15 suites de tests (más de 900 chequeos) |
 
 En modo consola: `/soy <numero>` cambia de remitente (usá el `numero_duena` del config para probar los comandos `!`), `/foto <texto>` simula un comprobante, `/producto <id>` simula el catálogo.
 
