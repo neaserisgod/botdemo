@@ -28,7 +28,8 @@ TERMINOS = {
 
 FRASES_BIO = {
     **p.FRASES,
-    'reserva por mensaje': re.compile(r'(pedi|reserva|saca|agenda)\w*\s+(tu\s+|su\s+)?turno|turnos?\s+(por\s+)?(aca|abajo|link)'),
+    'reserva por mensaje': re.compile(
+        r'(pedi|reserva|saca|agenda)\w*\s+(tu\s+|su\s+)?turno|turnos?\s+(por\s+)?(aca|abajo|link)|agenda\s+abierta'),
 }
 # Palabras del rubro: sin alguna en la cuenta, el título o la bio, no es un negocio del rubro (filtra a "barbara_brc").
 DEL_RUBRO = {
@@ -37,6 +38,10 @@ DEL_RUBRO = {
     'peluqueria': re.compile(r'pelu|hair|estilist|color|corte|alisad'),
     'estetica': re.compile(r'estetic|ceja|pestan|lash|depil|facial|spa|beauty|belleza|brow'),
 }
+# Otra ciudad con el mismo nombre en otro país (Córdoba de España, Córdoba de Veracruz, Mendoza…): bandera, país o un
+# celular español (6xx xx xx xx). Los de Argentina llevan característica: 351…, 0351…, +54…
+OTRO_PAIS = re.compile(r'🇪🇸|🇲🇽|🇨🇴|🇨🇱|🇺🇾|🇵🇪|🇻🇪|🇺🇸|espana|spain|mexico|veracruz|colombia|\+34|\b[67]\d{2}\s?\d{2}\s?\d{2}\s?\d{2}\b'
+                       r'|cordobaver|andalucia|sevilla|madrid')
 NO_ES_CLIENTE = re.compile(r'insumos|mayorista|distribuidor|venta de productos|tienda|escuela|academia')
 
 
@@ -88,6 +93,8 @@ def buscar(consulta):
 
 def es_de_la_ciudad(resultado, ciudad, codigo):
     texto = p.normalizar(resultado['cuenta'] + ' ' + resultado['titulo'] + ' ' + resultado['texto'])
+    if OTRO_PAIS.search(texto) or OTRO_PAIS.search(resultado['texto']):  # las banderas no sobreviven a normalizar
+        return False
     return p.normalizar(ciudad) in texto or bool(codigo and re.search(r'(^|[^a-z])' + codigo.lower() + r'([^a-z]|$)',
                                                                         texto.replace('.', ' ').replace('_', ' ')))
 

@@ -45,7 +45,8 @@ APPS_DE_TURNOS = {
 # Páginas de "todos mis links": se analizan como la web del negocio.
 AGREGADORES = ('linktr.ee', 'beacons.ai', 'taplink.cc', 'bio.link', 'linkin.bio', 'campsite.bio')
 # Rutas de instagram.com que no son una cuenta.
-NO_CUENTAS_IG = {'p', 'reel', 'reels', 'explore', 'stories', 'accounts', 'tv', 'share', 'direct', 'about', 'developer'}
+NO_CUENTAS_IG = {'p', 'reel', 'reels', 'explore', 'stories', 'accounts', 'tv', 'share', 'direct', 'about', 'developer',
+                 'popular'}
 
 FRASES = {
     'turnos por WhatsApp/DM': re.compile(
@@ -58,7 +59,7 @@ FRASES = {
 
 def normalizar(texto):
     """Minúsculas y sin tildes ni ñ, para buscar frases sin importar cómo las escriban."""
-    t = unicodedata.normalize('NFKD', texto.lower())
+    t = unicodedata.normalize('NFKD', texto).lower()  # primero NFKD: '𝐓𝐔𝐑𝐍𝐎' → 'TURNO' → 'turno'
     return ''.join(c for c in t if not unicodedata.combining(c))
 
 

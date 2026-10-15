@@ -59,6 +59,29 @@ class Calificar(unittest.TestCase):
         self.assertTrue(b.calificar(self.r['insumos.brc'])['prioridad'].startswith('baja (vende insumos'))
 
 
+class OtrasCordobas(unittest.TestCase):
+    def r(self, texto, cuenta='x'):
+        return {'cuenta': cuenta, 'titulo': '', 'texto': texto}
+
+    def test_descarta_otros_paises(self):
+        self.assertFalse(b.es_de_la_ciudad(self.r('📞 666 38 79 01 📍Calle Manuel de Sandoval 12, Córdoba'), 'Córdoba', 'cba'))
+        self.assertFalse(b.es_de_la_ciudad(self.r('UÑAS Y GEMAS DENTALES CÓRDOBA 🇪🇸'), 'Córdoba', 'cba'))
+        self.assertFalse(b.es_de_la_ciudad(self.r('CITAS DISPONIBLES 📍#CÓRDOBAVER 🇲🇽'), 'Córdoba', 'cba'))
+
+    def test_acepta_argentina(self):
+        self.assertTrue(b.es_de_la_ciudad(self.r('Vz. Sarsfield 811 📞3517313800 Córdoba'), 'Córdoba', 'cba'))
+        self.assertTrue(b.es_de_la_ciudad(self.r('Córdoba Capital, Argentina 🇦🇷'), 'Córdoba', 'cba'))
+
+    def test_letras_decoradas_y_agenda_abierta(self):
+        r = b.calificar(self.r('634 Followers - on Instagram: "𝐔Ñ𝐀𝐒 📍𝐂Ó𝐑𝐃𝐎𝐁𝐀 👇🏻𝐑𝐄𝐒𝐄𝐑𝐕𝐀 𝐓𝐔 𝐓𝐔𝐑𝐍𝐎"'))
+        self.assertIn('reserva por mensaje', r['senales'])
+        self.assertEqual(r['prioridad'], 'alta')
+        self.assertIn('reserva por mensaje', b.calificar(self.r('on Instagram: "Semipermanente. Agenda abierta"'))['senales'])
+
+    def test_popular_no_es_cuenta(self):
+        self.assertIsNone(b.p.cuenta_instagram('https://www.instagram.com/popular/nails-cba/'))
+
+
 class Main(unittest.TestCase):
     def test_junta_filtra_y_guarda(self):
         consultas = []
