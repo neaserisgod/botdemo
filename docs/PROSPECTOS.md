@@ -2,6 +2,8 @@
 
 Cuentas encontradas en búsqueda web (agosto 2026), a partir del patrón de tu lista de Bariloche.
 
+> Para buscar más: `prospectar/` arma una planilla por ciudad y rubro (Google Places + Scrapling). Ver `prospectar/README.md`.
+
 > ⚠️ Salieron de resultados de búsqueda: **verificá cada una abriéndola** antes de escribirle. Algunas pueden estar inactivas o haber cambiado de handle.
 
 ---
