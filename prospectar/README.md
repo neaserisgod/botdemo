@@ -61,8 +61,28 @@ Respondió, Probó, Pagó) se agregan a mano, como en la planilla diaria de `men
 negocios sin web solo tienen las señales de Google. Esos van a "media" o "baja" aunque sean buenos prospectos: hay
 que mirarlos a mano.
 
+## Cuentas de Instagram, gratis y sin clave (`buscar_instagram.py`)
+
+Para home studios de uñas, que casi nunca están en Google Maps. Busca en DuckDuckGo `site:instagram.com nails
+Bariloche` (y uñas, barbería, peluquería, estética), sin entrar a Instagram. Cada resultado ya trae **seguidores y
+bio**, y con eso califica: punto dulce de 500 a 10.000 seguidores, "reservá tu turno" o "turnos por DM", seña, home
+studio. Descarta las cuentas de más de 50.000 seguidores y las que venden insumos o cursos, y saltea las que ya están en
+`docs/PROSPECTOS.md`.
+
+```bash
+python3 buscar_instagram.py --ciudad Bariloche --codigo brc --max 15
+python3 buscar_instagram.py --ciudad Neuquén --codigo nqn --rubro unas --max 30 --salida neuquen.csv
+```
+
+- Correrlo **desde la PC de casa**: desde un servidor en la nube, DuckDuckGo pide verificar que sos humano a las pocas
+  búsquedas. Hace una pausa de 8 segundos entre búsquedas. Si igual pide verificación, espera, reintenta una vez y
+  corta con lo que juntó.
+- Bing y Google no sirven: a un programa le devuelven resultados que no tienen nada que ver o lo bloquean.
+- Sale `instagram.csv`: Prioridad, Cuenta, Seguidores, Rubro, Ciudad, Señales, Bio y Link. Abrí cada cuenta antes de
+  escribirle (ver la última publicación: si no publicó hace meses, no sirve).
+
 ## Pruebas
 
 ```bash
-python3 -m unittest test_prospectar      # sin red: Google y las webs están simulados
+python3 -m unittest      # sin red: Google, DuckDuckGo y las webs están simulados
 ```
