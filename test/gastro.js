@@ -67,7 +67,8 @@ chequear('la hora se dice linda', gastro.textoHora(new Date(2026, 9, 17, 19, 30)
   && gastro.textoHora(new Date(2026, 9, 16, 20, 30), vie20) === 'a las 20:30');
 
 console.log('\n— 3. Formas y pagos —');
-chequear('cadete y reparto juntos se ofrecen como uno', gastro.formas({ pedidos: { retiro: true, cadete: true, reparto: true } }).length === 2);
+chequear('cadete y reparto juntos se ofrecen como uno', gastro.formas({ pedidos: { retiro: true, cadete: true, reparto: true, zonas: PEDIDOS.zonas } }).length === 2);
+chequear('sin zonas no se ofrece envío', gastro.formas({ pedidos: { retiro: true, cadete: true } }).length === 1);
 chequear('sin alias no se pide adelantado', gastro.pagos({ pedidos: { pago: 'adelantado' } }).join() === 'al_entregar');
 chequear('a elegir con alias: las dos', gastro.pagos(config).join() === 'al_entregar,alias');
 chequear('costo del envío en centavos', gastro.costoEnvio(cadete, PEDIDOS.zonas[1]) === 250000 && gastro.costoEnvio(retiro, PEDIDOS.zonas[1]) === 0);
@@ -245,6 +246,62 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   chequear('y sigue con la entrega', tc.includes('¿Cómo lo querés?'));
   r = motor.procesarMensaje({ de: C7, texto: '', carrito: [] });
   chequear('un carrito que no se pudo leer: que lo escriba', textoPara(r, C7).includes('No pude leer tu carrito'));
+
+  console.log('\n— 11. La carta copiada al catálogo de WhatsApp —');
+  const espejo = require('../src/core/espejo');
+  const carta = [
+    { gid: 'g-mila', nombre: 'Milanesa con papas', precioCentavos: 650000, hay: true },
+    { gid: 'g-empa', nombre: 'Empanada de carne', precioCentavos: 120000, hay: true },
+    { gid: 'g-flan', nombre: 'Flan casero', precioCentavos: 300000, hay: false },
+    { gid: 'g-tarta', nombre: 'Tarta de verdura', precioCentavos: 500000, hay: false },
+    { gid: 'g-pollo', nombre: 'Pollo al spiedo (por kg)', precioCentavos: 900000, hay: true },
+  ];
+  let plan = espejo.planEspejo({ items: carta, actuales: [] });
+  chequear('vacío: crea lo que hay, sin lo que no hay ni lo que va por peso', plan.crear.map((x) => x.retailerId).join() === 'ns-g-mila,ns-g-empa');
+  chequear('con el precio en milésimas', plan.crear[0].price === 6500000 && plan.crear[0].name === 'Milanesa con papas');
+  const actuales = [
+    { id: 'wa1', retailerId: 'ns-g-mila', name: 'Milanesa con papas', price: 6000000, isHidden: false },
+    { id: 'wa2', retailerId: 'ns-g-empa', name: 'Empanada de carne', price: 1200000, isHidden: false },
+    { id: 'wa3', retailerId: 'ns-g-flan', name: 'Flan casero', price: 3000000, isHidden: false },
+    { id: 'wa4', retailerId: 'ns-g-vieja', name: 'Lasagna', price: 7000000, isHidden: false },
+    { id: 'wa5', retailerId: 'SKU-A-MANO', name: 'Vino de la casa', price: 4000000, isHidden: false },
+    { id: 'wa6', retailerId: '', name: 'Promo sin código', price: 1000000, isHidden: false },
+  ];
+  plan = espejo.planEspejo({ items: carta, actuales });
+  chequear('cambia el precio que no coincide', plan.cambiar.some((x) => x.id === 'wa1' && x.price === 6500000));
+  chequear('lo que no hay se esconde, no se borra', plan.cambiar.some((x) => x.id === 'wa3' && x.isHidden === true));
+  chequear('lo que está igual no se toca', !plan.cambiar.some((x) => x.id === 'wa2'));
+  chequear('lo que salió de la carta se borra', plan.borrar.join() === 'wa4');
+  chequear('lo cargado a mano en WhatsApp no se toca', !JSON.stringify(plan).includes('wa5') && !JSON.stringify(plan).includes('wa6'));
+  const muchos = Array.from({ length: 30 }, (_, i) => ({ gid: `g-${i}`, nombre: `Plato ${i}`, precioCentavos: 100000, hay: true }));
+  plan = espejo.planEspejo({ items: muchos, actuales: [], max: 20 });
+  chequear('de a poco: 20 por vuelta y el resto queda pendiente', plan.crear.length === 20 && plan.pendientes === 10);
+  const C8 = '5492944200008';
+  r = motor.procesarMensaje({ de: C8, texto: '', carrito: [{ retailerId: 'ns-g-empa', nombre: 'Empanada', cantidad: 12 }] });
+  chequear('el carrito de un producto copiado por el bot se reconoce', textoPara(r, C8).includes('12 × Empanada de carne'));
+  plan = espejo.planEspejo({ items: carta, actuales: [{ id: 'wa9', retailerId: null, name: 'milanesa  con papas', price: 5000000, isHidden: false }] });
+  chequear('uno cargado a mano con el mismo nombre se adopta, no se duplica', plan.cambiar.some((x) => x.id === 'wa9' && x.retailerId === 'ns-g-mila' && x.price === 6500000)
+    && !plan.crear.some((x) => x.retailerId === 'ns-g-mila'));
+  const paraApp = espejo.catalogoParaLaApp([
+    { id: '111', retailerId: 'ns-g-mila', name: 'Milanesa con papas', description: 'Con fritas', price: 6500000, isHidden: false },
+    { id: '112', retailerId: '', name: ' Tarta de jamón y queso ', price: 5000000, isHidden: true },
+    { id: '113', name: '', price: 1 },
+  ]);
+  chequear('el catálogo de WhatsApp para la app: precio en centavos, escondidos marcados', paraApp.length === 2
+    && paraApp[0].precioCentavos === 650000 && paraApp[0].descripcion === 'Con fritas'
+    && paraApp[1].nombre === 'Tarta de jamón y queso' && paraApp[1].oculto === true && paraApp[1].retailerId === null);
+  let subido = null;
+  let pidio = false;
+  const sincWa = crearSincronizador({
+    config, cuenta: cuentaFalsa, recargarConfig: () => [], enviar: async (x) => x, log: { log: () => {}, error: () => {} },
+    cliente: { mandarCatalogoWa: async (items) => { subido = items; return { ok: true }; } },
+    alPedirCatalogoWa: async () => { pidio = true; },
+  });
+  await sincWa.subirCatalogoWa(paraApp);
+  chequear('sube el catálogo de WhatsApp a Nodo Sur', subido && subido.length === 2);
+  await sincWa.alAviso(JSON.stringify({ bot: { catalogoWa: true } }));
+  chequear('cuando la app lo pide, lo vuelve a leer', pidio);
+  chequear('el catálogo se prende también desde la app', gastro.conCatalogoWhatsapp({ pedidos: { catalogo_whatsapp: true }, negocio: {} }));
 
   console.log(fallas ? `\n❌ ${fallas} chequeos de gastronomía fallaron` : '\n✅ Gastronomía OK');
   process.exit(fallas ? 1 : 0);

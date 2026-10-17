@@ -31,6 +31,7 @@ function crearCliente({ sitio, token, fetch = globalThis.fetch }) {
     yo: () => pedir('/api/device/me'),
     config: () => pedir('/api/bot/config'),
     catalogo: () => pedir('/api/bot/catalogo'),
+    mandarCatalogoWa: (items) => pedir('/api/bot/catalogo-wa', { metodo: 'POST', cuerpo: { items } }),
     mandarPedido: (p) => pedir('/api/bot/pedido', { metodo: 'POST', cuerpo: p }),
     pedidos: (desde) => pedir(`/api/bot/pedidos?desde=${encodeURIComponent(desde)}`),
     reservarTurno: (t) => pedir('/api/bot/turno', { metodo: 'POST', cuerpo: t }),

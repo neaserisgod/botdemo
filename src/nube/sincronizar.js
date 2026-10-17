@@ -43,7 +43,9 @@ function cargarCatalogoGuardado() {
   } catch { return false; }
 }
 
-function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarConfig, enviar, version = '0', log = console }) {
+// `alCambiarCatalogo`: bajó una carta nueva (el bot la copia al catálogo de WhatsApp). `alPedirCatalogoWa`: la app pidió que se
+// lea el catálogo de WhatsApp para traerlo a su carta.
+function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarConfig, enviar, version = '0', log = console, alCambiarCatalogo, alPedirCatalogoWa }) {
   const esComercio = () => config.forma === 'productos';
 
   async function traerConfig() {
@@ -69,7 +71,13 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
     const r = await cliente.catalogo();
     escribirAtomico(rutaCatalogo(), { items: r.items || [], actualizado: r.actualizado ?? null });
     catalogo.fijar(r.items || [], r.actualizado ?? null);
+    if (alCambiarCatalogo) Promise.resolve().then(alCambiarCatalogo).catch((e) => reportar('catálogo de WhatsApp', e));
     return true;
+  }
+
+  // Lo que tiene el catálogo de WhatsApp Business del local, para que la app lo traiga a su carta.
+  async function subirCatalogoWa(items) {
+    await cliente.mandarCatalogoWa(items);
   }
 
   // Lo que se pesa viaja en gramos: `{ gid, nombre, gramos, precioCentavos }` con el precio POR KILO. El sitio los acepta
@@ -385,7 +393,7 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
     }
   }
 
-  // Lo que manda el sitio por el WebSocket: `{ bot: { config | catalogo | pedido, estado | turno | ocupados } }`. Cualquier otra cosa se ignora.
+  // Lo que manda el sitio por el WebSocket: `{ bot: { config | catalogo | catalogoWa | pedido, estado | turno | ocupados } }`. Cualquier otra cosa se ignora.
   async function alAviso(texto) {
     let m;
     try { m = JSON.parse(texto); } catch { return; }
@@ -394,6 +402,7 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
     try {
       if (a.config !== undefined) await traerConfig();
       if (a.catalogo) await traerCatalogo();
+      if (a.catalogoWa && alPedirCatalogoWa) await alPedirCatalogoWa();
       if (a.pedido !== undefined && a.estado) await revisarPedidos();
       if (a.turno !== undefined || a.ocupados) await revisarTurnos();
     } catch (e) { reportar('aviso', e); }
@@ -435,7 +444,7 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
   // Lo que se manda apenas pasa algo en una charla: un pedido (comercio) o un turno (servicios).
   const mandarYa = () => (esComercio() ? mandarBandeja() : mandarTurnos());
 
-  return { traerConfig, traerCatalogo, mandarBandeja, revisarPedidos, avisarResueltos, mandarTurnos, revisarTurnos, mandarYa, ping, vuelta, alAviso, iniciar, detener };
+  return { traerConfig, traerCatalogo, subirCatalogoWa, mandarBandeja, revisarPedidos, avisarResueltos, mandarTurnos, revisarTurnos, mandarYa, ping, vuelta, alAviso, iniciar, detener };
 }
 
 module.exports = { crearSincronizador, cargarCatalogoGuardado, rutaCatalogo };
