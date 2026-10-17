@@ -275,10 +275,41 @@ function crearAdaptador(config, hooks) {
     // Ítem del catálogo tocado por la clienta
     const productoId = m.productMessage?.product?.productId || null;
 
+    // El carrito que mandó desde el catálogo de WhatsApp Business: se pide el detalle y cada producto se traduce a su
+    // "ID de contenido" (retailer id), que es el global_id de Nodo Sur (ver `carritoDelCatalogo` en core/comercio.js).
+    const carrito = m.orderMessage ? await leerCarrito(m.orderMessage) : undefined;
+
     // Audio o nota de voz: el bot no los escucha, pero le avisa al cliente (ver motor.js).
     const tipo = m.audioMessage ? 'audio' : null;
-    const salientes = hooks.alRecibir({ de, texto, rutaImagen, productoId, tipo });
+    const salientes = hooks.alRecibir({ de, texto, rutaImagen, productoId, tipo, ...(carrito ? { carrito } : {}) });
     await enviarTodos(salientes, { respondiendo: de });
+  }
+
+  // id del producto en WhatsApp → retailer id, del catálogo propio. Se vuelve a pedir si aparece uno que no está (lo cargaron
+  // después). Es la API no oficial: si falla, el carrito vuelve vacío y el bot le pide al cliente que lo escriba.
+  let retailerDe = new Map();
+  async function cargarCatalogoWa() {
+    const mapa = new Map();
+    let cursor;
+    for (let i = 0; i < 20; i++) {
+      const r = await sock.getCatalog({ limit: 100, cursor });
+      for (const p of r.products || []) if (p.id) mapa.set(String(p.id), p.retailerId || null);
+      if (!r.nextPageCursor) break;
+      cursor = r.nextPageCursor;
+    }
+    retailerDe = mapa;
+  }
+
+  async function leerCarrito(orden) {
+    try {
+      const detalle = await sock.getOrderDetails(orden.orderId, orden.token);
+      const productos = detalle.products || [];
+      if (productos.some((p) => !retailerDe.has(String(p.id)))) await cargarCatalogoWa().catch((e) => console.error('No pude leer el catálogo de WhatsApp:', e.message));
+      return productos.map((p) => ({ retailerId: retailerDe.get(String(p.id)) || null, nombre: p.name, cantidad: p.quantity || 1 }));
+    } catch (e) {
+      console.error('No pude leer el carrito de WhatsApp:', e.message);
+      return [];
+    }
   }
 
   // Un voto en una encuesta del bot: vuelve al núcleo como el número de la opción (`adaptadores/encuestas.js`).

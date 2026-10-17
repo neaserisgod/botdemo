@@ -167,6 +167,9 @@ const PLANTILLAS = {
   almacen: comercio('Almacén', '🛒'),
   kiosco: comercio('Kiosco', '🍬'),
   fiambreria: comercio('Fiambrería', '🧀'),
+  // Un local gastronómico (Nodo Gastro): mismo bot de comercio, y con `config.pedidos` (lo manda la app) suma la entrega, la
+  // hora y el pago (`core/gastro.js`).
+  rotiseria: comercio('Rotisería', '🍗'),
   otro: comercio('Otro comercio', '🏪'),
 };
 
