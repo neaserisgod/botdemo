@@ -84,11 +84,11 @@ CREATE TABLE IF NOT EXISTS pedidos (
   id             INTEGER PRIMARY KEY,
   pedido_id      TEXT NOT NULL UNIQUE,          -- el id que viaja a Nodo Sur
   clienta_id     INTEGER NOT NULL REFERENCES clientas(id),
-  datos          TEXT NOT NULL,                 -- JSON: { cliente: {nombre, telefono}, items: [...], nota? }
+  datos          TEXT NOT NULL,                 -- JSON: { cliente: {nombre, telefono}, items: [...], nota?, entrega?, pago?, horaEstimada?, programado? }
   estado         TEXT NOT NULL DEFAULT 'por_enviar',
-    -- por_enviar → enviado → aceptado | rechazado;  por_enviar → a_mano (Nodo Sur no aceptó los gramos: fue por WhatsApp)
+    -- por_enviar → enviado → aceptado | rechazado; local gastronómico: aceptado → listo → en_camino → entregado, o cancelado;  por_enviar → a_mano (Nodo Sur no aceptó los gramos: fue por WhatsApp)
   remoto_id      INTEGER,                       -- el id del pedido en Nodo Sur
-  avisado        INTEGER NOT NULL DEFAULT 0,    -- 1 cuando el cliente ya recibió si se aceptó o no
+  avisado        INTEGER NOT NULL DEFAULT 0,    -- 1 cuando el cliente ya supo del último cambio
   creado_en      TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
   actualizado_en TEXT
 );

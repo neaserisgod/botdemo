@@ -5,7 +5,7 @@
 //  * Catálogo (solo comercios): lo que publica la app para contestar precio y si hay. Se guarda en data/catalogo.json para
 //    arrancar sin internet.
 //  * Pedidos (solo comercios): la bandeja local (`pedidos`) se manda al sitio, y cuando el local los acepta o rechaza en la
-//    app el bot le avisa al cliente. Reintentar no duplica nada: el pedido lleva su id, y un pedido ya resuelto no cambia.
+//    app (o, en un local gastronómico, lo pone listo, lo manda o lo cancela) el bot le avisa al cliente. Reintentar no duplica nada: el pedido lleva su id, y un pedido ya resuelto no cambia.
 //  * Turnos (negocios de servicios): cada turno que da el bot se RESERVA en Nodo Sur (el sitio no deja que dos personas tomen
 //    el mismo horario: si se le adelantaron, el bot le pide al cliente que elija otro) y entra a la Agenda de la app. Lo que
 //    ocupa la agenda de la app se baja a `turnos_nube`, así el bot no ofrece un horario que dio la dueña. Si ella mueve,
@@ -88,7 +88,10 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
       else if (x.gramos % 1000 === 0) items.push({ ...base, cantidad: x.gramos / 1000 });
       else sueltos.push(x);
     }
-    return { envio: { id: p.pedido_id, cliente: p.datos.cliente, items, ...(p.datos.nota ? { nota: p.datos.nota } : {}) }, sueltos };
+    // Lo de un local gastronómico (entrega, pago, hora) viaja tal cual; el pedido de un almacén no lo trae.
+    const { nota, entrega, pago, horaEstimada, programado } = p.datos;
+    const gastro = { ...(entrega ? { entrega } : {}), ...(pago ? { pago } : {}), ...(horaEstimada != null ? { horaEstimada } : {}), ...(programado ? { programado: true } : {}) };
+    return { envio: { id: p.pedido_id, cliente: p.datos.cliente, items, ...(nota ? { nota } : {}), ...gastro }, sueltos };
   }
 
   // Lo manda y devuelve lo que contestó el sitio, o null si con el sitio de hoy no se puede (gramos sueltos).
@@ -141,7 +144,7 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
     for (;;) {
       const r = await cliente.pedidos(desde);
       for (const p of r.pedidos || []) {
-        if (p.estado !== 'aceptado' && p.estado !== 'rechazado') continue;
+        if (!qPedidos.ESTADOS_RESUELTOS.includes(p.estado)) continue;
         const local = qPedidos.porRemotoId(p.id);
         if (local) qPedidos.resolver(local.id, p.estado);
       }
@@ -157,7 +160,10 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
   async function avisarResueltos() {
     let avisados = 0;
     for (const p of qPedidos.sinAvisar()) {
-      const enviados = await enviar([comercio.avisoDePedido(config, p, p.estado)]);
+      // Un paso que no se le avisa (un envío listo, uno entregado) queda marcado sin mandar nada.
+      const aviso = comercio.avisoDePedido(config, p, p.estado);
+      if (!aviso) { qPedidos.marcarAvisado(p.id); continue; }
+      const enviados = await enviar([aviso]);
       if (enviados && enviados.length) { qPedidos.marcarAvisado(p.id); avisados++; }
     }
     return avisados;

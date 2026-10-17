@@ -29,10 +29,25 @@ function porRemotoId(remotoId) {
   return leer(obtener().prepare('SELECT * FROM pedidos WHERE remoto_id = ?').get(remotoId));
 }
 
-// Solo desde 'enviado': un pedido ya resuelto no cambia (si el aviso llega dos veces, no se le avisa dos veces al cliente).
+// Lo que el local hace con un pedido en la app, y desde qué estado se llega a cada cosa: siempre para adelante, así un aviso
+// que llega dos veces (o tarde) no se le manda dos veces al cliente. Un almacén solo acepta o rechaza; un local gastronómico
+// además lo pone listo, lo manda, lo entrega o lo cancela (los mismos pasos que el sitio, `PASOS_PEDIDO` en NodoSurPage). Si
+// el bot no vio un paso (estuvo apagado), salta al que ve.
+const DESDE = {
+  aceptado: ['enviado'],
+  rechazado: ['enviado'],
+  listo: ['enviado', 'aceptado'],
+  en_camino: ['enviado', 'aceptado', 'listo'],
+  entregado: ['enviado', 'aceptado', 'listo', 'en_camino'],
+  cancelado: ['enviado', 'aceptado', 'listo'],
+};
+const ESTADOS_RESUELTOS = Object.keys(DESDE);
+
 function resolver(id, estado) {
-  const r = obtener().prepare("UPDATE pedidos SET estado = ?, actualizado_en = datetime('now', 'localtime') WHERE id = ? AND estado = 'enviado'")
-    .run(estado, id);
+  const desde = DESDE[estado];
+  if (!desde) return false;
+  const r = obtener().prepare(`UPDATE pedidos SET estado = ?, avisado = 0, actualizado_en = datetime('now', 'localtime') WHERE id = ? AND estado IN (${desde.map(() => '?').join(', ')})`)
+    .run(estado, id, ...desde);
   return r.changes > 0;
 }
 
@@ -48,7 +63,8 @@ function marcarAvisado(id) {
 
 // Resueltos que el cliente todavía no sabe (el aviso pudo fallar por falta de conexión con WhatsApp).
 function sinAvisar() {
-  return obtener().prepare("SELECT * FROM pedidos WHERE estado IN ('aceptado', 'rechazado') AND avisado = 0 ORDER BY id").all().map(leer);
+  return obtener().prepare(`SELECT * FROM pedidos WHERE estado IN (${ESTADOS_RESUELTOS.map(() => '?').join(', ')}) AND avisado = 0 ORDER BY id`)
+    .all(...ESTADOS_RESUELTOS).map(leer);
 }
 
-module.exports = { crear, porId, porEnviar, marcarEnviado, marcarAMano, porRemotoId, resolver, marcarAvisado, sinAvisar };
+module.exports = { ESTADOS_RESUELTOS, crear, porId, porEnviar, marcarEnviado, marcarAMano, porRemotoId, resolver, marcarAvisado, sinAvisar };
