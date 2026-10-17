@@ -119,7 +119,7 @@ const adaptador = crearAdaptador(config, {
     // Catch-up: recordatorios que quedaron pendientes mientras estaba caído
     if (primeraVez) adaptador.enviar(recordatorios.tick(config));
     // La carta al catálogo de WhatsApp, cuando la conexión ya se asentó.
-    setTimeout(() => espejarCarta().catch(() => {}), 30000);
+    setTimeout(() => espejarCarta().then(() => subirCatalogoWa(false)).catch(() => {}), 30000);
   },
 
   // La app que trae el bot adentro muestra el código y avisa cuando hay que volver a vincular.
@@ -245,10 +245,13 @@ function recargarConfig() {
 }
 
 const cuentaNube = require('./nube/cuenta').leer();
+let sincronizador = null;
 if (cuentaNube) {
   const { crearCliente } = require('./nube/cliente');
-  const sincronizador = nube.crearSincronizador({
+  sincronizador = nube.crearSincronizador({
     config, recargarConfig, enviar: enviarAhora,
+    alCambiarCatalogo: () => espejarCarta(),
+    alPedirCatalogoWa: () => subirCatalogoWa(true),
     cliente: crearCliente({ sitio: cuentaNube.sitio, token: cuentaNube.token }),
     version: require('../package.json').version,
   });
@@ -278,8 +281,24 @@ async function espejarCarta() {
     console.log(`Catálogo de WhatsApp: ${r.creados} nuevos, ${r.cambiados} cambiados, ${r.borrados} borrados${r.pendientes ? ` (faltan ${r.pendientes}, siguen en 5 minutos)` : ''}.`);
   }
   if (!r.pendientes) cartaEspejada = huella;
+  await subirCatalogoWa(false);
 }
 setInterval(() => espejarCarta().catch(() => {}), 5 * 60 * 1000);
+
+// El otro sentido: lo que hay en el catálogo de WhatsApp sube a Nodo Sur para que la app lo traiga a su carta (lo que el local
+// cargó allá a mano). Sube al conectar, después de cada copia y cuando la app lo pide; solo si cambió, salvo que lo pida.
+let catalogoWaSubido = null;
+async function subirCatalogoWa(forzar) {
+  if (!sincronizador || !adaptador.leerCatalogoWa || !gastro.esGastro(config) || !gastro.conCatalogoWhatsapp(config)) return;
+  const items = await adaptador.leerCatalogoWa();
+  if (!items) return;
+  const huella = JSON.stringify(items);
+  if (!forzar && huella === catalogoWaSubido) return;
+  try {
+    await sincronizador.subirCatalogoWa(items);
+    catalogoWaSubido = huella;
+  } catch (e) { console.error('No pude mandar el catálogo de WhatsApp a Nodo Sur:', e.message); }
+}
 
 // --- Panel + arranque ---
 iniciarPanel(config, () => estado);

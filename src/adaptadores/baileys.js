@@ -297,14 +297,7 @@ function crearAdaptador(config, hooks) {
     if (!sock || !abierto || espejando) return null;
     espejando = true;
     try {
-      const actuales = [];
-      let cursor;
-      for (let i = 0; i < 20; i++) {
-        const r = await sock.getCatalog({ limit: 100, cursor });
-        actuales.push(...(r.products || []));
-        if (!r.nextPageCursor) break;
-        cursor = r.nextPageCursor;
-      }
+      const actuales = await catalogoWaEntero();
       const plan = espejo.planEspejo({ items, actuales });
       const pausa = () => new Promise((ok) => setTimeout(ok, PAUSA_ESPEJO_MS));
       const hecho = { cambiados: 0, creados: 0, borrados: 0, pendientes: plan.pendientes };
@@ -331,16 +324,33 @@ function crearAdaptador(config, hooks) {
   // id del producto en WhatsApp → retailer id, del catálogo propio. Se vuelve a pedir si aparece uno que no está (lo cargaron
   // después). Es la API no oficial: si falla, el carrito vuelve vacío y el bot le pide al cliente que lo escriba.
   let retailerDe = new Map();
-  async function cargarCatalogoWa() {
-    const mapa = new Map();
+  async function catalogoWaEntero() {
+    const productos = [];
     let cursor;
     for (let i = 0; i < 20; i++) {
       const r = await sock.getCatalog({ limit: 100, cursor });
-      for (const p of r.products || []) if (p.id) mapa.set(String(p.id), p.retailerId || null);
+      productos.push(...(r.products || []));
       if (!r.nextPageCursor) break;
       cursor = r.nextPageCursor;
     }
-    retailerDe = mapa;
+    return productos;
+  }
+
+  async function cargarCatalogoWa() {
+    const productos = await catalogoWaEntero();
+    retailerDe = new Map(productos.filter((p) => p.id).map((p) => [String(p.id), p.retailerId || null]));
+    return productos;
+  }
+
+  // El catálogo de WhatsApp como lo necesita la app para traerlo a su carta, o null si no está conectado o no se pudo leer.
+  async function leerCatalogoWa() {
+    if (!sock || !abierto) return null;
+    try {
+      return espejo.catalogoParaLaApp(await cargarCatalogoWa());
+    } catch (e) {
+      console.error('No pude leer el catálogo de WhatsApp:', e.message);
+      return null;
+    }
   }
 
   async function leerCarrito(orden) {
@@ -474,6 +484,7 @@ function crearAdaptador(config, hooks) {
     iniciar: () => conectar().catch((e) => { console.error('Baileys no pudo iniciar:', e.message); process.exit(1); }),
     enviar: enviarTodos,
     espejarCatalogo,
+    leerCatalogoWa,
     cerrar: () => { cerrando = true; sock?.end?.(); },
   };
 }

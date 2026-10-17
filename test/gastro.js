@@ -279,6 +279,28 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   const C8 = '5492944200008';
   r = motor.procesarMensaje({ de: C8, texto: '', carrito: [{ retailerId: 'ns-g-empa', nombre: 'Empanada', cantidad: 12 }] });
   chequear('el carrito de un producto copiado por el bot se reconoce', textoPara(r, C8).includes('12 × Empanada de carne'));
+  plan = espejo.planEspejo({ items: carta, actuales: [{ id: 'wa9', retailerId: null, name: 'milanesa  con papas', price: 5000000, isHidden: false }] });
+  chequear('uno cargado a mano con el mismo nombre se adopta, no se duplica', plan.cambiar.some((x) => x.id === 'wa9' && x.retailerId === 'ns-g-mila' && x.price === 6500000)
+    && !plan.crear.some((x) => x.retailerId === 'ns-g-mila'));
+  const paraApp = espejo.catalogoParaLaApp([
+    { id: '111', retailerId: 'ns-g-mila', name: 'Milanesa con papas', description: 'Con fritas', price: 6500000, isHidden: false },
+    { id: '112', retailerId: '', name: ' Tarta de jamón y queso ', price: 5000000, isHidden: true },
+    { id: '113', name: '', price: 1 },
+  ]);
+  chequear('el catálogo de WhatsApp para la app: precio en centavos, escondidos marcados', paraApp.length === 2
+    && paraApp[0].precioCentavos === 650000 && paraApp[0].descripcion === 'Con fritas'
+    && paraApp[1].nombre === 'Tarta de jamón y queso' && paraApp[1].oculto === true && paraApp[1].retailerId === null);
+  let subido = null;
+  let pidio = false;
+  const sincWa = crearSincronizador({
+    config, cuenta: cuentaFalsa, recargarConfig: () => [], enviar: async (x) => x, log: { log: () => {}, error: () => {} },
+    cliente: { mandarCatalogoWa: async (items) => { subido = items; return { ok: true }; } },
+    alPedirCatalogoWa: async () => { pidio = true; },
+  });
+  await sincWa.subirCatalogoWa(paraApp);
+  chequear('sube el catálogo de WhatsApp a Nodo Sur', subido && subido.length === 2);
+  await sincWa.alAviso(JSON.stringify({ bot: { catalogoWa: true } }));
+  chequear('cuando la app lo pide, lo vuelve a leer', pidio);
   chequear('el catálogo se prende también desde la app', gastro.conCatalogoWhatsapp({ pedidos: { catalogo_whatsapp: true }, negocio: {} }));
 
   console.log(fallas ? `\n❌ ${fallas} chequeos de gastronomía fallaron` : '\n✅ Gastronomía OK');

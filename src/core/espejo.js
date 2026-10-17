@@ -5,7 +5,9 @@
 // Acá vive solo la cuenta de qué hay que hacer (crear, cambiar, esconder, borrar); el adaptador de Baileys lo hace
 // (`espejarCatalogo`). Reglas:
 //  * Solo se tocan los productos que puso el bot: llevan como "ID de contenido" (retailer id) `ns-<global_id>`. Lo que el local
-//    cargó a mano en WhatsApp queda como está.
+//    cargó a mano en WhatsApp queda como está, salvo que se llame igual que un plato de la carta: ese se ADOPTA (pasa a ser el
+//    del plato, con el precio de la app) en vez de crear otro igual. Pasa sobre todo después de traer el catálogo de WhatsApp a
+//    la app (`catalogoParaLaApp`): los platos que se crearon de ahí se adoptan solos.
 //  * Lo que hoy no hay se esconde (no se borra): mañana vuelve con el mismo producto. Lo que se borró de la carta, se borra.
 //  * Lo que se vende por peso no va: el catálogo de WhatsApp solo pide unidades.
 //  * El precio en WhatsApp va en milésimas de la moneda (el `priceAmount1000` de WhatsApp): centavos × 10.
@@ -18,6 +20,7 @@ const retailerDe = (gid) => `${PREFIJO}${gid}`;
 const gidDeRetailer = (r) => (typeof r === 'string' && r.startsWith(PREFIJO) ? r.slice(PREFIJO.length) : null);
 const precioWa = (centavos) => centavos * 10;
 const MAX_NOMBRE = 120;
+const normal = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
 
 // `items`: la carta (`catalogo.todos()`); `actuales`: lo que devuelve getCatalog. → { crear, cambiar, borrar } en ese orden.
 function planEspejo({ items, actuales, max = 20 }) {
@@ -25,6 +28,11 @@ function planEspejo({ items, actuales, max = 20 }) {
   for (const p of actuales || []) {
     const gid = gidDeRetailer(p.retailerId);
     if (gid && p.id) nuestros.set(gid, p);
+  }
+  // Los cargados a mano (sin `ns-`), por nombre, para adoptarlos.
+  const aMano = new Map();
+  for (const p of actuales || []) {
+    if (!gidDeRetailer(p.retailerId) && p.id && !aMano.has(normal(p.name))) aMano.set(normal(p.name), p);
   }
   const crear = [];
   const cambiar = [];
@@ -34,7 +42,11 @@ function planEspejo({ items, actuales, max = 20 }) {
     enLaCarta.add(x.gid);
     const quiero = { name: String(x.nombre).slice(0, MAX_NOMBRE), price: precioWa(x.precioCentavos), isHidden: !x.hay };
     const ya = nuestros.get(x.gid);
-    if (!ya) {
+    const adoptar = !ya && aMano.get(normal(x.nombre));
+    if (adoptar) {
+      aMano.delete(normal(x.nombre));
+      cambiar.push({ id: adoptar.id, retailerId: retailerDe(x.gid), ...quiero, adoptado: true });
+    } else if (!ya) {
       if (x.hay) crear.push({ retailerId: retailerDe(x.gid), ...quiero });
     } else if (ya.name !== quiero.name || Number(ya.price) !== quiero.price || !!ya.isHidden !== quiero.isHidden) {
       cambiar.push({ id: ya.id, retailerId: retailerDe(x.gid), ...quiero });
@@ -51,4 +63,17 @@ function planEspejo({ items, actuales, max = 20 }) {
   return { cambiar: c, crear: n, borrar: b, pendientes };
 }
 
-module.exports = { planEspejo, retailerDe, gidDeRetailer, precioWa, PREFIJO };
+// Lo que la app necesita para traer el catálogo de WhatsApp a su carta (`POST /api/bot/catalogo-wa`): de cada producto, su id,
+// su "ID de contenido", nombre, descripción, precio en centavos y si está escondido.
+function catalogoParaLaApp(productos) {
+  return (productos || []).filter((p) => p && p.id && p.name).map((p) => ({
+    waId: String(p.id),
+    retailerId: p.retailerId || null,
+    nombre: String(p.name).trim().slice(0, 120),
+    descripcion: String(p.description || '').trim().slice(0, 500),
+    precioCentavos: Math.max(0, Math.round((Number(p.price) || 0) / 10)),
+    oculto: !!p.isHidden,
+  })).filter((x) => /^[\w-]{1,64}$/.test(x.waId) && x.nombre);
+}
+
+module.exports = { planEspejo, catalogoParaLaApp, retailerDe, gidDeRetailer, precioWa, PREFIJO };
