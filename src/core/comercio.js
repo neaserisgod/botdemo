@@ -17,6 +17,7 @@ const qClientas = require('../db/consultas/clientas');
 const qPedidos = require('../db/consultas/pedidos');
 const catalogo = require('./catalogo');
 const gastro = require('./gastro');
+const espejo = require('./espejo');
 const faq = require('./flujos/faq');
 const nlu = require('./nlu');
 const numeros = require('./diccionario/numeros');
@@ -246,7 +247,9 @@ function carritoDelCatalogo(ctx) {
   const notas = [];
   for (const x of lineas.slice(0, MAX_LINEAS)) {
     const cantidad = Math.min(Math.max(Math.trunc(Number(x.cantidad) || 1), 1), 999);
-    let producto = x.retailerId ? catalogo.porGid(String(x.retailerId)) : null;
+    // El bot pone `ns-<global_id>` (`espejo.js`); uno cargado a mano puede tener el global_id solo.
+    const gid = x.retailerId ? espejo.gidDeRetailer(String(x.retailerId)) || String(x.retailerId) : null;
+    let producto = gid ? catalogo.porGid(gid) : null;
     if (!producto && x.nombre) {
       const r = catalogo.buscar(String(x.nombre), 5, sinonimos(ctx)).resultados;
       producto = r.find((y) => nlu.normalizar(y.nombre) === nlu.normalizar(String(x.nombre))) || (r.length === 1 ? r[0] : null);

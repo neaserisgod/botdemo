@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { separarOpciones } = require('../core/opciones');
 const { crearRegistroEncuestas, descifrarVoto } = require('./encuestas');
+const espejo = require('../core/espejo');
 
 function crearAdaptador(config, hooks) {
   // Baileys 7 (2026-10-09): con la 6 (ya "legacy") ningún mensaje entrante se podía descifrar ("Bad MAC") desde que
@@ -31,6 +32,7 @@ function crearAdaptador(config, hooks) {
   const conEncuestas = config.encuestas !== false;
   const encuestas = crearRegistroEncuestas({ ruta: require('../rutas').enDatos('encuestas.json') });
   let sock = null;
+  let abierto = false; // la conexión con WhatsApp está arriba
   let cerrando = false;
   let reconectando = false;
 
@@ -153,8 +155,9 @@ function crearAdaptador(config, hooks) {
         console.log('Escaneá este QR desde WhatsApp > Dispositivos vinculados:');
         qrcode.generate(qr, { small: true });
       }
-      if (connection === 'open') { marcarActividad(); intentosFallidos = 0; hooks.alConectar(); }
+      if (connection === 'open') { abierto = true; marcarActividad(); intentosFallidos = 0; hooks.alConectar(); }
       if (connection === 'close') {
+        abierto = false;
         const codigo = lastDisconnect?.error?.output?.statusCode;
         const deslogueado = codigo === baileys.DisconnectReason.loggedOut;
         hooks.alDesconectar(`baileys close (código ${codigo ?? '?'})`);
@@ -283,6 +286,46 @@ function crearAdaptador(config, hooks) {
     const tipo = m.audioMessage ? 'audio' : null;
     const salientes = hooks.alRecibir({ de, texto, rutaImagen, productoId, tipo, ...(carrito ? { carrito } : {}) });
     await enviarTodos(salientes, { respondiendo: de });
+  }
+
+  // El catálogo de WhatsApp igual a la carta (`core/espejo.js` dice qué hacer). Una vuelta por vez, con pausas entre cada
+  // operación; devuelve qué hizo, o null si no está conectado o WhatsApp no lo dejó (cuenta sin catálogo, API cambiada).
+  const PAUSA_ESPEJO_MS = 2000;
+  const IMAGEN_PLATO = path.join(__dirname, '..', 'assets', 'plato.jpg');
+  let espejando = false;
+  async function espejarCatalogo(items) {
+    if (!sock || !abierto || espejando) return null;
+    espejando = true;
+    try {
+      const actuales = [];
+      let cursor;
+      for (let i = 0; i < 20; i++) {
+        const r = await sock.getCatalog({ limit: 100, cursor });
+        actuales.push(...(r.products || []));
+        if (!r.nextPageCursor) break;
+        cursor = r.nextPageCursor;
+      }
+      const plan = espejo.planEspejo({ items, actuales });
+      const pausa = () => new Promise((ok) => setTimeout(ok, PAUSA_ESPEJO_MS));
+      const hecho = { cambiados: 0, creados: 0, borrados: 0, pendientes: plan.pendientes };
+      for (const p of plan.cambiar) {
+        await sock.productUpdate(p.id, { name: p.name, retailerId: p.retailerId, description: '', price: p.price, currency: 'ARS', isHidden: p.isHidden, images: [] });
+        hecho.cambiados++; await pausa();
+      }
+      for (const p of plan.crear) {
+        await sock.productCreate({ name: p.name, retailerId: p.retailerId, description: '', price: p.price, currency: 'ARS', isHidden: false,
+          originCountryCode: undefined, images: [{ url: IMAGEN_PLATO }] });
+        hecho.creados++; await pausa();
+      }
+      if (plan.borrar.length) { await sock.productDelete(plan.borrar); hecho.borrados = plan.borrar.length; }
+      if (hecho.cambiados || hecho.creados || hecho.borrados) await cargarCatalogoWa().catch(() => {});
+      return hecho;
+    } catch (e) {
+      console.error('No pude copiar la carta al catálogo de WhatsApp:', e.message);
+      return null;
+    } finally {
+      espejando = false;
+    }
   }
 
   // id del producto en WhatsApp → retailer id, del catálogo propio. Se vuelve a pedir si aparece uno que no está (lo cargaron
@@ -430,6 +473,7 @@ function crearAdaptador(config, hooks) {
   return {
     iniciar: () => conectar().catch((e) => { console.error('Baileys no pudo iniciar:', e.message); process.exit(1); }),
     enviar: enviarTodos,
+    espejarCatalogo,
     cerrar: () => { cerrando = true; sock?.end?.(); },
   };
 }

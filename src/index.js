@@ -118,6 +118,8 @@ const adaptador = crearAdaptador(config, {
     adaptador.enviar(salud.alReconectar(config));
     // Catch-up: recordatorios que quedaron pendientes mientras estaba caído
     if (primeraVez) adaptador.enviar(recordatorios.tick(config));
+    // La carta al catálogo de WhatsApp, cuando la conexión ya se asentó.
+    setTimeout(() => espejarCarta().catch(() => {}), 30000);
   },
 
   // La app que trae el bot adentro muestra el código y avisa cuando hay que volver a vincular.
@@ -259,6 +261,25 @@ if (cuentaNube) {
 } else {
   console.log('Sin vincular a Nodo Sur: el bot usa solo config.json (para vincularlo: bash bot.sh vincular-nodosur).');
 }
+
+// --- Catálogo de WhatsApp igual a la carta (local gastronómico con catálogo, `core/espejo.js`) ---
+// Se revisa cada 5 minutos y al conectar; solo trabaja si la carta cambió desde la última vez que quedó copiada entera.
+const gastro = require('./core/gastro');
+const catalogoCarta = require('./core/catalogo');
+let cartaEspejada = null;
+async function espejarCarta() {
+  if (!adaptador.espejarCatalogo || !gastro.esGastro(config) || !gastro.conCatalogoWhatsapp(config) || !catalogoCarta.cargado()) return;
+  const items = catalogoCarta.todos();
+  const huella = JSON.stringify(items.map((x) => [x.gid, x.nombre, x.precioCentavos, x.hay]));
+  if (huella === cartaEspejada) return;
+  const r = await adaptador.espejarCatalogo(items);
+  if (!r) return;
+  if (r.cambiados || r.creados || r.borrados) {
+    console.log(`Catálogo de WhatsApp: ${r.creados} nuevos, ${r.cambiados} cambiados, ${r.borrados} borrados${r.pendientes ? ` (faltan ${r.pendientes}, siguen en 5 minutos)` : ''}.`);
+  }
+  if (!r.pendientes) cartaEspejada = huella;
+}
+setInterval(() => espejarCarta().catch(() => {}), 5 * 60 * 1000);
 
 // --- Panel + arranque ---
 iniciarPanel(config, () => estado);

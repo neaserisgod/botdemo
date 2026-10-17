@@ -15,17 +15,21 @@ const FORMAS = {
 };
 
 // Las formas prendidas, en el orden en que se ofrecen. El cadete propio y el servicio de reparto son lo mismo para el
-// cliente (se lo llevan): si están los dos se ofrece uno solo, el cadete propio. Ninguna prendida es retiro.
+// cliente (se lo llevan): si están los dos se ofrece uno solo, el cadete propio. Un envío sin zonas no se ofrece (no habría
+// cómo cobrarlo; la misma regla que `formasDisponibles` de la app). Ninguna prendida es retiro.
 function formas(config) {
   const p = config.pedidos || {};
   const lista = [];
+  const hayZonas = zonas(config).length > 0;
   if (p.retiro !== false) lista.push(FORMAS.RETIRO);
-  if (p.cadete) lista.push(FORMAS.CADETE);
-  else if (p.reparto) lista.push(FORMAS.REPARTO);
+  if (p.cadete && hayZonas) lista.push(FORMAS.CADETE);
+  else if (p.reparto && hayZonas) lista.push(FORMAS.REPARTO);
   return lista.length ? lista : [FORMAS.RETIRO];
 }
 
-const zonas = (config) => (config.pedidos?.zonas || []).filter((z) => z && typeof z.nombre === 'string' && z.nombre.trim());
+function zonas(config) {
+  return (config.pedidos?.zonas || []).filter((z) => z && typeof z.nombre === 'string' && z.nombre.trim());
+}
 
 // Lo que cuesta llevarlo a esa zona, en centavos (la app manda pesos enteros).
 const costoEnvio = (forma, zona) => (forma.envio && zona ? Math.max(0, Math.round(Number(zona.costo) || 0)) * 100 : 0);
@@ -102,9 +106,11 @@ function textoAlias(config, total) {
   return `Transferí *${total}* al alias *${p.alias}*${titular} y mandame el comprobante por acá 🙏`;
 }
 
-// El link del catálogo de WhatsApp Business del local, si lo tiene (se prende en config.json: `negocio.catalogo_whatsapp`).
-const linkCatalogo = (config) => (config.negocio?.catalogo_whatsapp ? `https://wa.me/c/${config.numero_actual}` : null);
+// Si el local tiene catálogo de WhatsApp Business: lo prende la app (`pedidos.catalogo_whatsapp`) o config.json
+// (`negocio.catalogo_whatsapp`). Con eso el bot manda el link del catálogo y le copia la carta (`espejo.js`).
+const conCatalogoWhatsapp = (config) => !!(config.pedidos?.catalogo_whatsapp || config.negocio?.catalogo_whatsapp);
+const linkCatalogo = (config) => (conCatalogoWhatsapp(config) ? `https://wa.me/c/${config.numero_actual}` : null);
 
 module.exports = {
-  esGastro, formas, zonas, costoEnvio, pausada, cuandoSale, textoHora, pagos, TEXTO_PAGO, textoAlias, linkCatalogo, FORMAS,
+  esGastro, formas, zonas, costoEnvio, pausada, cuandoSale, textoHora, pagos, TEXTO_PAGO, textoAlias, linkCatalogo, conCatalogoWhatsapp, FORMAS,
 };
