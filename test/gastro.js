@@ -85,6 +85,8 @@ config.negocio.catalogo_whatsapp = true;
 r = decir(C1, 'menu');
 r = decir(C1, '1');
 chequear('con catálogo de WhatsApp: el link', textoPara(r, C1).includes(`https://wa.me/c/${config.numero_actual}`));
+r = decir(C1, '¿me pasás el catálogo?');
+chequear('"me pasás el catálogo" manda el link', textoPara(r, C1).includes('https://wa.me/c/'));
 delete config.negocio.catalogo_whatsapp;
 r = decir(C1, '¿hacen envíos?');
 chequear('a "hacen envíos" contesta las zonas', textoPara(r, C1).includes('te lo llevamos') && textoPara(r, C1).includes('Km 5 — $2.500'));
@@ -186,6 +188,63 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   chequear('entregado no se avisa; cancelado sí', !t.includes(C2) && t.includes(`${C3}:😕 Tu pedido quedó cancelado`));
   t = await avisos([[remoto2, 'listo']]);
   chequear('no vuelve para atrás', t === '' && qPedidos.porId(p2.id).estado === 'entregado');
+
+  console.log('\n— 9. Pago por Mercado Pago —');
+  chequear('sin Mercado Pago conectado no se ofrece', !gastro.pagos(config).includes('mp'));
+  config.pedidos.mp = true;
+  chequear('con Mercado Pago: al recibir, Mercado Pago y alias', gastro.pagos(config).join() === 'al_entregar,mp,alias');
+  const pedirConMp = (tel) => {
+    decir(tel, 'pedido');
+    decir(tel, '1 mila');
+    decir(tel, 'listo');
+    decir(tel, '1');
+    decir(tel, `Cliente ${tel.slice(-2)}`);
+    decir(tel, 'mercado pago');
+    return decir(tel, '1');
+  };
+  const C5 = '5492944200005';
+  r = pedirConMp(C5);
+  chequear('al confirmar dice que manda el link', textoPara(r, C5).includes('Ya te paso el link para pagar $6.500'));
+  const p5 = qPedidos.porEnviar().pop();
+  chequear('el pedido va con pago mp', p5.datos.pago === 'mp');
+  const sincMp = (respuesta) => crearSincronizador({
+    config,
+    cliente: { mandarPedido: async () => ({ id: proximo++, ...respuesta }), pedidos: async () => ({ pedidos: remotos, hasta: 1, mas: false }) },
+    cuenta: cuentaFalsa, recargarConfig: () => [], enviar: async (x) => { enviados.push(...x); return x; }, log: { log: () => {}, error: () => {} },
+  });
+  enviados.length = 0;
+  await sincMp({ estado: 'esperando_pago', pago: { url: 'https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=X', vence: 1 } }).mandarBandeja();
+  chequear('le manda el link al cliente', enviados.some((x) => x.para === C5 && x.texto.includes('https://www.mercadopago.com.ar/checkout')));
+  remotos = [{ id: qPedidos.porId(p5.id).remoto_id, estado: 'por_confirmar' }];
+  enviados.length = 0;
+  await sinc.revisarPedidos();
+  chequear('cuando se acredita, "recibimos tu pago"', enviados.some((x) => x.para === C5 && x.texto.includes('Recibimos tu pago')));
+
+  const C6 = '5492944200006';
+  pedirConMp(C6);
+  const p6 = qPedidos.porEnviar().pop();
+  enviados.length = 0;
+  await sincMp({ estado: 'por_confirmar', formaPago: 'al_entregar' }).mandarBandeja();
+  chequear('sin link: le dice que paga al recibir', enviados.some((x) => x.para === C6 && x.texto.includes('lo pagás al recibir')));
+  remotos = [{ id: qPedidos.porId(p6.id).remoto_id, estado: 'por_confirmar' }];
+  enviados.length = 0;
+  await sinc.revisarPedidos();
+  chequear('y "por confirmar" no se lee como pagado', !enviados.some((x) => x.texto.includes('Recibimos tu pago')));
+  delete config.pedidos.mp;
+
+  console.log('\n— 10. El carrito del catálogo de WhatsApp —');
+  const C7 = '5492944200007';
+  r = motor.procesarMensaje({ de: C7, texto: '', carrito: [
+    { retailerId: 'g-mila', nombre: 'Mila de WhatsApp', cantidad: 2 },
+    { retailerId: null, nombre: 'Empanada de carne', cantidad: 6 },
+    { retailerId: null, nombre: 'Pizza', cantidad: 1 },
+  ] });
+  let tc = textoPara(r, C7);
+  chequear('lo anota por el ID de contenido y por el nombre', tc.includes('Recibí tu carrito') && tc.includes('2 × Milanesa con papas') && tc.includes('6 × Empanada de carne'));
+  chequear('dice lo que no está en la carta', tc.includes('*Pizza* no lo tengo'));
+  chequear('y sigue con la entrega', tc.includes('¿Cómo lo querés?'));
+  r = motor.procesarMensaje({ de: C7, texto: '', carrito: [] });
+  chequear('un carrito que no se pudo leer: que lo escriba', textoPara(r, C7).includes('No pude leer tu carrito'));
 
   console.log(fallas ? `\n❌ ${fallas} chequeos de gastronomía fallaron` : '\n✅ Gastronomía OK');
   process.exit(fallas ? 1 : 0);

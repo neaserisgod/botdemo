@@ -53,6 +53,8 @@ function procesar(config, clienta, msj) {
     ctx.datos = {};
     return menu(ctx, '¡Volvamos al principio!');
   }
+  // El carrito del catálogo de WhatsApp Business: se toma como un pedido entero, en cualquier paso.
+  if (msj.carrito) return carritoDelCatalogo(ctx);
   const manejadores = {
     inicio, consultando, armando_pedido, eligiendo_producto, eligiendo_peso, pidiendo_nombre, confirmando_pedido,
     eligiendo_entrega, pidiendo_direccion, eligiendo_zona, eligiendo_pago,
@@ -108,6 +110,8 @@ function inicio(ctx, estado = 'inicio') {
   // "hola, ¿me podés cortar 200 de jamón, 1/4 de queso y 100 de salame?": el pedido entero en el primer mensaje.
   const enMensaje = pedidoEnElMensaje(ctx);
   if (enMensaje) return enMensaje;
+  // "¿me pasás el catálogo?", "¿qué tienen en la carta?": la carta (o el link del catálogo de WhatsApp).
+  if (gastro.esGastro(ctx.config) && /\b(?:catalogo|carta|que tienen hoy|que hay hoy)\b/.test(norm)) return carta(ctx);
   if (PIDE_PEDIDO.some((k) => nlu.contiene(norm, tokens, k))) return empezarPedido(ctx);
 
   // Lo que pregunta en el mismo mensaje va antes que pasarlo a una persona: "¿alguien me atiende? quiero saber si tienen
@@ -226,6 +230,35 @@ function empezarPedido(ctx) {
   const ej = gastro.esGastro(ctx.config) ? '*2 milanesas*, *1 docena de empanadas*' : '*2 coca*, *1/4 de jamón*';
   return responder(ctx, 'armando_pedido',
     `${encabezadoPedido(ctx)}\nDecime qué querés y cuánto (ej: ${ej}). Podés mandar varias cosas juntas, una por renglón.\nCuando termines, escribí *listo*.`);
+}
+
+// El carrito que mandó desde el catálogo de WhatsApp (el adaptador lo lee: `[{ retailerId, nombre, cantidad }]`, o `[]` si no
+// pudo). Cada producto del catálogo de WhatsApp lleva como "ID de contenido" (retailer id) el global_id del plato en Nodo Sur;
+// si no lo tiene, se busca por el nombre. El precio es el de Nodo Sur, no el que dice WhatsApp: es el que cobra la caja.
+function carritoDelCatalogo(ctx) {
+  const lineas = Array.isArray(ctx.msj.carrito) ? ctx.msj.carrito : [];
+  if (!lineas.length) {
+    return responder(ctx, ctx.clienta.estado_conv || 'inicio', 'No pude leer tu carrito 😅 ¿Me escribís qué querés? (ej: *2 milanesas*)');
+  }
+  if (!catalogo.cargado()) return sinCatalogo(ctx);
+  if (gastro.pausada(ctx.config)) return cocinaPausada(ctx);
+  ctx.datos = { items: [] };
+  const notas = [];
+  for (const x of lineas.slice(0, MAX_LINEAS)) {
+    const cantidad = Math.min(Math.max(Math.trunc(Number(x.cantidad) || 1), 1), 999);
+    let producto = x.retailerId ? catalogo.porGid(String(x.retailerId)) : null;
+    if (!producto && x.nombre) {
+      const r = catalogo.buscar(String(x.nombre), 5, sinonimos(ctx)).resultados;
+      producto = r.find((y) => nlu.normalizar(y.nombre) === nlu.normalizar(String(x.nombre))) || (r.length === 1 ? r[0] : null);
+    }
+    if (!producto) { notas.push(`❌ *${x.nombre || 'Un producto'}* no lo tengo en la carta de hoy`); continue; }
+    if (catalogo.esPesable(producto)) { notas.push(`⚖️ *${catalogo.nombreCorto(producto)}* va por peso: decime cuánto (ej: *1/2 kilo de ${catalogo.palabrasClave(producto.nombre)[0]}*)`); continue; }
+    notas.push(sumar(ctx, producto, { cantidad }).nota);
+  }
+  if (!ctx.datos.items.length) return responder(ctx, 'armando_pedido', `${notas.join('\n')}\n\nDecime qué querés, o *0* para cancelar.`);
+  const r = terminarPedido(ctx);
+  r[0].texto = `🛒 Recibí tu carrito:\n${notas.join('\n')}\n\n${r[0].texto}`;
+  return r;
 }
 
 // La carta: el link del catálogo de WhatsApp si el local lo tiene, y si no, escrita (lo que hay hoy).
@@ -546,9 +579,11 @@ function eligiendo_zona(ctx) {
 
 function eligiendo_pago(ctx) {
   const pagos = gastro.pagos(ctx.config);
-  const r = elegir(ctx, pagos.length, (t) => pagos.findIndex((p) => (p === 'alias'
-    ? /\b(?:transfiero|transferencia|transferir|alias|ahora|adelantado)\b/.test(t)
-    : /\b(?:efectivo|recibir|entregar|cuando llegue|al retirar|despues)\b/.test(t))));
+  const r = elegir(ctx, pagos.length, (t) => pagos.findIndex((p) => ({
+    alias: /\b(?:transfiero|transferencia|transferir|alias)\b/,
+    mp: /\b(?:mercado ?pago|mp|link|tarjeta)\b/,
+    al_entregar: /\b(?:efectivo|recibir|entregar|cuando llegue|al retirar|despues)\b/,
+  })[p].test(t)));
   if (r.cancelar) return cancelar(ctx);
   if (r.i === undefined) return noEntendi(ctx, 'Respondé con el número, o *0* para cancelar.');
   ctx.datos.pago = pagos[r.i];
@@ -597,7 +632,7 @@ function resumenGastro(ctx) {
   const cuando = sale.programado
     ? `🕐 Ahora estamos cerrados: lo dejamos programado y está ${forma.envio ? 'llegando' : 'listo'} ${gastro.textoHora(sale.hora)}.`
     : `🕐 ${forma.envio ? 'Llega' : 'Está listo'} ${gastro.textoHora(sale.hora)} aprox.`;
-  const pago = ctx.datos.pago === 'alias' ? '\n💳 Pagás ahora por transferencia.' : '\n💵 Pagás al recibir.';
+  const pago = { alias: '\n💳 Pagás ahora por transferencia.', mp: '\n💳 Pagás ahora con Mercado Pago (te paso el link).' }[ctx.datos.pago] || '\n💵 Pagás al recibir.';
   return responder(ctx, 'confirmando_pedido',
     `${ctx.clienta.nombre}, tu pedido:\n\n${lineas}${envio}\n\n💰 Total: ${catalogo.plata(total)}${donde}\n${cuando}${pago}\n\n*1* — Confirmar\n*2* — Agregar algo más\n*0* — Cancelar`);
 }
@@ -617,8 +652,11 @@ function confirmarGastro(ctx) {
     ...(sale.programado ? { programado: true } : {}),
   });
   const total = items.reduce((s, x) => s + subtotal(x), 0) + costo;
-  const pagar = ctx.datos.pago === 'alias' ? `\n\n${gastro.textoAlias(ctx.config, catalogo.plata(total))}` : '';
+  const pago = ctx.datos.pago;
   ctx.datos = {};
+  // Por Mercado Pago el link llega apenas el sitio lo arma (`nube/sincronizar.js`), y el local lo ve cuando se acredita.
+  if (pago === 'mp') return responder(ctx, 'inicio', `¡Listo! Ya te paso el link para pagar ${catalogo.plata(total)} 💳 Apenas se acredita, le llega tu pedido al local.`);
+  const pagar = pago === 'alias' ? `\n\n${gastro.textoAlias(ctx.config, catalogo.plata(total))}` : '';
   return responder(ctx, 'inicio', `¡Listo! Le pasé tu pedido al local 🙌 Te aviso por acá apenas lo confirmen.${pagar}`);
 }
 
@@ -668,6 +706,7 @@ function avisoDePedido(config, pedido, estado) {
     const donde = config.negocio.direccion ? `\n📍 ${config.negocio.direccion}` : '';
     const hora = pedido.datos.horaEstimada ? ` (${gastro.textoHora(new Date(pedido.datos.horaEstimada))} aprox.)` : '';
     const texto = {
+      pagado: '💸 ¡Recibimos tu pago! Ya le pasé tu pedido al local; te aviso por acá apenas lo confirmen.',
       aceptado: `✅ ¡Confirmamos tu pedido! Te aviso por acá cuando esté ${envio ? 'en camino' : 'listo'}${hora}.`,
       listo: envio ? null : `🍽️ ¡Tu pedido está listo! Ya podés pasar a retirarlo.${donde}`,
       en_camino: '🛵 ¡Tu pedido salió! Ya va para tu casa.',

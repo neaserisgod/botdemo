@@ -122,12 +122,25 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
     return true;
   }
 
+  // El link de Mercado Pago que armó el sitio, al cliente. Si el sitio no pudo (el negocio no conectó Mercado Pago o no
+  // contestó), el pedido entró igual para pagar al recibir, y se le dice. Si WhatsApp falla, queda en el log: el pedido
+  // ya está en Nodo Sur y el cliente puede escribir.
+  async function mandarLinkDePago(p, r) {
+    const para = p.datos.cliente.telefono;
+    if (!(r.pago && r.pago.url)) qPedidos.pagaAlRecibir(p.id);
+    const texto = r.pago && r.pago.url
+      ? `💳 Pagá tu pedido acá:\n${r.pago.url}\n\nEl link vence en 30 minutos. Apenas se acredita, le llega al local.`
+      : 'No pude armar el link de pago 😕 Tu pedido ya le llegó al local y lo pagás al recibir.';
+    try { await enviar([{ para, texto }]); } catch (e) { log.error(`No pude mandar el link de pago del pedido ${p.pedido_id}: ${e.message}`); }
+  }
+
   async function mandarBandeja() {
     let mandados = 0;
     for (const p of qPedidos.porEnviar()) {
       try {
         const r = await mandarUno(p);
         if (r) qPedidos.marcarEnviado(p.id, r.id);
+        if (r && p.datos.pago === 'mp') await mandarLinkDePago(p, r);
         if (r || await aMano(p)) mandados++;
       } catch (e) {
         // Sin red o el sitio caído: queda en la bandeja para la próxima vuelta. Un 400 sería un pedido que el sitio no
@@ -144,9 +157,11 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
     for (;;) {
       const r = await cliente.pedidos(desde);
       for (const p of r.pedidos || []) {
-        if (!qPedidos.ESTADOS_RESUELTOS.includes(p.estado)) continue;
         const local = qPedidos.porRemotoId(p.id);
-        if (local) qPedidos.resolver(local.id, p.estado);
+        if (!local) continue;
+        // Un pedido por Mercado Pago que vuelve a "por confirmar" es que se acreditó el pago.
+        const estado = p.estado === 'por_confirmar' && local.datos.pago === 'mp' ? 'pagado' : p.estado;
+        if (qPedidos.ESTADOS_RESUELTOS.includes(estado)) qPedidos.resolver(local.id, estado);
       }
       desde = r.hasta ?? desde;
       cuenta.actualizar({ cursorPedidos: desde });

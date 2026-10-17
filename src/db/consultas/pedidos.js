@@ -33,13 +33,15 @@ function porRemotoId(remotoId) {
 // que llega dos veces (o tarde) no se le manda dos veces al cliente. Un almacén solo acepta o rechaza; un local gastronómico
 // además lo pone listo, lo manda, lo entrega o lo cancela (los mismos pasos que el sitio, `PASOS_PEDIDO` en NodoSurPage). Si
 // el bot no vio un paso (estuvo apagado), salta al que ve.
+// `pagado`: se acreditó el link de Mercado Pago y el pedido le llegó al local (en el sitio pasa a "por confirmar").
 const DESDE = {
-  aceptado: ['enviado'],
-  rechazado: ['enviado'],
-  listo: ['enviado', 'aceptado'],
-  en_camino: ['enviado', 'aceptado', 'listo'],
-  entregado: ['enviado', 'aceptado', 'listo', 'en_camino'],
-  cancelado: ['enviado', 'aceptado', 'listo'],
+  pagado: ['enviado'],
+  aceptado: ['enviado', 'pagado'],
+  rechazado: ['enviado', 'pagado'],
+  listo: ['enviado', 'pagado', 'aceptado'],
+  en_camino: ['enviado', 'pagado', 'aceptado', 'listo'],
+  entregado: ['enviado', 'pagado', 'aceptado', 'listo', 'en_camino'],
+  cancelado: ['enviado', 'pagado', 'aceptado', 'listo'],
 };
 const ESTADOS_RESUELTOS = Object.keys(DESDE);
 
@@ -57,6 +59,14 @@ function marcarAMano(id) {
   obtener().prepare("UPDATE pedidos SET estado = 'a_mano', actualizado_en = datetime('now', 'localtime') WHERE id = ? AND estado = 'por_enviar'").run(id);
 }
 
+// El sitio no pudo armar el link de Mercado Pago y el pedido entró para pagar al recibir: así queda también acá (si no, volver a
+// "por confirmar" se leería como "pagó").
+function pagaAlRecibir(id) {
+  const p = porId(id);
+  if (!p) return;
+  obtener().prepare('UPDATE pedidos SET datos = ? WHERE id = ?').run(JSON.stringify({ ...p.datos, pago: 'al_entregar' }), id);
+}
+
 function marcarAvisado(id) {
   obtener().prepare('UPDATE pedidos SET avisado = 1 WHERE id = ?').run(id);
 }
@@ -67,4 +77,4 @@ function sinAvisar() {
     .all(...ESTADOS_RESUELTOS).map(leer);
 }
 
-module.exports = { ESTADOS_RESUELTOS, crear, porId, porEnviar, marcarEnviado, marcarAMano, porRemotoId, resolver, marcarAvisado, sinAvisar };
+module.exports = { ESTADOS_RESUELTOS, crear, porId, porEnviar, marcarEnviado, marcarAMano, porRemotoId, resolver, marcarAvisado, sinAvisar, pagaAlRecibir };

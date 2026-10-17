@@ -84,18 +84,17 @@ function textoHora(hora, ahora = fechas.ahora()) {
   return `${dia}a las ${t.slice(11)}`;
 }
 
-// Cómo puede pagar: al recibir, o adelantado por transferencia al alias (El dueño, 2026-10-16: "ambas", MP y alias; el link
-// de Mercado Pago llega cuando el sitio lo arme). Sin alias cargado no se puede pedir adelantado: se paga al recibir.
+// Cómo puede pagar: al recibir, o adelantado por Mercado Pago (link) o transferencia al alias (El dueño, 2026-10-16: "ambas").
+// Mercado Pago solo si el negocio lo conectó (el sitio lo dice en `pedidos.mp`); el alias, si está cargado. Si para pagar
+// adelantado no hay ninguno de los dos, se paga al recibir.
 function pagos(config) {
   const p = config.pedidos || {};
-  const alias = typeof p.alias === 'string' && p.alias.trim();
-  if (!alias) return ['al_entregar'];
-  if (p.pago === 'adelantado') return ['alias'];
-  if (p.pago === 'a_elegir') return ['al_entregar', 'alias'];
-  return ['al_entregar'];
+  const adelantado = [...(p.mp === true ? ['mp'] : []), ...(typeof p.alias === 'string' && p.alias.trim() ? ['alias'] : [])];
+  if (!adelantado.length || !['adelantado', 'a_elegir'].includes(p.pago)) return ['al_entregar'];
+  return p.pago === 'adelantado' ? adelantado : ['al_entregar', ...adelantado];
 }
 
-const TEXTO_PAGO = { al_entregar: 'Pago al recibir', alias: 'Transfiero ahora' };
+const TEXTO_PAGO = { al_entregar: 'Pago al recibir', mp: 'Pago ahora con Mercado Pago', alias: 'Transfiero ahora' };
 
 function textoAlias(config, total) {
   const p = config.pedidos || {};
