@@ -178,8 +178,9 @@ function precioDePeso(ctx, estado) {
 }
 
 // ---------- pedido ----------
-// Verbos de pedido de mostrador: "cortame", "¿me podés cortar…?", "preparame", "separame", "dame", "quiero", "me llevo".
-const VERBO_PEDIDO = '(?:me )?(?:podes |podrias |puedes |vas a )?(?:cortar|cortame|cortas|preparar|preparame|preparas|separar|separame|separas|guardar|guardame|guardas|anotar|anotame|anotas|dar|dame|das|mandar|mandame|quiero|quisiera|queria|necesito|me llevo|llevo|encargar|encargo|pedir|pido|traeme|me traes)';
+// Verbos de pedido de mostrador y de delivery: "cortame", "¿me podés cortar…?", "preparame", "dame", "quiero", "me llevo",
+// "me mandás", "me traés".
+const VERBO_PEDIDO = '(?:me )?(?:podes |podrias |puedes |vas a )?(?:cortar|cortame|cortas|preparar|preparame|preparas|separar|separame|separas|guardar|guardame|guardas|anotar|anotame|anotas|dar|dame|das|mandar|mandame|mandas|mandan|enviar|enviame|envias|quiero|quisiera|queria|necesito|me llevo|llevo|encargar|encargo|pedir|pido|traer|traeme|traes|traen)';
 const SALUDO_INICIAL = /^(?:(?:hola|holis|buenas|buen dia|buenos dias|buenas tardes|buenas noches|che|como va|que tal|disculpa|perdon)[\s,!.¡¿?]*)+/;
 const RELLENO_FINAL = /[\s,.!?¿¡]*(?:(?:porfa|por favor|gracias|plis|please|dale)[\s,.!?¿¡]*)*$/;
 

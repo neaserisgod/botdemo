@@ -130,6 +130,12 @@ decir(C3, '1');
 const p3 = qPedidos.porEnviar().pop();
 chequear('va como retiro sin dirección', p3.datos.entrega.forma === 'RETIRO' && !p3.datos.entrega.direccion && p3.datos.pago === 'al_entregar');
 
+// Como escribe el que pide delivery: "me mandás…", "me traés…".
+r = decir('5492944200097', 'hola! me mandás 2 milanesas con papas y 6 empanadas de carne?');
+chequear('"me mandás" arranca el pedido con todo anotado', textoPara(r, '5492944200097').includes('2 × Milanesa con papas') && textoPara(r, '5492944200097').includes('6 × Empanada de carne'));
+r = decir('5492944200098', 'buenas, me traés una milanesa con papas');
+chequear('"me traés" también', textoPara(r, '5492944200098').includes('1 × Milanesa con papas'));
+
 console.log('\n— 7. Cocina pausada —');
 const C4 = '5492944200004';
 config.pedidos.cocina = 'pausada';
