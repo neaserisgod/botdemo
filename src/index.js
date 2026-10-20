@@ -101,7 +101,7 @@ const adaptador = crearAdaptador(config, {
   alConectar: () => {
     const primeraVez = !estado.conectado;
     estado.conectado = true;
-    estadoApp.anotar({ conectado: true, codigo: null, deslogueado: false, desde: Date.now(), motivo: null });
+    estadoApp.anotar({ conectado: true, codigo: null, qr: null, deslogueado: false, desde: Date.now(), motivo: null });
     console.log('WhatsApp conectado.');
 
     // Modo vinculación: ya quedó la sesión guardada, salimos para que PM2 lo
@@ -122,9 +122,10 @@ const adaptador = crearAdaptador(config, {
     setTimeout(() => espejarCarta().then(() => subirCatalogoWa(false)).catch(() => {}), 30000);
   },
 
-  // La app que trae el bot adentro muestra el código y avisa cuando hay que volver a vincular.
+  // La app que trae el bot adentro muestra el código (celular) o el QR (compu) y avisa cuando hay que volver a vincular.
   alCodigo: (codigo, numero) => estadoApp.anotar({ codigo, codigoPara: numero, codigoDesde: Date.now() }),
-  alDesloguear: () => estadoApp.anotar({ conectado: false, deslogueado: true, codigo: null }),
+  alQr: (qr) => estadoApp.anotar({ qr, qrDesde: Date.now() }),
+  alDesloguear: () => estadoApp.anotar({ conectado: false, deslogueado: true, codigo: null, qr: null }),
 
   alDesconectar: (motivo) => {
     estado.conectado = false;

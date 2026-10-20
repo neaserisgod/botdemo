@@ -134,7 +134,9 @@ function crearAdaptador(config, hooks) {
       setTimeout(async () => {
         try {
           // NUMERO_BOT: la app que trae el bot adentro lo pasa, porque al arrancar la primera vez todavía no bajó la configuración.
-          const numero = String(process.env.NUMERO_BOT || config.numero_actual).replace(/\D/g, '');
+          const numero = String(process.env.NUMERO_BOT || config.numero_actual || '').replace(/\D/g, '');
+          // Sin número (la app de la compu, que vincula escaneando el QR): no se pide código, alcanza con el QR.
+          if (!numero) { console.log('Sin número para el código: se vincula escaneando el QR.'); return; }
           const codigo = await sock.requestPairingCode(numero);
           hooks.alCodigo?.(codigo, numero);
           console.log('==========================================');
@@ -150,7 +152,10 @@ function crearAdaptador(config, hooks) {
     }
 
     sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-      // En modo pareo no mostramos el QR: confunde y encima tapa el código.
+      // La app que trae el bot adentro dibuja el QR en la pantalla de la compu (desde el celular no se puede escanear la
+      // propia pantalla: ahí va el código). WhatsApp lo cambia cada tanto; cada uno nuevo pisa al anterior.
+      if (qr) hooks.alQr?.(qr);
+      // En modo pareo no mostramos el QR en la terminal: confunde y encima tapa el código.
       if (qr && !process.argv.includes('--pareo')) {
         console.log('Escaneá este QR desde WhatsApp > Dispositivos vinculados:');
         qrcode.generate(qr, { small: true });
