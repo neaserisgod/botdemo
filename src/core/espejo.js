@@ -10,6 +10,9 @@
 //    la app (`catalogoParaLaApp`): los platos que se crearon de ahí se adoptan solos.
 //  * Lo que hoy no hay se esconde (no se borra): mañana vuelve con el mismo producto. Lo que se borró de la carta, se borra.
 //  * Lo que se vende por peso no va: el catálogo de WhatsApp solo pide unidades.
+//  * La foto: la que se sacó en la app (`foto` del plato, la versión) o una genérica. Solo se manda cuando hay que ponerla o
+//    cambiarla (`foto` en el plan: la versión, o null para la genérica); si no, la que tenga en WhatsApp queda como está, igual
+//    que la descripción, que el bot nunca escribe. `fotos` es lo que ya quedó puesto (`nube/fotos.js`).
 //  * El precio en WhatsApp va en milésimas de la moneda (el `priceAmount1000` de WhatsApp): centavos × 10.
 //  * Pocas operaciones por vuelta (`max`): muchas seguidas se parecen a un robot y WhatsApp puede bloquear el número. Lo que
 //    falta sale en la vuelta siguiente.
@@ -22,8 +25,9 @@ const precioWa = (centavos) => centavos * 10;
 const MAX_NOMBRE = 120;
 const normal = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
 
-// `items`: la carta (`catalogo.todos()`); `actuales`: lo que devuelve getCatalog. → { crear, cambiar, borrar } en ese orden.
-function planEspejo({ items, actuales, max = 20 }) {
+// `items`: la carta (`catalogo.todos()`); `actuales`: lo que devuelve getCatalog; `fotos`: gid → versión puesta (null = la
+// genérica). → { crear, cambiar, borrar } en ese orden.
+function planEspejo({ items, actuales, max = 20, fotos = new Map() }) {
   const nuestros = new Map();
   for (const p of actuales || []) {
     const gid = gidDeRetailer(p.retailerId);
@@ -40,16 +44,22 @@ function planEspejo({ items, actuales, max = 20 }) {
   for (const x of items || []) {
     if (!x.gid || catalogo.esPesable(x) || !Number.isSafeInteger(x.precioCentavos) || x.precioCentavos <= 0) continue;
     enLaCarta.add(x.gid);
-    const quiero = { name: String(x.nombre).slice(0, MAX_NOMBRE), price: precioWa(x.precioCentavos), isHidden: !x.hay };
+    const quiero = { gid: x.gid, name: String(x.nombre).slice(0, MAX_NOMBRE), price: precioWa(x.precioCentavos), isHidden: !x.hay };
+    const foto = x.foto || null;
     const ya = nuestros.get(x.gid);
     const adoptar = !ya && aMano.get(normal(x.nombre));
     if (adoptar) {
+      // Lo cargado a mano tiene su foto: se cambia solo si en la app se sacó una.
       aMano.delete(normal(x.nombre));
-      cambiar.push({ id: adoptar.id, retailerId: retailerDe(x.gid), ...quiero, adoptado: true });
+      cambiar.push({ id: adoptar.id, retailerId: retailerDe(x.gid), ...quiero, adoptado: true, ...(foto ? { foto } : {}) });
     } else if (!ya) {
-      if (x.hay) crear.push({ retailerId: retailerDe(x.gid), ...quiero });
-    } else if (ya.name !== quiero.name || Number(ya.price) !== quiero.price || !!ya.isHidden !== quiero.isHidden) {
-      cambiar.push({ id: ya.id, retailerId: retailerDe(x.gid), ...quiero });
+      if (x.hay) crear.push({ retailerId: retailerDe(x.gid), ...quiero, foto });
+    } else {
+      // Un plato de antes de las fotos no tiene nada anotado: cuenta como la genérica.
+      const cambiaFoto = (fotos.get(x.gid) ?? null) !== foto;
+      if (cambiaFoto || ya.name !== quiero.name || Number(ya.price) !== quiero.price || !!ya.isHidden !== quiero.isHidden) {
+        cambiar.push({ id: ya.id, retailerId: retailerDe(x.gid), ...quiero, ...(cambiaFoto ? { foto } : {}) });
+      }
     }
   }
   const borrar = [...nuestros.entries()].filter(([gid]) => !enLaCarta.has(gid)).map(([, p]) => p.id);

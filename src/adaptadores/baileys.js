@@ -298,21 +298,38 @@ function crearAdaptador(config, hooks) {
   const PAUSA_ESPEJO_MS = 2000;
   const IMAGEN_PLATO = path.join(__dirname, '..', 'assets', 'plato.jpg');
   let espejando = false;
-  async function espejarCatalogo(items) {
+  // `fotos` (`nube/fotos.js`, solo vinculado a Nodo Sur): las fotos sacadas en la app. Sin eso, la genérica.
+  async function espejarCatalogo(items, fotos = null) {
     if (!sock || !abierto || espejando) return null;
     espejando = true;
     try {
       const actuales = await catalogoWaEntero();
-      const plan = espejo.planEspejo({ items, actuales });
+      const plan = espejo.planEspejo({ items, actuales, fotos: fotos ? fotos.aplicadas() : new Map() });
       const pausa = () => new Promise((ok) => setTimeout(ok, PAUSA_ESPEJO_MS));
       const hecho = { cambiados: 0, creados: 0, borrados: 0, pendientes: plan.pendientes };
+      // La imagen que va (la del plato o la genérica), o null si la foto no se pudo bajar: se reintenta en la vuelta siguiente.
+      const imagen = async (p) => {
+        if (!p.foto || !fotos) return IMAGEN_PLATO;
+        try { return await fotos.ruta(p.gid, p.foto); } catch (e) {
+          console.error(`No pude bajar la foto de ${p.name}:`, e.message);
+          return null;
+        }
+      };
+      const anotar = (p) => { if (fotos && p.foto !== undefined) fotos.anotar(p.gid, p.foto || null); };
       for (const p of plan.cambiar) {
-        await sock.productUpdate(p.id, { name: p.name, retailerId: p.retailerId, description: '', price: p.price, currency: 'ARS', isHidden: p.isHidden, images: [] });
+        // Sin `description` ni imágenes, WhatsApp deja las que tiene: lo que el local escribió o puso a mano no se pisa.
+        const url = p.foto !== undefined ? await imagen(p) : null;
+        await sock.productUpdate(p.id, { name: p.name, retailerId: p.retailerId, price: p.price, currency: 'ARS', isHidden: p.isHidden,
+          images: url ? [{ url }] : [] });
+        if (url) anotar(p); else if (p.foto) hecho.pendientes++;
         hecho.cambiados++; await pausa();
       }
       for (const p of plan.crear) {
+        const url = (await imagen(p)) || IMAGEN_PLATO;
         await sock.productCreate({ name: p.name, retailerId: p.retailerId, description: '', price: p.price, currency: 'ARS', isHidden: false,
-          originCountryCode: undefined, images: [{ url: IMAGEN_PLATO }] });
+          originCountryCode: undefined, images: [{ url }] });
+        if (fotos) fotos.anotar(p.gid, url === IMAGEN_PLATO ? null : p.foto);
+        if (p.foto && url === IMAGEN_PLATO) hecho.pendientes++;
         hecho.creados++; await pausa();
       }
       if (plan.borrar.length) { await sock.productDelete(plan.borrar); hecho.borrados = plan.borrar.length; }
