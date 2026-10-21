@@ -317,6 +317,31 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   r14 = await decir(C17, '¿Tienen tacc?');
   chequear('una pregunta sin respuesta no dice "no encontré ese producto"', textoPara(r14, C17).includes('no la sé responder') && !textoPara(r14, C17).includes('ese producto'));
 
+  console.log('\n— 15. El pedido con la dirección en el mismo mensaje (2026-10-21) —');
+  catalogo.fijar([
+    { gid: 'h-dp', nombre: 'Doble con papas', precioCentavos: 1600000, hay: true },
+    { gid: 'h-sp', nombre: 'Simple con papas', precioCentavos: 1300000, hay: true },
+  ]);
+  const C18 = '5492944200018';
+  let r15 = await decir(C18, 'Quería pedirte una doble con papas. Para de los satélites 12963 (la tranquera q no tienen número)');
+  chequear('el pedido con la dirección después del punto se anota', textoPara(r15, C18).includes('1 × Doble con papas') && !textoPara(r15, C18).includes('No encontré'));
+  r15 = await decir(C18, 'listo');
+  chequear('no vuelve a preguntar retiro o envío ni la dirección: pasa a la zona', textoPara(r15, C18).includes('¿En qué zona') && !textoPara(r15, C18).includes('¿Cómo lo querés') && !textoPara(r15, C18).includes('¿A qué dirección'));
+  await decir(C18, '1');
+  await decir(C18, 'Bruno');
+  r15 = await decir(C18, '1');
+  chequear('y la dirección va al resumen', textoPara(r15, C18).includes('de los satélites 12963 (la tranquera q no tienen número)'));
+  const C19 = '5492944200019';
+  await decir(C19, 'pedido');
+  r15 = await decir(C19, 'Queria pedirte una doble con papas, direccion de los satelites 12963');
+  chequear('armando el pedido, el verbo y la dirección no son el producto', textoPara(r15, C19).includes('Anotado: 1 × Doble con papas') && !textoPara(r15, C19).includes('Horarios'));
+  r15 = await decir(C19, 'listo');
+  chequear('y la dirección queda para el envío', textoPara(r15, C19).includes('¿En qué zona'));
+  decir(C19, 'cancelar');
+  const C20 = '5492944200020';
+  r15 = await decir(C20, 'quiero 2 simple con papas para las 21');
+  chequear('"para las 21" no es una dirección', !textoPara(r15, C20).includes('Anoté la dirección'));
+
   console.log(fallas ? `\n❌ ${fallas} chequeos de gastronomía fallaron` : '\n✅ Gastronomía OK');
   process.exit(fallas ? 1 : 0);
 })();
