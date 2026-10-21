@@ -389,7 +389,10 @@ function crearSincronizador({ config, cliente, cuenta = cuentaArchivo, recargarC
     } else if (e && e.sinPlan) {
       log.error('Nodo Sur: el negocio no tiene un plan con bot, así que no baja la configuración ni los pedidos.');
     } else {
-      log.error(`Nodo Sur (${que}): ${e && e.message}`);
+      // "fetch failed" solo no dice nada (primer celular real, 2026-10-21): la causa está adentro (sin internet, sin DNS, el
+      // certificado, la conexión cortada).
+      const causa = e && e.cause && (e.cause.code || e.cause.message);
+      log.error(`Nodo Sur (${que}): ${e && e.message}${causa ? ` (${causa})` : ''}`);
     }
   }
 
