@@ -107,7 +107,7 @@ function textoAlias(config, total) {
 }
 
 // Si el local tiene catálogo de WhatsApp Business: lo prende la app (`pedidos.catalogo_whatsapp`) o config.json
-// (`negocio.catalogo_whatsapp`). Con eso el bot manda el link del catálogo y le copia la carta (`espejo.js`).
+// (`negocio.catalogo_whatsapp`). Con eso el bot manda el link del catálogo; el catálogo lo carga el local a mano en WhatsApp.
 const conCatalogoWhatsapp = (config) => !!(config.pedidos?.catalogo_whatsapp || config.negocio?.catalogo_whatsapp);
 const linkCatalogo = (config) => (conCatalogoWhatsapp(config) ? `https://wa.me/c/${config.numero_actual}` : null);
 
