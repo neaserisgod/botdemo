@@ -396,16 +396,36 @@ function crearAdaptador(config, hooks) {
   // id del producto en WhatsApp → retailer id, del catálogo propio. Se vuelve a pedir si aparece uno que no está (lo cargaron
   // después). Es la API no oficial: si falla, el carrito vuelve vacío y el bot le pide al cliente que lo escriba.
   let retailerDe = new Map();
+  // Con el número del bot (lo que hace Baileys) y, si no trae nada, con su @lid: desde 2025 WhatsApp mezcla las dos identidades
+  // y el catálogo propio podía volver vacío (primer celular real, 2026-10-21: "leído: 0 artículos" con uno cargado a mano).
+  let catalogoVacioAnotado = false;
   async function catalogoWaEntero() {
-    const productos = [];
-    let cursor;
-    for (let i = 0; i < 20; i++) {
-      const r = await sock.getCatalog({ limit: 100, cursor });
-      productos.push(...(r.products || []));
-      if (!r.nextPageCursor) break;
-      cursor = r.nextPageCursor;
+    const leer = async (jid) => {
+      const productos = [];
+      let cursor;
+      for (let i = 0; i < 20; i++) {
+        const r = await sock.getCatalog({ jid, limit: 100, cursor });
+        productos.push(...(r.products || []));
+        if (!r.nextPageCursor) break;
+        cursor = r.nextPageCursor;
+      }
+      return productos;
+    };
+    const vistas = [];
+    const mirar = (frame) => { if (frame && frame.tag === 'iq') vistas.push(frame); };
+    sock.ws?.on?.('frame', mirar);
+    try {
+      let productos = await leer(undefined);
+      const lid = sock.user?.lid ? baileys.jidNormalizedUser(sock.user.lid) : null;
+      if (!productos.length && lid) productos = await leer(lid);
+      if (!productos.length && !catalogoVacioAnotado && vistas.length) {
+        catalogoVacioAnotado = true;
+        console.log(`Catálogo de WhatsApp vacío. Lo que contestó WhatsApp: ${vistas.map((v) => resumenNodo(v)).join(' | ').slice(0, 1500)}`);
+      }
+      return productos;
+    } finally {
+      sock.ws?.off?.('frame', mirar);
     }
-    return productos;
   }
 
   async function cargarCatalogoWa() {
