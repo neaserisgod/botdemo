@@ -35,6 +35,12 @@ la configuración y el catálogo de verdad de ese equipo. No toca nada real: bas
 llega a Nodo Sur. «Charla nueva» arranca con un cliente que nunca escribió; «No entendió» muestra lo que el bot no supo
 contestar en la prueba.
 
+### Modo prueba en el WhatsApp de verdad
+
+Desde tu número (`numero_duena`) escribile al bot **modo prueba**: te atiende como a un cliente y no le contesta a nadie más.
+**salir** vuelve a lo normal; si te olvidás, se apaga solo a las 2 horas sin escribirle (y con cada reinicio del bot).
+Un pedido que confirmes en la prueba llega de verdad a Encargues: se cancela ahí.
+
 ## Problemas comunes al instalar (primer celular real, 2026-10-09)
 
 - **"curl: command not found"**: Termux recién instalado no lo trae. Primero `pkg install -y curl`.

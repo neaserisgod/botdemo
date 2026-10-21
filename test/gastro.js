@@ -325,6 +325,21 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   chequear('una pregunta que el local no cargó sigue buscando en la carta', textoPara(r12, C15).includes('Empanada de carne'));
   config.preguntas = [];
 
+  console.log('\n— 13. Modo prueba: el dueño es el cliente y al resto no se le contesta —');
+  const D = config.numero_duena;
+  const C16 = '5492944200016';
+  let r13 = await decir(D, 'modo prueba');
+  chequear('el dueño entra al modo prueba', motor.enPrueba() && textoPara(r13, D).includes('Modo prueba') && textoPara(r13, D).includes('Encargues'));
+  r13 = await decir(D, 'hola');
+  chequear('y lo atiende como a un cliente', textoPara(r13, D).length > 0 && !textoPara(r13, D).includes('Escribime como te salga'));
+  r13 = await decir(D, 'hay milanesa?');
+  chequear('le contesta con la carta', textoPara(r13, D).includes('Milanesa con papas'));
+  chequear('a otro número no le contesta', (await decir(C16, 'hola')).length === 0);
+  r13 = await decir(D, 'Salir');
+  chequear('con "salir" vuelve a ser el dueño', !motor.enPrueba() && textoPara(r13, D).includes('Salí del modo prueba'));
+  chequear('y los clientes vuelven a ser atendidos', (await decir(C16, 'hola')).length > 0);
+  chequear('el dueño vuelve a tener sus comandos', textoPara(await decir(D, 'ayuda'), D).includes('modo prueba'));
+
   console.log(fallas ? `\n❌ ${fallas} chequeos de gastronomía fallaron` : '\n✅ Gastronomía OK');
   process.exit(fallas ? 1 : 0);
 })();
