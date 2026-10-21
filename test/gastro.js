@@ -309,6 +309,22 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   chequear('otra versión reemplaza a la vieja', bajadas === 2 && fs.existsSync(r2) && !fs.existsSync(r1));
   fotos.anotar('g-mila', 'v2');
   chequear('lo puesto en WhatsApp queda anotado entre reinicios', crearFotos({ dir: dirFotos, cliente: {} }).aplicadas().get('g-mila') === 'v2');
+  // Lo que pasó en el primer celular real: WhatsApp contesta sin el producto y Baileys se cae (2026-10-21).
+  let reloj = 0;
+  const memoria = espejo.crearMemoriaEspejo(() => reloj);
+  const op = { retailerId: 'ns-g-mila', name: 'Milanesa', price: 1, isHidden: false, foto: null };
+  chequear('el error de Baileys sin producto se reconoce', memoria.respuestaSinProducto(new Error("Cannot read properties of undefined (reading 'attrs')")) && !memoria.respuestaSinProducto(new Error('timeout')));
+  memoria.dudosa(memoria.clave(op));
+  chequear('lo dudoso no se repite enseguida', memoria.esDudosa(memoria.clave(op)));
+  reloj += 61 * 60000;
+  chequear('a la hora se vuelve a probar', !memoria.esDudosa(memoria.clave(op)));
+  chequear('el primer error se anota', memoria.fallo('x') === true && !memoria.puedeIntentar());
+  reloj += 5 * 60000;
+  chequear('a los 5 minutos se reintenta, y el mismo error no se vuelve a anotar', memoria.puedeIntentar() && memoria.fallo('x') === false);
+  reloj += 5 * 60000;
+  chequear('la segunda espera es más larga', !memoria.puedeIntentar());
+  memoria.anduvo();
+  chequear('cuando anda, vuelve a lo normal', memoria.puedeIntentar());
   const paraApp = espejo.catalogoParaLaApp([
     { id: '111', retailerId: 'ns-g-mila', name: 'Milanesa con papas', description: 'Con fritas', price: 6500000, isHidden: false },
     { id: '112', retailerId: '', name: ' Tarta de jamón y queso ', price: 5000000, isHidden: true },

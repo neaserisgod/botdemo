@@ -86,4 +86,39 @@ function catalogoParaLaApp(productos) {
   })).filter((x) => /^[\w-]{1,64}$/.test(x.waId) && x.nombre);
 }
 
-module.exports = { planEspejo, catalogoParaLaApp, retailerDe, gidDeRetailer, precioWa, PREFIJO };
+// Lo que el adaptador recuerda entre vueltas (primer celular real, 2026-10-21: "No pude copiar la carta al catálogo de WhatsApp:
+// Cannot read properties of undefined (reading 'attrs')" cada 5 minutos):
+//  * Baileys lee la respuesta de WhatsApp al crear o cambiar un producto y, si no trae el producto, se cae aunque WhatsApp lo
+//    haya hecho. Esa operación queda "dudosa": no se repite por una hora (un producto creado que todavía no aparece en el
+//    catálogo, por ejemplo en revisión, se crearía otra vez en cada vuelta) y la vuelta sigue con lo demás.
+//  * Un error de verdad corta la vuelta y la próxima espera más (5, 10, 20… hasta 60 minutos); se anota una vez, no en cada vuelta.
+const RESPUESTA_SIN_PRODUCTO = /reading 'attrs'/;
+const VIDA_DUDOSA_MS = 60 * 60 * 1000;
+const ESPERA_MAX_MIN = 60;
+
+function crearMemoriaEspejo(ahora = () => Date.now()) {
+  const dudosas = new Map(); // clave → cuándo
+  let fallas = 0;
+  let esperarHasta = 0;
+  let ultimoError = null;
+  const vigente = (clave) => { const t = dudosas.get(clave); return t !== undefined && ahora() - t < VIDA_DUDOSA_MS; };
+  return {
+    respuestaSinProducto: (e) => RESPUESTA_SIN_PRODUCTO.test((e && e.message) || ''),
+    // La operación, como clave: lo mismo pedido otra vez es la misma clave.
+    clave: (p) => JSON.stringify([p.id || null, p.retailerId, p.name, p.price, p.isHidden, p.foto === undefined ? '-' : p.foto]),
+    dudosa: (clave) => { dudosas.set(clave, ahora()); },
+    esDudosa: vigente,
+    puedeIntentar: () => ahora() >= esperarHasta,
+    anduvo: () => { fallas = 0; esperarHasta = 0; ultimoError = null; },
+    // Devuelve si hay que anotarlo (la primera vez, o si cambió el error).
+    fallo: (mensaje) => {
+      fallas++;
+      esperarHasta = ahora() + Math.min(ESPERA_MAX_MIN, 5 * 2 ** (fallas - 1)) * 60000;
+      const anotar = mensaje !== ultimoError;
+      ultimoError = mensaje;
+      return anotar;
+    },
+  };
+}
+
+module.exports = { planEspejo, catalogoParaLaApp, crearMemoriaEspejo, retailerDe, gidDeRetailer, precioWa, PREFIJO };
