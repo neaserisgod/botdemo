@@ -27,4 +27,13 @@ t('con TZ puesta (la que pasa la app): la respeta', () => {
   assert.strictEqual(horaLocal({ ...sinTz, TZ: 'America/Argentina/Cordoba' }), 'America/Argentina/Cordoba 15');
   assert.strictEqual(horaLocal({ ...sinTz, TZ: 'Europe/Madrid' }), 'Europe/Madrid 20');
 });
+// Lo mismo con los certificados (`src/certificados.js`, 2026-10-21): en Android, los que trae Node; en una PC, los del sistema.
+t('certificados: en Android usa los que trae Node, en una PC no toca nada', () => {
+  const tls = require('tls');
+  const { asegurarCertificados } = require('../src/certificados');
+  assert.strictEqual(asegurarCertificados('linux'), false);
+  const cargo = asegurarCertificados('android');
+  assert.strictEqual(cargo, typeof tls.setDefaultCACertificates === 'function');
+  if (cargo) assert.strictEqual(tls.getCACertificates('default').length, tls.rootCertificates.length);
+});
 console.log(`\n✅ Zona horaria OK (${ok})`);
