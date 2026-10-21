@@ -303,6 +303,28 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   chequear('cuando la app lo pide, lo vuelve a leer', pidio);
   chequear('el catálogo se prende también desde la app', gastro.conCatalogoWhatsapp({ pedidos: { catalogo_whatsapp: true }, negocio: {} }));
 
+  console.log('\n— 12. Las preguntas del local no se mezclan con el pedido —');
+  config.preguntas = [
+    { claves: ['sos un bot'], respuesta: 'Soy el asistente del local 🙂' },
+    { claves: ['tienen milanesa', 'hay milanesa'], respuesta: 'Sí, de carne y con papas.' },
+  ];
+  const C12 = '5492944200012';
+  let r12 = await decir(C12, '¿sos un bot?');
+  chequear('"¿sos un bot?" con respuesta cargada la contesta el local (no pasa a una persona)', textoPara(r12, C12).includes('Soy el asistente del local'));
+  config.preguntas = [];
+  r12 = await decir('5492944200014', 'sos un bot?');
+  chequear('sin respuesta cargada, "¿sos un bot?" sigue yendo a una persona', textoPara(r12, '5492944200014').includes('personalmente'));
+  config.preguntas = [{ claves: ['tienen milanesa', 'hay milanesa'], respuesta: 'Sí, de carne y con papas.' }];
+  const C15 = '5492944200015';
+  await decir(C15, 'pedido');
+  r12 = await decir(C15, '¿tienen milanesa?');
+  chequear('armando el pedido, una pregunta del local se contesta y no se anota', textoPara(r12, C15).includes('de carne y con papas') && !textoPara(r12, C15).includes('Anotado'));
+  r12 = await decir(C15, '2 milanesas');
+  chequear('con cantidad sí se anota', textoPara(r12, C15).includes('2 × Milanesa con papas'));
+  r12 = await decir(C15, 'hay empanadas?');
+  chequear('una pregunta que el local no cargó sigue buscando en la carta', textoPara(r12, C15).includes('Empanada de carne'));
+  config.preguntas = [];
+
   console.log(fallas ? `\n❌ ${fallas} chequeos de gastronomía fallaron` : '\n✅ Gastronomía OK');
   process.exit(fallas ? 1 : 0);
 })();

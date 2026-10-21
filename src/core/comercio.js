@@ -118,11 +118,13 @@ function inicio(ctx, estado = 'inicio') {
   // Lo que pregunta en el mismo mensaje va antes que pasarlo a una persona: "¿alguien me atiende? quiero saber si tienen
   // leche" se contesta con la leche (y la opción de hablar con alguien).
   const buscado = catalogo.palabrasClave(t).length && catalogo.cargado() ? catalogo.buscar(t, 5, sinonimos(ctx)) : null;
-  if (inter.intencion === 'humano' && !(buscado && buscado.resultados.length)) return derivarAHumano(ctx, ctx.msj.texto);
-
-  // Envíos, cómo se paga, horarios, ubicación y las preguntas que cargó el negocio.
+  // Envíos, cómo se paga, horarios, ubicación y las preguntas que cargó el negocio. Las del negocio van antes que pasarlo a
+  // una persona: si el local cargó qué contestar a "¿sos un bot?", lo contesta él (si no, sigue yendo a una persona).
   const tm = nlu.tema(ctx.config, t);
-  if (tm) return responderTema(ctx, tm, porDefecto(ctx), estado === 'consultando' ? 'consultando' : 'inicio');
+  const estadoTema = estado === 'consultando' ? 'consultando' : 'inicio';
+  if (tm && tm.tema === 'pregunta') return responderTema(ctx, tm, porDefecto(ctx), estadoTema);
+  if (inter.intencion === 'humano' && !(buscado && buscado.resultados.length)) return derivarAHumano(ctx, ctx.msj.texto);
+  if (tm) return responderTema(ctx, tm, porDefecto(ctx), estadoTema);
 
   // "¿cuánto sale 1/4 de jamón?": lo que sale ese peso.
   const conPeso = precioDePeso(ctx, estado);
@@ -353,6 +355,12 @@ function armando_pedido(ctx) {
   // "listo", y también "listo gracias", "eso es todo, gracias".
   if (TERMINAR.includes(norm) || (nlu.esCortesia(ctx.msj.texto || '') && /\b(?:listo|eso es todo|nada mas|ya esta|eso nomas)\b/.test(norm))) return terminarPedido(ctx);
   const texto = ctx.msj.texto || '';
+  // "¿tienen cerveza?" mientras arma el pedido es una pregunta, no un renglón: si la contesta una pregunta de siempre o del
+  // negocio, se contesta y no se anota nada. Con una cantidad ("¿me sumás 2 cervezas?") sí es un renglón.
+  if (esPreguntaSinCantidad(texto)) {
+    const aparte = entenderEnPaso(ctx, '¿Algo más? Si no, escribí *listo*.');
+    if (aparte) return aparte;
+  }
   const lineas = separarLineas(texto);
   if (lineas.length > 1) return anotarVarias(ctx, lineas, []);
 
@@ -374,6 +382,13 @@ function armando_pedido(ctx) {
   if (r.tipo === 'pesar') return preguntarPeso(ctx, r.producto, []);
   if (r.tipo === 'elegir') return preguntarCual(ctx, r.resultados, r.cantidad, [], r.gramos);
   return agregar(ctx, r.producto, r);
+}
+
+const INTERROGATIVO = /^(?:que|cual|cuales|como|cuanto|cuanta|cuantos|cuantas|donde|cuando|tienen|tenes|tienes|hay|hacen|puedo|se puede|podes|es|son|viene|vienen|trae|traen|incluye|sos)\b/;
+function esPreguntaSinCantidad(texto) {
+  const norm = nlu.normalizar(texto);
+  if (!norm || numeros.pesoInicial(norm) || numeros.cantidadInicial(norm) || /\d/.test(norm)) return false;
+  return texto.includes('?') || INTERROGATIVO.test(norm);
 }
 
 const textoPaquete = (p) => `*${p.nombre}* viene en paquete, no se vende suelto 📦`;
