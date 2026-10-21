@@ -239,7 +239,8 @@ function ayuda(config) {
     return `Escribime como te salga 😊\n\n` +
       `📣 *"aviso mañana abrimos a las 10"* — mensaje ${config.textos.a_todos}\n` +
       `👥 *"pasame los contactos"* — ${config.textos.todos} para tu agenda\n` +
-      `🤔 *"qué no entendiste"* — lo que me escribieron y no supe contestar\n\n` +
+      `🤔 *"qué no entendiste"* — lo que me escribieron y no supe contestar\n` +
+      `🧪 *"modo prueba"* — te atiendo como a un cliente para que pruebes (y *salir* para volver)\n\n` +
       'Los pedidos que toma el bot los ves y los confirmás en la app de Nodo Sur (Encargues).';
   }
   return `Escribime como te salga, te entiendo 😊\n\n` +
@@ -253,7 +254,8 @@ function ayuda(config) {
     `✏️ *"${ejemploPrecio(config)}"* — cambiar un precio\n` +
     `📣 *"aviso mañana no abrimos por el feriado"* — mensaje ${config.textos.a_todos}\n` +
     `👥 *"pasame los contactos"* — ${config.textos.todos} para tu agenda\n` +
-    `🤔 *"qué no entendiste"* — lo que me escribieron y no supe contestar\n\n` +
+    `🤔 *"qué no entendiste"* — lo que me escribieron y no supe contestar\n` +
+    `🧪 *"modo prueba"* — te atiendo como a un cliente para que pruebes (y *salir* para volver)\n\n` +
     `También andan los atajos: !hoy !semana !turno N !ok N !no N !anular N !precio`;
 }
 
