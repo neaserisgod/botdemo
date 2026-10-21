@@ -172,7 +172,9 @@ function crearAdaptador(config, hooks) {
         sesionRotaSeguidas = codigo === baileys.DisconnectReason.badSession ? sesionRotaSeguidas + 1 : 0;
         const deslogueado = codigo === baileys.DisconnectReason.loggedOut || codigo === baileys.DisconnectReason.forbidden
           || sesionRotaSeguidas >= SESION_ROTA_MAX;
-        hooks.alDesconectar(`baileys close (código ${codigo ?? '?'})`);
+        // El motivo que da Baileys, además del código: un 500 puede ser la sesión rota o la conexión que no llega a abrir.
+        const motivo = lastDisconnect?.error?.message;
+        hooks.alDesconectar(`baileys close (código ${codigo ?? '?'}${motivo && motivo !== 'Connection Closed' ? `: ${motivo}` : ''})`);
         if (deslogueado) {
           console.error(sesionRotaSeguidas >= SESION_ROTA_MAX
             ? 'La sesión de WhatsApp está rota (o se borró el dispositivo): hay que vincular de nuevo.'
