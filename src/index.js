@@ -3,6 +3,8 @@
 // consola (pruebas sin WhatsApp), baileys (fase 2, celu).
 // Primero la zona horaria: todo lo que sigue cuenta "hoy" y los horarios en hora local (`zona.js`).
 require('./zona').asegurarZona();
+// Y los certificados, antes de cualquier conexión (`certificados.js`).
+require('./certificados').asegurarCertificados();
 const cron = require('node-cron');
 const configuracion = require('./config');
 const config = configuracion.cargar(); // valida y avisa si algo está mal
