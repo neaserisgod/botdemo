@@ -34,9 +34,12 @@ function porDefecto(ctx) {
   if (!gastro.esGastro(ctx.config)) return POR_DEFECTO;
   if (!gastro.formas(ctx.config).some((f) => f.envio)) return POR_DEFECTO;
   const zs = gastro.zonas(ctx.config);
-  const lista = zs.length ? `\n${zs.map((z) => `• ${z.nombre} — ${catalogo.plata(gastro.costoEnvio({ envio: true }, z))}`).join('\n')}` : '';
-  return { envios: `¡Sí, te lo llevamos! 🛵${lista}\nPara armar tu pedido, escribí *pedido*.` };
+  const lista = zs.length ? `\n${zs.map((z) => `• ${z.nombre} — ${precioEnvio(gastro.costoEnvio({ envio: true }, z))}`).join('\n')}` : '';
+  return { envios: `¡Sí, te lo llevamos! 🛵${lista}\nCuando quieras armar el pedido, escribime *pedido*.` };
 }
+
+// Un envío que no cuesta nada se dice como lo diría alguien del local, no "$0".
+const precioEnvio = (centavos) => (centavos > 0 ? catalogo.plata(centavos) : 'sin cargo');
 
 const AVISO_PRECIO = '_Precios de hoy, pueden cambiar._';
 const MAX_LINEAS = 50; // lo que acepta Nodo Sur por pedido
@@ -69,9 +72,23 @@ function menu(ctx, saludo) {
   const g = gastro.esGastro(ctx.config);
   const ver = g ? `Ver la carta ${ctx.config.textos.emoji}` : `Consultar precios ${ctx.config.textos.emoji}`;
   const pedir = g ? 'Hacer un pedido' : 'Hacer un pedido para retirar';
+  const pregunta = g ? '¿Qué te preparamos?' : '¿Qué necesitás?';
+  const pie = g ? `Elegí un número, o escribime directo lo que querés${ejemploDeLaCarta(ctx, ' (ej: ', ')')}.` : 'Respondé con el número, o escribime directo qué buscás.';
   return responder(ctx, 'inicio',
-    `${encabezado}¿Qué necesitás?\n\n*1* — ${ver}\n*2* — ${pedir}\n*3* — Ubicación y horarios\n*4* — Hablar con una persona\n\nRespondé con el número, o escribime directo qué buscás.`);
+    `${encabezado}${pregunta}\n\n*1* — ${ver}\n*2* — ${pedir}\n*3* — ${g ? 'Horarios y envíos' : 'Ubicación y horarios'}\n*4* — Hablar con una persona\n\n${pie}`);
 }
+
+// Un ejemplo de pedido con algo que el local tiene hoy ("*1 combo la km 13*"): lo más corto de la carta, así se lee fácil.
+function ejemploDeLaCarta(ctx, antes = '', despues = '') {
+  if (!catalogo.cargado()) return '';
+  const hay = catalogo.todos().filter((x) => x.hay).sort((a, b) => a.nombre.length - b.nombre.length);
+  return hay.length ? `${antes}*1 ${hay[0].nombre.toLowerCase()}*${despues}` : '';
+}
+
+// El saludo: un local gastronómico agradece como lo haría alguien del local; el resto se presenta como asistente.
+const saludo = (ctx) => (gastro.esGastro(ctx.config)
+  ? `¡Hola! 👋 Gracias por escribir a *${ctx.config.negocio.nombre}*.`
+  : `¡Hola! 👋 Soy el asistente de *${ctx.config.negocio.nombre}*.`);
 
 const sinCatalogo = (ctx) => responder(ctx, 'inicio',
   'Todavía no tengo cargada la lista de precios 😅 Escribí *4* y te responde una persona.');
@@ -118,11 +135,13 @@ function inicio(ctx, estado = 'inicio') {
   // Lo que pregunta en el mismo mensaje va antes que pasarlo a una persona: "¿alguien me atiende? quiero saber si tienen
   // leche" se contesta con la leche (y la opción de hablar con alguien).
   const buscado = catalogo.palabrasClave(t).length && catalogo.cargado() ? catalogo.buscar(t, 5, sinonimos(ctx)) : null;
-  if (inter.intencion === 'humano' && !(buscado && buscado.resultados.length)) return derivarAHumano(ctx, ctx.msj.texto);
-
-  // Envíos, cómo se paga, horarios, ubicación y las preguntas que cargó el negocio.
+  // Envíos, cómo se paga, horarios, ubicación y las preguntas que cargó el negocio. Las del negocio van antes que pasarlo a
+  // una persona: si el local cargó qué contestar a "¿sos un bot?", lo contesta él (si no, sigue yendo a una persona).
   const tm = nlu.tema(ctx.config, t);
-  if (tm) return responderTema(ctx, tm, porDefecto(ctx), estado === 'consultando' ? 'consultando' : 'inicio');
+  const estadoTema = estado === 'consultando' ? 'consultando' : 'inicio';
+  if (tm && tm.tema === 'pregunta') return responderTema(ctx, tm, porDefecto(ctx), estadoTema);
+  if (inter.intencion === 'humano' && !(buscado && buscado.resultados.length)) return derivarAHumano(ctx, ctx.msj.texto);
+  if (tm) return responderTema(ctx, tm, porDefecto(ctx), estadoTema);
 
   // "¿cuánto sale 1/4 de jamón?": lo que sale ese peso.
   const conPeso = precioDePeso(ctx, estado);
@@ -151,14 +170,14 @@ function inicio(ctx, estado = 'inicio') {
   // Enojo sin otro pedido: perdón, y una persona.
   const enojado = enojo(ctx);
   if (enojado) return enojado;
-  if (inter.intencion === 'saludo') return menu(ctx, `¡Hola! 👋 Soy el asistente de *${ctx.config.negocio.nombre}*.`);
+  if (inter.intencion === 'saludo') return menu(ctx, saludo(ctx));
   // Lo que no se entendió queda anotado; a la segunda seguida, una persona en vez del menú otra vez.
   anotarNoEntendido(ctx);
   if (sinEntender >= 1) {
     return derivarAHumano(ctx, ctx.msj.texto, `Perdón, no te estoy entendiendo 😅 Ya le aviso ${aQuienAtiende(ctx.config.textos)} para que te responda personalmente.`);
   }
   ctx.datos.sinEntender = sinEntender + 1;
-  if (!pregunta) return menu(ctx, `¡Hola! 👋 Soy el asistente de *${ctx.config.negocio.nombre}*.`);
+  if (!pregunta) return menu(ctx, saludo(ctx));
   return responder(ctx, estado, 'No te entendí bien 🤔 Decime qué producto buscás, o escribí *menú* para ver las opciones.');
 }
 
@@ -228,9 +247,12 @@ function empezarPedido(ctx) {
   if (!catalogo.cargado()) return sinCatalogo(ctx);
   if (gastro.pausada(ctx.config)) return cocinaPausada(ctx);
   ctx.datos = { items: [] };
-  const ej = gastro.esGastro(ctx.config) ? '*2 milanesas*, *1 docena de empanadas*' : '*2 coca*, *1/4 de jamón*';
+  if (gastro.esGastro(ctx.config)) {
+    return responder(ctx, 'armando_pedido',
+      `${encabezadoPedido(ctx)} Decime qué te preparamos y cuántos${ejemploDeLaCarta(ctx, ' (ej: ', ')')}. Si son varias cosas, mandalas juntas, una por renglón.\nCuando termines, escribí *listo*.`);
+  }
   return responder(ctx, 'armando_pedido',
-    `${encabezadoPedido(ctx)}\nDecime qué querés y cuánto (ej: ${ej}). Podés mandar varias cosas juntas, una por renglón.\nCuando termines, escribí *listo*.`);
+    `${encabezadoPedido(ctx)}\nDecime qué querés y cuánto (ej: *2 coca*, *1/4 de jamón*). Podés mandar varias cosas juntas, una por renglón.\nCuando termines, escribí *listo*.`);
 }
 
 // El carrito que mandó desde el catálogo de WhatsApp (el adaptador lo lee: `[{ retailerId, nombre, cantidad }]`, o `[]` si no
@@ -353,6 +375,12 @@ function armando_pedido(ctx) {
   // "listo", y también "listo gracias", "eso es todo, gracias".
   if (TERMINAR.includes(norm) || (nlu.esCortesia(ctx.msj.texto || '') && /\b(?:listo|eso es todo|nada mas|ya esta|eso nomas)\b/.test(norm))) return terminarPedido(ctx);
   const texto = ctx.msj.texto || '';
+  // "¿tienen cerveza?" mientras arma el pedido es una pregunta, no un renglón: si la contesta una pregunta de siempre o del
+  // negocio, se contesta y no se anota nada. Con una cantidad ("¿me sumás 2 cervezas?") sí es un renglón.
+  if (esPreguntaSinCantidad(texto)) {
+    const aparte = entenderEnPaso(ctx, '¿Algo más? Si no, escribí *listo*.');
+    if (aparte) return aparte;
+  }
   const lineas = separarLineas(texto);
   if (lineas.length > 1) return anotarVarias(ctx, lineas, []);
 
@@ -374,6 +402,13 @@ function armando_pedido(ctx) {
   if (r.tipo === 'pesar') return preguntarPeso(ctx, r.producto, []);
   if (r.tipo === 'elegir') return preguntarCual(ctx, r.resultados, r.cantidad, [], r.gramos);
   return agregar(ctx, r.producto, r);
+}
+
+const INTERROGATIVO = /^(?:que|cual|cuales|como|cuanto|cuanta|cuantos|cuantas|donde|cuando|tienen|tenes|tienes|hay|hacen|puedo|se puede|podes|es|son|viene|vienen|trae|traen|incluye|sos)\b/;
+function esPreguntaSinCantidad(texto) {
+  const norm = nlu.normalizar(texto);
+  if (!norm || numeros.pesoInicial(norm) || numeros.cantidadInicial(norm) || /\d/.test(norm)) return false;
+  return texto.includes('?') || INTERROGATIVO.test(norm);
 }
 
 const textoPaquete = (p) => `*${p.nombre}* viene en paquete, no se vende suelto 📦`;
@@ -525,7 +560,7 @@ function siguienteGastro(ctx) {
   if (forma.envio && !d.zona) {
     if (zs.length <= 1) d.zona = zs.length ? zs[0].nombre : 'General';
     else {
-      const lista = zs.map((z, i) => `*${i + 1}* — ${z.nombre} (envío ${catalogo.plata(gastro.costoEnvio(forma, z))})`).join('\n');
+      const lista = zs.map((z, i) => `*${i + 1}* — ${z.nombre} (envío ${precioEnvio(gastro.costoEnvio(forma, z))})`).join('\n');
       return responder(ctx, 'eligiendo_zona', `¿En qué zona estás?\n\n${lista}`);
     }
   }
@@ -630,14 +665,14 @@ function resumenGastro(ctx) {
   if (!sale) return cocinaPausada(ctx);
   const total = items.reduce((s, x) => s + subtotal(x), 0) + costo;
   const lineas = items.map((x) => `• ${cuantoDe(x)} — ${catalogo.plata(subtotal(x))}`).join('\n');
-  const envio = forma.envio ? `\n🛵 Envío a ${ctx.datos.direccion} (${ctx.datos.zona}) — ${catalogo.plata(costo)}` : '';
+  const envio = forma.envio ? `\n🛵 Envío a ${ctx.datos.direccion} (${ctx.datos.zona}) — ${precioEnvio(costo)}` : '';
   const donde = forma.envio ? '' : '\n📍 Lo retirás en el local.';
   const cuando = sale.programado
     ? `🕐 Ahora estamos cerrados: lo dejamos programado y está ${forma.envio ? 'llegando' : 'listo'} ${gastro.textoHora(sale.hora)}.`
     : `🕐 ${forma.envio ? 'Llega' : 'Está listo'} ${gastro.textoHora(sale.hora)} aprox.`;
   const pago = { alias: '\n💳 Pagás ahora por transferencia.', mp: '\n💳 Pagás ahora con Mercado Pago (te paso el link).' }[ctx.datos.pago] || '\n💵 Pagás al recibir.';
   return responder(ctx, 'confirmando_pedido',
-    `${ctx.clienta.nombre}, tu pedido:\n\n${lineas}${envio}\n\n💰 Total: ${catalogo.plata(total)}${donde}\n${cuando}${pago}\n\n*1* — Confirmar\n*2* — Agregar algo más\n*0* — Cancelar`);
+    `${ctx.clienta.nombre}, así quedó tu pedido:\n\n${lineas}${envio}\n\n💰 Total: ${catalogo.plata(total)}${donde}\n${cuando}${pago}\n\n¿Te lo confirmo?\n*1* — Sí, confirmar\n*2* — Quiero agregar algo\n*0* — Cancelar`);
 }
 
 // El pedido de un local gastronómico: la hora se vuelve a sacar al confirmar (la cocina pudo cambiar mientras tanto).
@@ -660,7 +695,7 @@ function confirmarGastro(ctx) {
   // Por Mercado Pago el link llega apenas el sitio lo arma (`nube/sincronizar.js`), y el local lo ve cuando se acredita.
   if (pago === 'mp') return responder(ctx, 'inicio', `¡Listo! Ya te paso el link para pagar ${catalogo.plata(total)} 💳 Apenas se acredita, le llega tu pedido al local.`);
   const pagar = pago === 'alias' ? `\n\n${gastro.textoAlias(ctx.config, catalogo.plata(total))}` : '';
-  return responder(ctx, 'inicio', `¡Listo! Le pasé tu pedido al local 🙌 Te aviso por acá apenas lo confirmen.${pagar}`);
+  return responder(ctx, 'inicio', `¡Listo, gracias! 🙌 Ya le pasé tu pedido a la cocina. En un ratito te confirmo por acá.${pagar}`);
 }
 
 function confirmando_pedido(ctx) {
