@@ -310,6 +310,16 @@ function crearAdaptador(config, hooks) {
   const IMAGEN_PLATO = path.join(__dirname, '..', 'assets', 'plato.jpg');
   let espejando = false;
   const memoriaEspejo = espejo.crearMemoriaEspejo();
+  // La respuesta cruda de WhatsApp cuando crear o cambiar un producto vuelve sin el producto (2026-10-21: los platos no
+  // aparecían y Baileys no decía por qué). Se anota una vez por arranque: tag, atributos y los hijos, sin los bytes.
+  let respuestaAnotada = false;
+  const resumenNodo = (n, hondo = 0) => {
+    if (!n || typeof n !== 'object' || hondo > 4) return '';
+    const attrs = Object.entries(n.attrs || {}).map(([k, v]) => `${k}=${String(v).slice(0, 40)}`).join(' ');
+    const hijos = Array.isArray(n.content) ? n.content.map((h) => resumenNodo(h, hondo + 1)).filter(Boolean).join(' ') : '';
+    const texto = !Array.isArray(n.content) && n.content ? `"${Buffer.from(n.content).toString('utf8').slice(0, 80)}"` : '';
+    return `<${n.tag}${attrs ? ` ${attrs}` : ''}>${hijos || texto}</${n.tag}>`;
+  };
   // `fotos` (`nube/fotos.js`, solo vinculado a Nodo Sur): las fotos sacadas en la app. Sin eso, la genérica.
   async function espejarCatalogo(items, fotos = null) {
     if (!sock || !abierto || espejando || !memoriaEspejo.puedeIntentar()) return null;
@@ -323,11 +333,21 @@ function crearAdaptador(config, hooks) {
       let dudosas = 0;
       // true si WhatsApp contestó bien, false si contestó sin el producto (quizás lo hizo: no se repite por un rato).
       const operar = async (p, f) => {
+        // Las respuestas de WhatsApp mientras dura la operación, para anotar la que Baileys no entendió.
+        const vistas = [];
+        const mirar = (frame) => { if (frame && frame.tag === 'iq') vistas.push(frame); };
+        sock.ws?.on?.('frame', mirar);
         try { await f(); return true; } catch (e) {
           if (!memoriaEspejo.respuestaSinProducto(e)) throw e;
+          if (!respuestaAnotada && vistas.length) {
+            respuestaAnotada = true;
+            console.log(`Catálogo de WhatsApp: respuesta que no se entendió (${p.name}): ${resumenNodo(vistas[vistas.length - 1])}`);
+          }
           memoriaEspejo.dudosa(memoriaEspejo.clave(p));
           dudosas++;
           return false;
+        } finally {
+          sock.ws?.off?.('frame', mirar);
         }
       };
       const pausa = () => new Promise((ok) => setTimeout(ok, PAUSA_ESPEJO_MS));
