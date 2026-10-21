@@ -22,6 +22,9 @@ function recortar(t, max) {
 // La línea "Respondé con el número…" ya no dice lo que hay que hacer: se toca la encuesta. Lo que agregaba ("*0* para
 // volver", "*menú* para empezar de nuevo") se conserva, porque eso se sigue escribiendo.
 function pieParaEncuesta(linea) {
+  // "Elegí un número, o escribime directo lo que querés (ej: …)": con la encuesta no hay números que elegir.
+  const elegi = linea.match(/^Elegí un número, o (.+)$/);
+  if (elegi) return `O ${elegi[1]}`;
   const m = linea.match(/^\(?Respondé con el número[,.]?\s*(.*?)\)?\.?$/i);
   if (!m) return linea;
   let resto = m[1].replace(/^\(|\)$/g, '').trim();
@@ -34,8 +37,9 @@ function pieParaEncuesta(linea) {
  * Parte un mensaje con un menú numerado. Devuelve null si no tiene uno que sirva como encuesta (menos de 2 opciones, más
  * de 12, números repetidos, o opciones iguales).
  *
- * @returns {{ texto: string, pregunta: string, opciones: { numero: number, texto: string }[] } | null}
- *   texto: lo que va antes de la encuesta (vacío si no queda nada); pregunta: el título de la encuesta.
+ * @returns {{ texto: string, pregunta: string, opciones: { numero: number, texto: string }[], pie: string } | null}
+ *   texto: lo que va antes de la encuesta (vacío si no queda nada); pregunta: el título de la encuesta; pie: lo que va
+ *   después (vacío si no queda nada).
  */
 function separarOpciones(mensaje) {
   if (typeof mensaje !== 'string' || !mensaje.includes('—')) return null;
@@ -73,9 +77,10 @@ function separarOpciones(mensaje) {
     while (antes.length && !antes[antes.length - 1].trim()) antes.pop();
   }
 
+  // Lo de después ("Si no, escribí *0*…") va después de la encuesta: antes se leía como respuesta a algo que todavía no
+  // apareció (primer chat de Nodo Gastro, 2026-10-21).
   const despues = lineas.slice(hasta + 1).map((l) => pieParaEncuesta(l.trim())).filter((l) => l);
-  const partes = [antes.join('\n').trim(), despues.join('\n').trim()].filter((p) => p);
-  return { texto: partes.join('\n\n'), pregunta, opciones };
+  return { texto: antes.join('\n').trim(), pregunta, opciones, pie: despues.join('\n').trim() };
 }
 
 module.exports = { separarOpciones, MAX_OPCIONES };

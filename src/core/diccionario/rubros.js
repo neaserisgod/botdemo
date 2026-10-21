@@ -70,6 +70,9 @@ const SERVICIOS = {
   },
 };
 
+const BEBIDAS = ['bebida', 'coca', 'sprite', 'fanta', 'pepsi', 'seven', 'manaos', 'cunnington', 'paso', 'schweppes', 'mirinda',
+  'gaseosa', 'agua', 'jugo', 'cerveza', 'limonada', 'levite', 'aquarius', 'baggio', 'cepita', 'pomelo', 'tonica', 'soda', 'vino'];
+
 // Para todos los comercios (almacén, kiosco, fiambrería, otro): un almacén también vende puchos y un kiosco gaseosas.
 const PRODUCTOS_COMERCIO = {
   birra: ['cerveza'], birras: ['cerveza'], chela: ['cerveza'], porron: ['cerveza'], lata: ['lata', 'cerveza'],
@@ -86,6 +89,12 @@ const PRODUCTOS_COMERCIO = {
   choco: ['chocolate'], chocolate: ['chocolate', 'chocolatada'], pancito: ['pan'], pancitos: ['pan'],
   chicle: ['chicle', 'beldent', 'topline'], chicles: ['chicle', 'beldent', 'topline'],
   alfa: ['alfajor'], papas: ['papas', 'lays', 'pringles'], fiambre: ['jamon', 'salame', 'mortadela', 'paleta', 'bondiola', 'salchichon'],
+  // Del primer chat de una hamburguesería (2026-10-21): "burger", "burguera", "¿qué bebidas tienen?".
+  hamburguesa: ['hamburguesa', 'burger', 'burguer'], hamburguesas: ['hamburguesa', 'burger', 'burguer'],
+  hamburgesa: ['hamburguesa', 'burger', 'burguer'], hambur: ['hamburguesa', 'burger', 'burguer'],
+  burger: ['hamburguesa', 'burger', 'burguer'], burguer: ['hamburguesa', 'burger', 'burguer'],
+  burguera: ['hamburguesa', 'burger', 'burguer'], burga: ['hamburguesa', 'burger', 'burguer'],
+  bebida: BEBIDAS, bebidas: BEBIDAS, tomar: BEBIDAS,
   azucar: ['azucar'], harina: ['harina'], aceite: ['aceite'], vino: ['vino'], tinto: ['tinto', 'vino'],
 };
 

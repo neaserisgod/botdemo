@@ -40,7 +40,7 @@ const VACIAS = new Set([
   'tienen', 'tenes', 'tiene', 'hay', 'queda', 'quedan', 'quiero', 'queria', 'quisiera', 'necesito', 'busco', 'me', 'te', 'se', 'das',
   'pasame', 'mandame', 'dame', 'por', 'favor', 'porfa', 'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas', 'de', 'del', 'a', 'al',
   'y', 'o', 'con', 'sin', 'para', 'en', 'es', 'son', 'mas', 'hola', 'buenas', 'buen', 'dia', 'tardes', 'noches', 'stock', 'algo',
-  'pedido', 'pedir', 'agregar', 'agregame', 'sumame', 'sumar', 'tambien', 'otro', 'otra', 'x',
+  'pedido', 'pedir', 'pedirte', 'pedirle', 'pedirles', 'agregar', 'agregame', 'sumame', 'sumar', 'tambien', 'otro', 'otra', 'x',
   // Del primer chat real y la sonda del 2026-10-09: "¿a cuánto está el pan?", "¿tenés algún alfajor?", "un atado de puchos".
   'esta', 'estan', 'tendras', 'tendrian', 'tenian', 'habia', 'venden', 'vendes', 'vende', 'traen', 'trae', 'consigo',
   'conseguir', 'sabes', 'saber', 'decime', 'deci', 'podes', 'puedo', 'consulta', 'pregunta', 'aca', 'ahi', 'ustedes', 'vos',
@@ -105,6 +105,21 @@ function buscar(texto, max = 5, sinonimos = {}) {
   return { resultados: encontrados.slice(0, max), total: encontrados.length, claves };
 }
 
+// Cuando ningún producto tiene TODAS las palabras: los que tienen más de ellas ("combo 2 burguera" → los combos), para
+// preguntar "¿es alguno de estos?" en vez de "no encontré". Solo cuentan las palabras de 3 letras o más que no son un
+// número: un "2" suelto calza con medio catálogo. Nunca se anota solo: el que pidió elige.
+function parecidos(texto, max = 5, sinonimos = {}) {
+  const claves = palabrasClave(texto).filter((p) => p.length >= 3 && !/^\d/.test(p));
+  if (!claves.length) return [];
+  const puntaje = (x) => { const tokens = x._norm.split(' '); return claves.filter((p) => calza(p, tokens, sinonimos)).length; };
+  const conPuntaje = items.map((x) => ({ x, n: puntaje(x) })).filter((e) => e.n > 0);
+  if (!conPuntaje.length) return [];
+  const mejor = Math.max(...conPuntaje.map((e) => e.n));
+  return conPuntaje.filter((e) => e.n === mejor).map((e) => e.x)
+    .sort((a, b) => (b.hay - a.hay) || a.nombre.length - b.nombre.length || a.nombre.localeCompare(b.nombre))
+    .slice(0, max);
+}
+
 const porGid = (gid) => items.find((x) => x.gid === gid) || null;
 
 // Lo que se vende pesado (fiambres, quesos, pan): la app de Nodo Sur lo publica como "Jamón cocido (por kg)" con el
@@ -136,6 +151,6 @@ function plata(centavos) {
 }
 
 module.exports = {
-  fijar, todos, cargado, cuando, buscar, porGid, palabrasClave, plata, medidas, RE_MEDIDA, gramosPorUnidad, esPesable, nombreCorto,
+  fijar, todos, cargado, cuando, buscar, parecidos, porGid, palabrasClave, plata, medidas, RE_MEDIDA, gramosPorUnidad, esPesable, nombreCorto,
   precioDeGramos,
 };

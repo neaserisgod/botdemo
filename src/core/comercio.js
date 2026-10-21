@@ -97,7 +97,7 @@ const sinCatalogo = (ctx) => responder(ctx, 'inicio',
 const lineaProducto = (x) => `• ${nombreConPrecio(x)} ${x.hay ? '✅' : '❌ sin stock'}`;
 
 // ---------- inicio: consultas ----------
-const PIDE_PEDIDO = ['pedido', 'pedir', 'hacer un pedido', 'quiero pedir', 'encargar', 'encargo', 'reservar'];
+const PIDE_PEDIDO = ['pedido', 'pedir', 'pedirte', 'pedirle', 'pedirles', 'hacer un pedido', 'quiero pedir', 'encargar', 'encargo', 'reservar'];
 const PIDE_PRECIO = ['precio', 'precios', 'cuanto', 'sale', 'cuesta', 'vale', 'hay', 'tienen', 'tenes', 'queda', 'quedan', 'stock'];
 
 // Después del "1" (consultar precios) cada mensaje es un producto: lo que no está dice "no encontré" (no el menú) y se
@@ -164,6 +164,16 @@ function inicio(ctx, estado = 'inicio') {
     }
     if (pregunta && inter.intencion !== 'saludo') {
       anotarNoEntendido(ctx);
+      const parecidos = catalogo.parecidos(t, 5, sinonimos(ctx));
+      if (parecidos.length) {
+        return responder(ctx, estado, `No tengo justo eso 🤔 Lo más parecido:\n${parecidos.map(lineaProducto).join('\n')}\n\n${AVISO_PRECIO}\nPara pedir, escribí *pedido*.`);
+      }
+      // "¿De qué están hechas?", "¿tienen tacc?": en un local gastronómico casi siempre es una pregunta sobre la comida, no
+      // un producto que falta. Decir "no encontré ese producto" suena a que no entendió nada; lo que el local quiera
+      // contestar a eso se carga en la app (Preguntas del bot) y queda anotado en "qué no entendiste".
+      if (gastro.esGastro(ctx.config)) {
+        return responder(ctx, estado, `Esa no la sé responder 😅 ${mirarCarta(ctx)}Si querés preguntarle a una persona, escribí *4*.`);
+      }
       return responder(ctx, estado, 'No encontré ese producto 🤔 Probá con otro nombre, o escribí *4* para preguntarle a una persona.');
     }
   }
@@ -198,7 +208,7 @@ function precioDePeso(ctx, estado) {
 
 // ---------- pedido ----------
 // Verbos de pedido de mostrador: "cortame", "¿me podés cortar…?", "preparame", "separame", "dame", "quiero", "me llevo".
-const VERBO_PEDIDO = '(?:me )?(?:podes |podrias |puedes |vas a )?(?:cortar|cortame|cortas|preparar|preparame|preparas|separar|separame|separas|guardar|guardame|guardas|anotar|anotame|anotas|dar|dame|das|mandar|mandame|quiero|quisiera|queria|necesito|me llevo|llevo|encargar|encargo|pedir|pido|traeme|me traes)';
+const VERBO_PEDIDO = '(?:me )?(?:podes |podrias |puedes |vas a )?(?:cortar|cortame|cortas|preparar|preparame|preparas|separar|separame|separas|guardar|guardame|guardas|anotar|anotame|anotas|dar|dame|das|mandar|mandame|quiero|quisiera|queria|necesito|me llevo|llevo|encargar|encargo|pedirte|pedirle|pedirles|pedir|pido|traeme|me traes)';
 const SALUDO_INICIAL = /^(?:(?:hola|holis|buenas|buen dia|buenos dias|buenas tardes|buenas noches|che|como va|que tal|disculpa|perdon)[\s,!.¡¿?]*)+/;
 const RELLENO_FINAL = /[\s,.!?¿¡]*(?:(?:porfa|por favor|gracias|plis|please|dale)[\s,.!?¿¡]*)*$/;
 
@@ -210,7 +220,8 @@ function pedidoEnElMensaje(ctx) {
   let t = (ctx.msj.texto || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(SALUDO_INICIAL, '');
   const norm = nlu.normalizar(t);
   if (/\b(?:cuanto|cuanta|precio|precios|sale|salen|cuesta|cuestan|vale|valen)\b/.test(norm)) return null;
-  const conVerbo = new RegExp(`^${VERBO_PEDIDO}\\b\\s*`);
+  // "quiero pedirte un combo": puede haber más de un verbo seguido.
+  const conVerbo = new RegExp(`^(?:${VERBO_PEDIDO}\\b\\s*)+`);
   const verbo = conVerbo.test(t);
   t = t.replace(conVerbo, '').replace(RELLENO_FINAL, '');
   let lineas = separarLineas(t);
@@ -320,7 +331,8 @@ const cantidadYProducto = (texto) => { const { cantidad, busqueda } = leerCantid
 //  * EN PAQUETE ("Yerba Playadito 1 kg"): se pide por unidad y no se fracciona. "2 kg de yerba" son 2 paquetes de 1 kg;
 //    "medio kilo de yerba" busca el paquete de 500 g y, si no hay, dice que viene en paquete;
 //  * "9 de oro", "7up": el número es parte del nombre; "media docena de huevos": primero el paquete de 6.
-// Devuelve { tipo, ... }: 'nada' | 'no_encontre' | 'cantidad_mala' | 'paquete' | 'elegir' | 'pesar' | 'anotar'.
+// Devuelve { tipo, ... }: 'nada' | 'no_encontre' | 'parecidos' (ninguno con todas las palabras, estos con algunas) |
+// 'cantidad_mala' | 'paquete' | 'elegir' | 'pesar' | 'anotar'.
 function leerLinea(ctx, linea) {
   const sin = sinonimos(ctx);
   const buscar = (t) => catalogo.buscar(t, 5, sin).resultados;
@@ -356,7 +368,10 @@ function leerLinea(ctx, linea) {
   // "200 jamón": gramos si es un pesable (como en la caja). Para lo que viene en paquete, la cantidad va hasta 999.
   const gramosDichos = como === 'numero' && cantidad >= 50 ? cantidad : null;
   resultados = resultados || buscar(busqueda);
-  if (!resultados.length) return { tipo: 'no_encontre', busqueda };
+  if (!resultados.length) {
+    const parecidos = catalogo.parecidos(busqueda, 5, sin);
+    return parecidos.length ? { tipo: 'parecidos', busqueda, resultados: parecidos, cantidad } : { tipo: 'no_encontre', busqueda };
+  }
   if (resultados.length > 1) return { tipo: 'elegir', resultados, cantidad, gramos: gramosDichos };
   const producto = resultados[0];
   if (catalogo.esPesable(producto)) return gramosDichos ? { tipo: 'anotar', producto, gramos: gramosDichos } : { tipo: 'pesar', producto };
@@ -385,16 +400,17 @@ function armando_pedido(ctx) {
   if (lineas.length > 1) return anotarVarias(ctx, lineas, []);
 
   const r = leerLinea(ctx, texto);
-  if (r.tipo === 'no_encontre') {
+  if (r.tipo === 'no_encontre' || r.tipo === 'parecidos') {
     // No es un producto: ¿es una pregunta de siempre ("¿hacen envíos?", "¿hasta qué hora están?")? Se contesta sin perder
     // lo anotado. Va después de buscar en el catálogo, así una palabra de un producto nunca se confunde con una pregunta.
     const aparte = entenderEnPaso(ctx, '¿Algo más? Si no, escribí *listo*.');
     if (aparte) return aparte;
     // "jamón y queso": dos productos, si cada uno existe por separado.
     const partes = texto.split(/\s+y\s+/i);
-    if (partes.length > 1 && partes.every((x) => !['no_encontre', 'nada'].includes(leerLinea(ctx, x).tipo))) return anotarVarias(ctx, partes, []);
+    if (partes.length > 1 && partes.every((x) => !['no_encontre', 'parecidos', 'nada'].includes(leerLinea(ctx, x).tipo))) return anotarVarias(ctx, partes, []);
+    if (r.tipo === 'parecidos') return preguntarCual(ctx, r.resultados, r.cantidad, [noJustoAsi(r.busqueda)]);
     anotarNoEntendido(ctx);
-    return responder(ctx, 'armando_pedido', `No encontré "${r.busqueda.trim()}" 🤔 Probá con otro nombre, o *listo* para terminar.`);
+    return responder(ctx, 'armando_pedido', `No encontré "${r.busqueda.trim()}" 🤔 ${mirarCarta(ctx)}Probá con otro nombre, o *listo* para terminar.`);
   }
   if (r.tipo === 'nada') return noEntendi(ctx, 'Decime qué producto querés (ej: *2 coca*), o *listo* para terminar.');
   if (r.tipo === 'cantidad_mala') return responder(ctx, 'armando_pedido', 'Esa cantidad no la puedo anotar 😅 Probá de nuevo (ej: *2 coca*).');
@@ -402,6 +418,13 @@ function armando_pedido(ctx) {
   if (r.tipo === 'pesar') return preguntarPeso(ctx, r.producto, []);
   if (r.tipo === 'elegir') return preguntarCual(ctx, r.resultados, r.cantidad, [], r.gramos);
   return agregar(ctx, r.producto, r);
+}
+
+const noJustoAsi = (busqueda) => `🤔 No tengo "${busqueda.trim()}" con ese nombre.`;
+// En un local gastronómico, el link de la carta ayuda a encontrar el nombre (si lo tiene).
+function mirarCarta(ctx) {
+  const link = gastro.esGastro(ctx.config) && gastro.linkCatalogo(ctx.config);
+  return link ? `Fijate el nombre en la carta: ${link}\n` : '';
 }
 
 const INTERROGATIVO = /^(?:que|cual|cuales|como|cuanto|cuanta|cuantos|cuantas|donde|cuando|tienen|tenes|tienes|hay|hacen|puedo|se puede|podes|es|son|viene|vienen|trae|traen|incluye|sos)\b/;
@@ -433,7 +456,10 @@ function anotarVarias(ctx, lineas, notas) {
     else if (r.tipo === 'no_encontre') { notas.push(`❌ No encontré "${r.busqueda.trim()}"`); anotarNoEntendido({ ...ctx, msj: { texto: linea } }); }
     else if (r.tipo === 'paquete') notas.push(`📦 ${textoPaquete(r.producto)}: decime cuántos`);
     else if (r.tipo === 'anotar') notas.push(sumar(ctx, r.producto, r).nota);
-    else {
+    else if (r.tipo === 'parecidos') {
+      ctx.datos.pendientes = resto;
+      return preguntarCual(ctx, r.resultados, r.cantidad, [...notas, noJustoAsi(r.busqueda)]);
+    } else {
       ctx.datos.pendientes = resto;
       return r.tipo === 'pesar' ? preguntarPeso(ctx, r.producto, notas) : preguntarCual(ctx, r.resultados, r.cantidad, notas, r.gramos);
     }
