@@ -6,7 +6,6 @@ const fs = require('fs');
 const path = require('path');
 const { separarOpciones } = require('../core/opciones');
 const { crearRegistroEncuestas, descifrarVoto } = require('./encuestas');
-const espejo = require('../core/espejo');
 
 function crearAdaptador(config, hooks) {
   // Baileys 7 (2026-10-09): con la 6 (ya "legacy") ningún mensaje entrante se podía descifrar ("Bad MAC") desde que
@@ -294,176 +293,28 @@ function crearAdaptador(config, hooks) {
     // Ítem del catálogo tocado por la clienta
     const productoId = m.productMessage?.product?.productId || null;
 
-    // El carrito que mandó desde el catálogo de WhatsApp Business: se pide el detalle y cada producto se traduce a su
-    // "ID de contenido" (retailer id), que es el global_id de Nodo Sur (ver `carritoDelCatalogo` en core/comercio.js).
-    const carrito = m.orderMessage ? await leerCarrito(m.orderMessage) : undefined;
+    // El carrito que mandó desde el catálogo de WhatsApp Business (`leerCarrito`).
+    const leido = m.orderMessage ? await leerCarrito(m.orderMessage) : undefined;
 
     // Audio o nota de voz: el bot no los escucha, pero le avisa al cliente (ver motor.js).
     const tipo = m.audioMessage ? 'audio' : null;
-    const salientes = hooks.alRecibir({ de, texto, rutaImagen, productoId, tipo, ...(carrito ? { carrito } : {}) });
+    const salientes = hooks.alRecibir({ de, texto, rutaImagen, productoId, tipo, ...(leido ? { carrito: leido.productos, carritoResumen: leido.resumen } : {}) });
     await enviarTodos(salientes, { respondiendo: de });
   }
 
-  // El catálogo de WhatsApp igual a la carta (`core/espejo.js` dice qué hacer). Una vuelta por vez, con pausas entre cada
-  // operación; devuelve qué hizo, o null si no está conectado o WhatsApp no lo dejó (cuenta sin catálogo, API cambiada).
-  const PAUSA_ESPEJO_MS = 2000;
-  const IMAGEN_PLATO = path.join(__dirname, '..', 'assets', 'plato.jpg');
-  let espejando = false;
-  const memoriaEspejo = espejo.crearMemoriaEspejo();
-  // La respuesta cruda de WhatsApp cuando crear o cambiar un producto vuelve sin el producto (2026-10-21: los platos no
-  // aparecían y Baileys no decía por qué). Se anota una vez por arranque: tag, atributos y los hijos, sin los bytes.
-  let respuestaAnotada = false;
-  const resumenNodo = (n, hondo = 0) => {
-    if (!n || typeof n !== 'object' || hondo > 4) return '';
-    const attrs = Object.entries(n.attrs || {}).map(([k, v]) => `${k}=${String(v).slice(0, 40)}`).join(' ');
-    const hijos = Array.isArray(n.content) ? n.content.map((h) => resumenNodo(h, hondo + 1)).filter(Boolean).join(' ') : '';
-    const texto = !Array.isArray(n.content) && n.content ? `"${Buffer.from(n.content).toString('utf8').slice(0, 80)}"` : '';
-    return `<${n.tag}${attrs ? ` ${attrs}` : ''}>${hijos || texto}</${n.tag}>`;
-  };
-  // `fotos` (`nube/fotos.js`, solo vinculado a Nodo Sur): las fotos sacadas en la app. Sin eso, la genérica.
-  async function espejarCatalogo(items, fotos = null) {
-    if (!sock || !abierto || espejando || !memoriaEspejo.puedeIntentar()) return null;
-    espejando = true;
-    try {
-      const actuales = await catalogoWaEntero();
-      const plan = espejo.planEspejo({ items, actuales, fotos: fotos ? fotos.aplicadas() : new Map() });
-      // Lo que quedó dudoso hace menos de una hora no se repite (ver `crearMemoriaEspejo`).
-      plan.cambiar = plan.cambiar.filter((p) => !memoriaEspejo.esDudosa(memoriaEspejo.clave(p)));
-      plan.crear = plan.crear.filter((p) => !memoriaEspejo.esDudosa(memoriaEspejo.clave(p)));
-      let dudosas = 0;
-      // true si WhatsApp contestó bien, false si contestó sin el producto (quizás lo hizo: no se repite por un rato).
-      const operar = async (p, f) => {
-        // Las respuestas de WhatsApp mientras dura la operación, para anotar la que Baileys no entendió.
-        const vistas = [];
-        const mirar = (frame) => { if (frame && frame.tag === 'iq') vistas.push(frame); };
-        sock.ws?.on?.('frame', mirar);
-        try { await f(); return true; } catch (e) {
-          if (!memoriaEspejo.respuestaSinProducto(e)) throw e;
-          if (!respuestaAnotada && vistas.length) {
-            respuestaAnotada = true;
-            console.log(`Catálogo de WhatsApp: respuesta que no se entendió (${p.name}): ${resumenNodo(vistas[vistas.length - 1])}`);
-          }
-          memoriaEspejo.dudosa(memoriaEspejo.clave(p));
-          dudosas++;
-          return false;
-        } finally {
-          sock.ws?.off?.('frame', mirar);
-        }
-      };
-      const pausa = () => new Promise((ok) => setTimeout(ok, PAUSA_ESPEJO_MS));
-      const hecho = { cambiados: 0, creados: 0, borrados: 0, pendientes: plan.pendientes };
-      // La imagen que va (la del plato o la genérica), o null si la foto no se pudo bajar: se reintenta en la vuelta siguiente.
-      const imagen = async (p) => {
-        if (!p.foto || !fotos) return IMAGEN_PLATO;
-        try { return await fotos.ruta(p.gid, p.foto); } catch (e) {
-          console.error(`No pude bajar la foto de ${p.name}:`, e.message);
-          return null;
-        }
-      };
-      const anotar = (p) => { if (fotos && p.foto !== undefined) fotos.anotar(p.gid, p.foto || null); };
-      for (const p of plan.cambiar) {
-        // Sin `description` ni imágenes, WhatsApp deja las que tiene: lo que el local escribió o puso a mano no se pisa.
-        const url = p.foto !== undefined ? await imagen(p) : null;
-        const ok = await operar(p, () => sock.productUpdate(p.id, { name: p.name, retailerId: p.retailerId, price: p.price, currency: 'ARS',
-          isHidden: p.isHidden, images: url ? [{ url }] : [] }));
-        if (ok && url) anotar(p); else if (p.foto) hecho.pendientes++;
-        hecho.cambiados++; await pausa();
-      }
-      for (const p of plan.crear) {
-        const url = (await imagen(p)) || IMAGEN_PLATO;
-        const ok = await operar(p, () => sock.productCreate({ name: p.name, retailerId: p.retailerId, description: '', price: p.price,
-          currency: 'ARS', isHidden: false, originCountryCode: undefined, images: [{ url }] }));
-        if (ok && fotos) fotos.anotar(p.gid, url === IMAGEN_PLATO ? null : p.foto);
-        if (p.foto && url === IMAGEN_PLATO) hecho.pendientes++;
-        hecho.creados++; await pausa();
-      }
-      if (plan.borrar.length) { await sock.productDelete(plan.borrar); hecho.borrados = plan.borrar.length; }
-      if (hecho.cambiados || hecho.creados || hecho.borrados) await cargarCatalogoWa().catch(() => {});
-      if (dudosas) {
-        console.log(`Catálogo de WhatsApp: ${dudosas} cambios sin confirmar (WhatsApp contestó distinto). Lo reviso en una hora.`);
-        hecho.pendientes += dudosas;
-      }
-      memoriaEspejo.anduvo();
-      return hecho;
-    } catch (e) {
-      if (memoriaEspejo.fallo(e.message)) console.error('No pude copiar la carta al catálogo de WhatsApp:', e.message, '(lo vuelvo a probar más espaciado)');
-      return null;
-    } finally {
-      espejando = false;
-    }
-  }
-
-  // id del producto en WhatsApp → retailer id, del catálogo propio. Se vuelve a pedir si aparece uno que no está (lo cargaron
-  // después). Es la API no oficial: si falla, el carrito vuelve vacío y el bot le pide al cliente que lo escriba.
-  let retailerDe = new Map();
-  // Con el número del bot (lo que hace Baileys) y, si no trae nada, con su @lid: desde 2025 WhatsApp mezcla las dos identidades
-  // y el catálogo propio podía volver vacío (primer celular real, 2026-10-21: "leído: 0 artículos" con uno cargado a mano).
-  let catalogoVacioAnotado = false;
-  async function catalogoWaEntero() {
-    const leer = async (jid) => {
-      const productos = [];
-      let cursor;
-      for (let i = 0; i < 20; i++) {
-        const r = await sock.getCatalog({ jid, limit: 100, cursor });
-        productos.push(...(r.products || []));
-        if (!r.nextPageCursor) break;
-        cursor = r.nextPageCursor;
-      }
-      return productos;
-    };
-    const vistas = [];
-    const mirar = (frame) => { if (frame && frame.tag === 'iq') vistas.push(frame); };
-    sock.ws?.on?.('frame', mirar);
-    try {
-      let productos = await leer(undefined);
-      const lid = sock.user?.lid ? baileys.jidNormalizedUser(sock.user.lid) : null;
-      if (!productos.length && lid) productos = await leer(lid);
-      if (!productos.length && !catalogoVacioAnotado && vistas.length) {
-        catalogoVacioAnotado = true;
-        console.log(`Catálogo de WhatsApp vacío. Lo que contestó WhatsApp: ${vistas.map((v) => resumenNodo(v)).join(' | ').slice(0, 1500)}`);
-      }
-      return productos;
-    } finally {
-      sock.ws?.off?.('frame', mirar);
-    }
-  }
-
-  async function cargarCatalogoWa() {
-    const productos = await catalogoWaEntero();
-    retailerDe = new Map(productos.filter((p) => p.id).map((p) => [String(p.id), p.retailerId || null]));
-    return productos;
-  }
-
-  // El catálogo de WhatsApp como lo necesita la app para traerlo a su carta, o null si no está conectado o no se pudo leer.
-  // Cuántos artículos devolvió WhatsApp, anotado cuando cambia: sin esto no se sabía si el bot leía 0 o no leía nada (primer
-  // celular real, 2026-10-21: un artículo cargado a mano no aparecía en "Traer de WhatsApp").
-  let ultimaLectura = null;
-  async function leerCatalogoWa() {
-    if (!sock || !abierto) return null;
-    try {
-      const productos = await cargarCatalogoWa();
-      const ocultos = productos.filter((p) => p.isHidden).length;
-      const resumen = `${productos.length} artículos${ocultos ? ` (${ocultos} ocultos)` : ''}`;
-      if (resumen !== ultimaLectura) {
-        console.log(`Catálogo de WhatsApp leído: ${resumen}.`);
-        ultimaLectura = resumen;
-      }
-      return espejo.catalogoParaLaApp(productos);
-    } catch (e) {
-      console.error('No pude leer el catálogo de WhatsApp:', e.message);
-      return null;
-    }
-  }
-
+  // El carrito que mandó desde el catálogo de WhatsApp Business. El catálogo lo carga el local a mano en WhatsApp: Baileys ya no
+  // puede crearlo ni leerlo (WhatsApp dejó de contestar ese pedido, Baileys #2717, 2026-10-21), así que cada producto se reconoce
+  // por el nombre (`carritoDelCatalogo` en core/comercio.js). Si tampoco se puede leer el detalle, vuelve vacío con lo que trae
+  // el mensaje (cuántos productos y el total) para que el bot se lo diga al cliente.
   async function leerCarrito(orden) {
+    const resumen = { cantidad: Number(orden.itemCount) || 0, totalCentavos: orden.totalAmount1000 ? Math.round(Number(orden.totalAmount1000) / 10) : 0 };
     try {
       const detalle = await sock.getOrderDetails(orden.orderId, orden.token);
-      const productos = detalle.products || [];
-      if (productos.some((p) => !retailerDe.has(String(p.id)))) await cargarCatalogoWa().catch((e) => console.error('No pude leer el catálogo de WhatsApp:', e.message));
-      return productos.map((p) => ({ retailerId: retailerDe.get(String(p.id)) || null, nombre: p.name, cantidad: p.quantity || 1 }));
+      const productos = (detalle.products || []).map((p) => ({ retailerId: null, nombre: p.name, cantidad: p.quantity || 1 }));
+      return { productos, resumen };
     } catch (e) {
       console.error('No pude leer el carrito de WhatsApp:', e.message);
-      return [];
+      return { productos: [], resumen };
     }
   }
 
@@ -586,8 +437,6 @@ function crearAdaptador(config, hooks) {
   return {
     iniciar: () => conectar().catch((e) => { console.error('Baileys no pudo iniciar:', e.message); process.exit(1); }),
     enviar: enviarTodos,
-    espejarCatalogo,
-    leerCatalogoWa,
     cerrar: () => { cerrando = true; sock?.end?.(); },
   };
 }

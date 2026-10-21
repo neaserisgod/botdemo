@@ -17,7 +17,6 @@ const qClientas = require('../db/consultas/clientas');
 const qPedidos = require('../db/consultas/pedidos');
 const catalogo = require('./catalogo');
 const gastro = require('./gastro');
-const espejo = require('./espejo');
 const faq = require('./flujos/faq');
 const nlu = require('./nlu');
 const numeros = require('./diccionario/numeros');
@@ -272,7 +271,10 @@ function empezarPedido(ctx) {
 function carritoDelCatalogo(ctx) {
   const lineas = Array.isArray(ctx.msj.carrito) ? ctx.msj.carrito : [];
   if (!lineas.length) {
-    return responder(ctx, ctx.clienta.estado_conv || 'inicio', 'No pude leer tu carrito 😅 ¿Me escribís qué querés? (ej: *2 milanesas*)');
+    // WhatsApp puede no dar el detalle: con lo que trae el mensaje, al menos se le confirma qué llegó.
+    const r = ctx.msj.carritoResumen;
+    const vi = r && r.cantidad ? ` (vi ${r.cantidad} ${r.cantidad === 1 ? 'producto' : 'productos'}${r.totalCentavos ? `, ${catalogo.plata(r.totalCentavos)}` : ''})` : '';
+    return responder(ctx, ctx.clienta.estado_conv || 'inicio', `Recibí tu carrito${vi}, pero no pude leer el detalle 😅 ¿Me escribís qué querés? (ej: *2 milanesas*)`);
   }
   if (!catalogo.cargado()) return sinCatalogo(ctx);
   if (gastro.pausada(ctx.config)) return cocinaPausada(ctx);
@@ -280,8 +282,9 @@ function carritoDelCatalogo(ctx) {
   const notas = [];
   for (const x of lineas.slice(0, MAX_LINEAS)) {
     const cantidad = Math.min(Math.max(Math.trunc(Number(x.cantidad) || 1), 1), 999);
-    // El bot pone `ns-<global_id>` (`espejo.js`); uno cargado a mano puede tener el global_id solo.
-    const gid = x.retailerId ? espejo.gidDeRetailer(String(x.retailerId)) || String(x.retailerId) : null;
+    // El "ID de contenido" del catálogo, si el local le puso el global_id del plato (antes el bot ponía `ns-<global_id>`); si
+    // no, se reconoce por el nombre.
+    const gid = x.retailerId ? String(x.retailerId).replace(/^ns-/, '') : null;
     let producto = gid ? catalogo.porGid(gid) : null;
     if (!producto && x.nombre) {
       const r = catalogo.buscar(String(x.nombre), 5, sinonimos(ctx)).resultados;

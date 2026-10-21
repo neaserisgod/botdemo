@@ -245,105 +245,14 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   chequear('dice lo que no está en la carta', tc.includes('*Pizza* no lo tengo'));
   chequear('y sigue con la entrega', tc.includes('¿Cómo lo querés?'));
   r = motor.procesarMensaje({ de: C7, texto: '', carrito: [] });
-  chequear('un carrito que no se pudo leer: que lo escriba', textoPara(r, C7).includes('No pude leer tu carrito'));
+  chequear('un carrito que no se pudo leer: que lo escriba', textoPara(r, C7).includes('no pude leer el detalle'));
 
-  console.log('\n— 11. La carta copiada al catálogo de WhatsApp —');
-  const espejo = require('../src/core/espejo');
-  const carta = [
-    { gid: 'g-mila', nombre: 'Milanesa con papas', precioCentavos: 650000, hay: true },
-    { gid: 'g-empa', nombre: 'Empanada de carne', precioCentavos: 120000, hay: true },
-    { gid: 'g-flan', nombre: 'Flan casero', precioCentavos: 300000, hay: false },
-    { gid: 'g-tarta', nombre: 'Tarta de verdura', precioCentavos: 500000, hay: false },
-    { gid: 'g-pollo', nombre: 'Pollo al spiedo (por kg)', precioCentavos: 900000, hay: true },
-  ];
-  let plan = espejo.planEspejo({ items: carta, actuales: [] });
-  chequear('vacío: crea lo que hay, sin lo que no hay ni lo que va por peso', plan.crear.map((x) => x.retailerId).join() === 'ns-g-mila,ns-g-empa');
-  chequear('con el precio en milésimas', plan.crear[0].price === 6500000 && plan.crear[0].name === 'Milanesa con papas');
-  const actuales = [
-    { id: 'wa1', retailerId: 'ns-g-mila', name: 'Milanesa con papas', price: 6000000, isHidden: false },
-    { id: 'wa2', retailerId: 'ns-g-empa', name: 'Empanada de carne', price: 1200000, isHidden: false },
-    { id: 'wa3', retailerId: 'ns-g-flan', name: 'Flan casero', price: 3000000, isHidden: false },
-    { id: 'wa4', retailerId: 'ns-g-vieja', name: 'Lasagna', price: 7000000, isHidden: false },
-    { id: 'wa5', retailerId: 'SKU-A-MANO', name: 'Vino de la casa', price: 4000000, isHidden: false },
-    { id: 'wa6', retailerId: '', name: 'Promo sin código', price: 1000000, isHidden: false },
-  ];
-  plan = espejo.planEspejo({ items: carta, actuales });
-  chequear('cambia el precio que no coincide', plan.cambiar.some((x) => x.id === 'wa1' && x.price === 6500000));
-  chequear('lo que no hay se esconde, no se borra', plan.cambiar.some((x) => x.id === 'wa3' && x.isHidden === true));
-  chequear('lo que está igual no se toca', !plan.cambiar.some((x) => x.id === 'wa2'));
-  chequear('lo que salió de la carta se borra', plan.borrar.join() === 'wa4');
-  chequear('lo cargado a mano en WhatsApp no se toca', !JSON.stringify(plan).includes('wa5') && !JSON.stringify(plan).includes('wa6'));
-  const muchos = Array.from({ length: 30 }, (_, i) => ({ gid: `g-${i}`, nombre: `Plato ${i}`, precioCentavos: 100000, hay: true }));
-  plan = espejo.planEspejo({ items: muchos, actuales: [], max: 20 });
-  chequear('de a poco: 20 por vuelta y el resto queda pendiente', plan.crear.length === 20 && plan.pendientes === 10);
+  // Sin el detalle (WhatsApp no lo dio): lo que trae el mensaje, para que el cliente no lo vuelva a contar a ciegas.
+  r = motor.procesarMensaje({ de: C7, texto: '', carrito: [], carritoResumen: { cantidad: 3, totalCentavos: 2500000 } });
+  chequear('sin el detalle, dice cuántos productos y el total que vio', textoPara(r, C7).includes('3 productos') && textoPara(r, C7).includes('$25.000'));
   const C8 = '5492944200008';
   r = motor.procesarMensaje({ de: C8, texto: '', carrito: [{ retailerId: 'ns-g-empa', nombre: 'Empanada', cantidad: 12 }] });
-  chequear('el carrito de un producto copiado por el bot se reconoce', textoPara(r, C8).includes('12 × Empanada de carne'));
-  plan = espejo.planEspejo({ items: carta, actuales: [{ id: 'wa9', retailerId: null, name: 'milanesa  con papas', price: 5000000, isHidden: false }] });
-  chequear('uno cargado a mano con el mismo nombre se adopta, no se duplica', plan.cambiar.some((x) => x.id === 'wa9' && x.retailerId === 'ns-g-mila' && x.price === 6500000)
-    && !plan.crear.some((x) => x.retailerId === 'ns-g-mila'));
-  // Fotos sacadas en la app (2026-10-21).
-  const conFoto = carta.map((x) => (x.gid === 'g-mila' ? { ...x, foto: 'v1' } : x));
-  plan = espejo.planEspejo({ items: conFoto, actuales: [] });
-  chequear('lo nuevo se crea con su foto, o con la genérica', plan.crear.find((x) => x.gid === 'g-mila').foto === 'v1' && plan.crear.find((x) => x.gid === 'g-empa').foto === null);
-  const iguales = [{ id: 'wa1', retailerId: 'ns-g-mila', name: 'Milanesa con papas', price: 6500000, isHidden: false }];
-  plan = espejo.planEspejo({ items: conFoto, actuales: iguales, fotos: new Map() });
-  chequear('una foto nueva cambia el producto aunque lo demás esté igual', plan.cambiar.some((x) => x.id === 'wa1' && x.foto === 'v1'));
-  plan = espejo.planEspejo({ items: conFoto, actuales: iguales, fotos: new Map([['g-mila', 'v1']]) });
-  chequear('con la misma foto ya puesta, no se toca', !plan.cambiar.some((x) => x.id === 'wa1'));
-  plan = espejo.planEspejo({ items: carta, actuales: iguales, fotos: new Map([['g-mila', 'v1']]) });
-  chequear('si borran la foto en la app, vuelve la genérica', plan.cambiar.some((x) => x.id === 'wa1' && x.foto === null));
-  plan = espejo.planEspejo({ items: carta, actuales: [{ ...iguales[0], price: 1 }] });
-  chequear('un cambio de precio sin foto nueva no manda foto (queda la que tenga en WhatsApp)', plan.cambiar.some((x) => x.id === 'wa1' && !('foto' in x)));
-  plan = espejo.planEspejo({ items: carta, actuales: [{ id: 'wa9', retailerId: null, name: 'Milanesa con papas', price: 6500000, isHidden: false }] });
-  chequear('al adoptar uno cargado a mano sin foto en la app, su foto queda', plan.cambiar.some((x) => x.id === 'wa9' && !('foto' in x)));
-  const fs = require('fs');
-  const dirFotos = fs.mkdtempSync(path.join(os.tmpdir(), 'fotos-'));
-  let bajadas = 0;
-  const { crearFotos } = require('../src/nube/fotos');
-  const fotos = crearFotos({ dir: dirFotos, cliente: { foto: async () => { bajadas++; return { bytes: Buffer.from([0xff, 0xd8, 0xff]), tipo: 'image/jpeg' }; } } });
-  const r1 = await fotos.ruta('g-mila', 'v1');
-  await fotos.ruta('g-mila', 'v1');
-  chequear('la foto se baja una vez', bajadas === 1 && fs.existsSync(r1));
-  const r2 = await fotos.ruta('g-mila', 'v2');
-  chequear('otra versión reemplaza a la vieja', bajadas === 2 && fs.existsSync(r2) && !fs.existsSync(r1));
-  fotos.anotar('g-mila', 'v2');
-  chequear('lo puesto en WhatsApp queda anotado entre reinicios', crearFotos({ dir: dirFotos, cliente: {} }).aplicadas().get('g-mila') === 'v2');
-  // Lo que pasó en el primer celular real: WhatsApp contesta sin el producto y Baileys se cae (2026-10-21).
-  let reloj = 0;
-  const memoria = espejo.crearMemoriaEspejo(() => reloj);
-  const op = { retailerId: 'ns-g-mila', name: 'Milanesa', price: 1, isHidden: false, foto: null };
-  chequear('el error de Baileys sin producto se reconoce', memoria.respuestaSinProducto(new Error("Cannot read properties of undefined (reading 'attrs')")) && !memoria.respuestaSinProducto(new Error('timeout')));
-  memoria.dudosa(memoria.clave(op));
-  chequear('lo dudoso no se repite enseguida', memoria.esDudosa(memoria.clave(op)));
-  reloj += 61 * 60000;
-  chequear('a la hora se vuelve a probar', !memoria.esDudosa(memoria.clave(op)));
-  chequear('el primer error se anota', memoria.fallo('x') === true && !memoria.puedeIntentar());
-  reloj += 5 * 60000;
-  chequear('a los 5 minutos se reintenta, y el mismo error no se vuelve a anotar', memoria.puedeIntentar() && memoria.fallo('x') === false);
-  reloj += 5 * 60000;
-  chequear('la segunda espera es más larga', !memoria.puedeIntentar());
-  memoria.anduvo();
-  chequear('cuando anda, vuelve a lo normal', memoria.puedeIntentar());
-  const paraApp = espejo.catalogoParaLaApp([
-    { id: '111', retailerId: 'ns-g-mila', name: 'Milanesa con papas', description: 'Con fritas', price: 6500000, isHidden: false },
-    { id: '112', retailerId: '', name: ' Tarta de jamón y queso ', price: 5000000, isHidden: true },
-    { id: '113', name: '', price: 1 },
-  ]);
-  chequear('el catálogo de WhatsApp para la app: precio en centavos, escondidos marcados', paraApp.length === 2
-    && paraApp[0].precioCentavos === 650000 && paraApp[0].descripcion === 'Con fritas'
-    && paraApp[1].nombre === 'Tarta de jamón y queso' && paraApp[1].oculto === true && paraApp[1].retailerId === null);
-  let subido = null;
-  let pidio = false;
-  const sincWa = crearSincronizador({
-    config, cuenta: cuentaFalsa, recargarConfig: () => [], enviar: async (x) => x, log: { log: () => {}, error: () => {} },
-    cliente: { mandarCatalogoWa: async (items) => { subido = items; return { ok: true }; } },
-    alPedirCatalogoWa: async () => { pidio = true; },
-  });
-  await sincWa.subirCatalogoWa(paraApp);
-  chequear('sube el catálogo de WhatsApp a Nodo Sur', subido && subido.length === 2);
-  await sincWa.alAviso(JSON.stringify({ bot: { catalogoWa: true } }));
-  chequear('cuando la app lo pide, lo vuelve a leer', pidio);
+  chequear('el ID de contenido con ns- de antes se sigue reconociendo', textoPara(r, C8).includes('12 × Empanada de carne'));
   chequear('el catálogo se prende también desde la app', gastro.conCatalogoWhatsapp({ pedidos: { catalogo_whatsapp: true }, negocio: {} }));
 
   console.log('\n— 12. Las preguntas del local no se mezclan con el pedido —');
