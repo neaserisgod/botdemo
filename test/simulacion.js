@@ -54,7 +54,9 @@ r = decir(CLIENTA, '1');
 chequear('lista servicios', textoPara(r, CLIENTA).includes('Semipermanente'));
 r = decir(CLIENTA, '1'); // semipermanente
 chequear('ofrece días', textoPara(r, CLIENTA).includes('¿Qué día'));
-r = decir(CLIENTA, '1');
+// El segundo día de la lista, no hoy: hoy puede quedar un solo horario (de tarde, con la anticipación mínima) y la segunda
+// clienta no tendría un "2" para elegir.
+r = decir(CLIENTA, '2');
 chequear('ofrece horarios', /\*1\* — \d\d:\d\d/.test(textoPara(r, CLIENTA)));
 r = decir(CLIENTA, '1');
 chequear('pide nombre', textoPara(r, CLIENTA).includes('nombre'));
@@ -74,7 +76,7 @@ chequear('avisa a la dueña con foto', r.some((s) => s.para === DUENA && s.image
 
 console.log('\n— 3. Segunda clienta, comprobante DUPLICADO → a_revisar → !ok —');
 decir(CLIENTA2, 'hola'); decir(CLIENTA2, '1'); decir(CLIENTA2, '1');
-decir(CLIENTA2, '1'); decir(CLIENTA2, '2'); // otro horario
+decir(CLIENTA2, '2'); decir(CLIENTA2, '2'); // el mismo día, otro horario
 decir(CLIENTA2, 'Sofía');
 decir(CLIENTA2, '1');
 r = decir(CLIENTA2, null, { ...fotoFake(
