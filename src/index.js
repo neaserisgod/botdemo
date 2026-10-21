@@ -247,13 +247,16 @@ function recargarConfig() {
 
 const cuentaNube = require('./nube/cuenta').leer();
 let sincronizador = null;
+let fotosCarta = null;
 if (cuentaNube) {
   const { crearCliente } = require('./nube/cliente');
+  const cliente = crearCliente({ sitio: cuentaNube.sitio, token: cuentaNube.token });
+  fotosCarta = require('./nube/fotos').crearFotos({ cliente, dir: require('./rutas').dirDatos() });
   sincronizador = nube.crearSincronizador({
     config, recargarConfig, enviar: enviarAhora,
     alCambiarCatalogo: () => espejarCarta(),
     alPedirCatalogoWa: () => subirCatalogoWa(true),
-    cliente: crearCliente({ sitio: cuentaNube.sitio, token: cuentaNube.token }),
+    cliente,
     version: require('../package.json').version,
   });
   let WebSocket = null;
@@ -274,9 +277,9 @@ let cartaEspejada = null;
 async function espejarCarta() {
   if (!adaptador.espejarCatalogo || !gastro.esGastro(config) || !gastro.conCatalogoWhatsapp(config) || !catalogoCarta.cargado()) return;
   const items = catalogoCarta.todos();
-  const huella = JSON.stringify(items.map((x) => [x.gid, x.nombre, x.precioCentavos, x.hay]));
+  const huella = JSON.stringify(items.map((x) => [x.gid, x.nombre, x.precioCentavos, x.hay, x.foto || null]));
   if (huella === cartaEspejada) return;
-  const r = await adaptador.espejarCatalogo(items);
+  const r = await adaptador.espejarCatalogo(items, fotosCarta);
   if (!r) return;
   if (r.cambiados || r.creados || r.borrados) {
     console.log(`Catálogo de WhatsApp: ${r.creados} nuevos, ${r.cambiados} cambiados, ${r.borrados} borrados${r.pendientes ? ` (faltan ${r.pendientes}, siguen en 5 minutos)` : ''}.`);

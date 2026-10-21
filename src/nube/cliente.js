@@ -27,8 +27,21 @@ function crearCliente({ sitio, token, fetch = globalThis.fetch }) {
     if (!r.ok) throw new ErrorNube(r.status, j && j.error);
     return j;
   }
+  // La foto de un plato: `{ bytes, tipo }`.
+  async function foto(gid) {
+    const r = await fetch(`${sitio}/api/bot/foto?gid=${encodeURIComponent(gid)}`, {
+      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(PLAZO_MS),
+    });
+    if (!r.ok) {
+      let j = null;
+      try { j = await r.json(); } catch { /* sin cuerpo */ }
+      throw new ErrorNube(r.status, j && j.error);
+    }
+    return { bytes: Buffer.from(await r.arrayBuffer()), tipo: r.headers.get('Content-Type') || 'image/jpeg' };
+  }
   return {
     yo: () => pedir('/api/device/me'),
+    foto,
     config: () => pedir('/api/bot/config'),
     catalogo: () => pedir('/api/bot/catalogo'),
     mandarCatalogoWa: (items) => pedir('/api/bot/catalogo-wa', { metodo: 'POST', cuerpo: { items } }),

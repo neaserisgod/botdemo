@@ -298,28 +298,64 @@ function crearAdaptador(config, hooks) {
   const PAUSA_ESPEJO_MS = 2000;
   const IMAGEN_PLATO = path.join(__dirname, '..', 'assets', 'plato.jpg');
   let espejando = false;
-  async function espejarCatalogo(items) {
-    if (!sock || !abierto || espejando) return null;
+  const memoriaEspejo = espejo.crearMemoriaEspejo();
+  // `fotos` (`nube/fotos.js`, solo vinculado a Nodo Sur): las fotos sacadas en la app. Sin eso, la genérica.
+  async function espejarCatalogo(items, fotos = null) {
+    if (!sock || !abierto || espejando || !memoriaEspejo.puedeIntentar()) return null;
     espejando = true;
     try {
       const actuales = await catalogoWaEntero();
-      const plan = espejo.planEspejo({ items, actuales });
+      const plan = espejo.planEspejo({ items, actuales, fotos: fotos ? fotos.aplicadas() : new Map() });
+      // Lo que quedó dudoso hace menos de una hora no se repite (ver `crearMemoriaEspejo`).
+      plan.cambiar = plan.cambiar.filter((p) => !memoriaEspejo.esDudosa(memoriaEspejo.clave(p)));
+      plan.crear = plan.crear.filter((p) => !memoriaEspejo.esDudosa(memoriaEspejo.clave(p)));
+      let dudosas = 0;
+      // true si WhatsApp contestó bien, false si contestó sin el producto (quizás lo hizo: no se repite por un rato).
+      const operar = async (p, f) => {
+        try { await f(); return true; } catch (e) {
+          if (!memoriaEspejo.respuestaSinProducto(e)) throw e;
+          memoriaEspejo.dudosa(memoriaEspejo.clave(p));
+          dudosas++;
+          return false;
+        }
+      };
       const pausa = () => new Promise((ok) => setTimeout(ok, PAUSA_ESPEJO_MS));
       const hecho = { cambiados: 0, creados: 0, borrados: 0, pendientes: plan.pendientes };
+      // La imagen que va (la del plato o la genérica), o null si la foto no se pudo bajar: se reintenta en la vuelta siguiente.
+      const imagen = async (p) => {
+        if (!p.foto || !fotos) return IMAGEN_PLATO;
+        try { return await fotos.ruta(p.gid, p.foto); } catch (e) {
+          console.error(`No pude bajar la foto de ${p.name}:`, e.message);
+          return null;
+        }
+      };
+      const anotar = (p) => { if (fotos && p.foto !== undefined) fotos.anotar(p.gid, p.foto || null); };
       for (const p of plan.cambiar) {
-        await sock.productUpdate(p.id, { name: p.name, retailerId: p.retailerId, description: '', price: p.price, currency: 'ARS', isHidden: p.isHidden, images: [] });
+        // Sin `description` ni imágenes, WhatsApp deja las que tiene: lo que el local escribió o puso a mano no se pisa.
+        const url = p.foto !== undefined ? await imagen(p) : null;
+        const ok = await operar(p, () => sock.productUpdate(p.id, { name: p.name, retailerId: p.retailerId, price: p.price, currency: 'ARS',
+          isHidden: p.isHidden, images: url ? [{ url }] : [] }));
+        if (ok && url) anotar(p); else if (p.foto) hecho.pendientes++;
         hecho.cambiados++; await pausa();
       }
       for (const p of plan.crear) {
-        await sock.productCreate({ name: p.name, retailerId: p.retailerId, description: '', price: p.price, currency: 'ARS', isHidden: false,
-          originCountryCode: undefined, images: [{ url: IMAGEN_PLATO }] });
+        const url = (await imagen(p)) || IMAGEN_PLATO;
+        const ok = await operar(p, () => sock.productCreate({ name: p.name, retailerId: p.retailerId, description: '', price: p.price,
+          currency: 'ARS', isHidden: false, originCountryCode: undefined, images: [{ url }] }));
+        if (ok && fotos) fotos.anotar(p.gid, url === IMAGEN_PLATO ? null : p.foto);
+        if (p.foto && url === IMAGEN_PLATO) hecho.pendientes++;
         hecho.creados++; await pausa();
       }
       if (plan.borrar.length) { await sock.productDelete(plan.borrar); hecho.borrados = plan.borrar.length; }
       if (hecho.cambiados || hecho.creados || hecho.borrados) await cargarCatalogoWa().catch(() => {});
+      if (dudosas) {
+        console.log(`Catálogo de WhatsApp: ${dudosas} cambios sin confirmar (WhatsApp contestó distinto). Lo reviso en una hora.`);
+        hecho.pendientes += dudosas;
+      }
+      memoriaEspejo.anduvo();
       return hecho;
     } catch (e) {
-      console.error('No pude copiar la carta al catálogo de WhatsApp:', e.message);
+      if (memoriaEspejo.fallo(e.message)) console.error('No pude copiar la carta al catálogo de WhatsApp:', e.message, '(lo vuelvo a probar más espaciado)');
       return null;
     } finally {
       espejando = false;

@@ -282,6 +282,49 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   plan = espejo.planEspejo({ items: carta, actuales: [{ id: 'wa9', retailerId: null, name: 'milanesa  con papas', price: 5000000, isHidden: false }] });
   chequear('uno cargado a mano con el mismo nombre se adopta, no se duplica', plan.cambiar.some((x) => x.id === 'wa9' && x.retailerId === 'ns-g-mila' && x.price === 6500000)
     && !plan.crear.some((x) => x.retailerId === 'ns-g-mila'));
+  // Fotos sacadas en la app (2026-10-21).
+  const conFoto = carta.map((x) => (x.gid === 'g-mila' ? { ...x, foto: 'v1' } : x));
+  plan = espejo.planEspejo({ items: conFoto, actuales: [] });
+  chequear('lo nuevo se crea con su foto, o con la genérica', plan.crear.find((x) => x.gid === 'g-mila').foto === 'v1' && plan.crear.find((x) => x.gid === 'g-empa').foto === null);
+  const iguales = [{ id: 'wa1', retailerId: 'ns-g-mila', name: 'Milanesa con papas', price: 6500000, isHidden: false }];
+  plan = espejo.planEspejo({ items: conFoto, actuales: iguales, fotos: new Map() });
+  chequear('una foto nueva cambia el producto aunque lo demás esté igual', plan.cambiar.some((x) => x.id === 'wa1' && x.foto === 'v1'));
+  plan = espejo.planEspejo({ items: conFoto, actuales: iguales, fotos: new Map([['g-mila', 'v1']]) });
+  chequear('con la misma foto ya puesta, no se toca', !plan.cambiar.some((x) => x.id === 'wa1'));
+  plan = espejo.planEspejo({ items: carta, actuales: iguales, fotos: new Map([['g-mila', 'v1']]) });
+  chequear('si borran la foto en la app, vuelve la genérica', plan.cambiar.some((x) => x.id === 'wa1' && x.foto === null));
+  plan = espejo.planEspejo({ items: carta, actuales: [{ ...iguales[0], price: 1 }] });
+  chequear('un cambio de precio sin foto nueva no manda foto (queda la que tenga en WhatsApp)', plan.cambiar.some((x) => x.id === 'wa1' && !('foto' in x)));
+  plan = espejo.planEspejo({ items: carta, actuales: [{ id: 'wa9', retailerId: null, name: 'Milanesa con papas', price: 6500000, isHidden: false }] });
+  chequear('al adoptar uno cargado a mano sin foto en la app, su foto queda', plan.cambiar.some((x) => x.id === 'wa9' && !('foto' in x)));
+  const fs = require('fs');
+  const dirFotos = fs.mkdtempSync(path.join(os.tmpdir(), 'fotos-'));
+  let bajadas = 0;
+  const { crearFotos } = require('../src/nube/fotos');
+  const fotos = crearFotos({ dir: dirFotos, cliente: { foto: async () => { bajadas++; return { bytes: Buffer.from([0xff, 0xd8, 0xff]), tipo: 'image/jpeg' }; } } });
+  const r1 = await fotos.ruta('g-mila', 'v1');
+  await fotos.ruta('g-mila', 'v1');
+  chequear('la foto se baja una vez', bajadas === 1 && fs.existsSync(r1));
+  const r2 = await fotos.ruta('g-mila', 'v2');
+  chequear('otra versión reemplaza a la vieja', bajadas === 2 && fs.existsSync(r2) && !fs.existsSync(r1));
+  fotos.anotar('g-mila', 'v2');
+  chequear('lo puesto en WhatsApp queda anotado entre reinicios', crearFotos({ dir: dirFotos, cliente: {} }).aplicadas().get('g-mila') === 'v2');
+  // Lo que pasó en el primer celular real: WhatsApp contesta sin el producto y Baileys se cae (2026-10-21).
+  let reloj = 0;
+  const memoria = espejo.crearMemoriaEspejo(() => reloj);
+  const op = { retailerId: 'ns-g-mila', name: 'Milanesa', price: 1, isHidden: false, foto: null };
+  chequear('el error de Baileys sin producto se reconoce', memoria.respuestaSinProducto(new Error("Cannot read properties of undefined (reading 'attrs')")) && !memoria.respuestaSinProducto(new Error('timeout')));
+  memoria.dudosa(memoria.clave(op));
+  chequear('lo dudoso no se repite enseguida', memoria.esDudosa(memoria.clave(op)));
+  reloj += 61 * 60000;
+  chequear('a la hora se vuelve a probar', !memoria.esDudosa(memoria.clave(op)));
+  chequear('el primer error se anota', memoria.fallo('x') === true && !memoria.puedeIntentar());
+  reloj += 5 * 60000;
+  chequear('a los 5 minutos se reintenta, y el mismo error no se vuelve a anotar', memoria.puedeIntentar() && memoria.fallo('x') === false);
+  reloj += 5 * 60000;
+  chequear('la segunda espera es más larga', !memoria.puedeIntentar());
+  memoria.anduvo();
+  chequear('cuando anda, vuelve a lo normal', memoria.puedeIntentar());
   const paraApp = espejo.catalogoParaLaApp([
     { id: '111', retailerId: 'ns-g-mila', name: 'Milanesa con papas', description: 'Con fritas', price: 6500000, isHidden: false },
     { id: '112', retailerId: '', name: ' Tarta de jamón y queso ', price: 5000000, isHidden: true },
