@@ -46,6 +46,11 @@ function crearAdaptador(config, hooks) {
   // muerta y forzamos una reconexión.
   let ultimaActividad = Date.now();
   let intentosFallidos = 0;
+  // Cierres seguidos por sesión rota (código 500, `badSession`) sin llegar a conectar. Primer celular real (2026-10-21): con
+  // la sesión dañada, o el dispositivo ya borrado en WhatsApp, Baileys no recibe "deslogueado" (401) sino 500 en cada intento,
+  // y el bot reintentaba cada 5 segundos para siempre. A la tercera se toma como desvinculado: la app ofrece vincular de nuevo.
+  let sesionRotaSeguidas = 0;
+  const SESION_ROTA_MAX = 3;
   const MINUTOS_SIN_SENAL = config.conexion?.minutos_sin_senal ?? 10;
   const INTENTOS_ANTES_DE_REINICIAR = config.conexion?.intentos_antes_de_reiniciar ?? 3;
 
@@ -160,14 +165,18 @@ function crearAdaptador(config, hooks) {
         console.log('Escaneá este QR desde WhatsApp > Dispositivos vinculados:');
         qrcode.generate(qr, { small: true });
       }
-      if (connection === 'open') { abierto = true; marcarActividad(); intentosFallidos = 0; hooks.alConectar(); }
+      if (connection === 'open') { abierto = true; marcarActividad(); intentosFallidos = 0; sesionRotaSeguidas = 0; hooks.alConectar(); }
       if (connection === 'close') {
         abierto = false;
         const codigo = lastDisconnect?.error?.output?.statusCode;
-        const deslogueado = codigo === baileys.DisconnectReason.loggedOut;
+        sesionRotaSeguidas = codigo === baileys.DisconnectReason.badSession ? sesionRotaSeguidas + 1 : 0;
+        const deslogueado = codigo === baileys.DisconnectReason.loggedOut || codigo === baileys.DisconnectReason.forbidden
+          || sesionRotaSeguidas >= SESION_ROTA_MAX;
         hooks.alDesconectar(`baileys close (código ${codigo ?? '?'})`);
         if (deslogueado) {
-          console.error('Sesión cerrada desde el teléfono. Borrá data/sesion-baileys y re-escaneá el QR.');
+          console.error(sesionRotaSeguidas >= SESION_ROTA_MAX
+            ? 'La sesión de WhatsApp está rota (o se borró el dispositivo): hay que vincular de nuevo.'
+            : 'Sesión cerrada desde el teléfono. Borrá data/sesion-baileys y re-escaneá el QR.');
           hooks.alDesloguear?.();
           return;
         }
