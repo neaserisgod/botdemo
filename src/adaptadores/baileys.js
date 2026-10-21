@@ -438,6 +438,7 @@ function crearAdaptador(config, hooks) {
       recordarEnviado(await sock.sendMessage(jid, { text: `${partes.pregunta}\n\n${lista}\n\nRespondé con el número.` }));
       encuestas.olvidar(s.para);
     }
+    if (partes.pie) recordarEnviado(await sock.sendMessage(jid, { text: partes.pie }));
   }
 
   // Devuelve los mensajes que SÍ salieron, para que el llamador sepa qué se

@@ -340,6 +340,31 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   chequear('y los clientes vuelven a ser atendidos', (await decir(C16, 'hola')).length > 0);
   chequear('el dueño vuelve a tener sus comandos', textoPara(await decir(D, 'ayuda'), D).includes('modo prueba'));
 
+  console.log('\n— 14. El primer chat de una hamburguesería (2026-10-21) —');
+  catalogo.fijar([
+    { gid: 'h-bcd', nombre: 'Combo Bacon Cheese Doble', precioCentavos: 1600000, hay: true },
+    { gid: 'h-bcs', nombre: 'Combo Bacon Cheese Simple', precioCentavos: 1350000, hay: true },
+    { gid: 'h-p2', nombre: 'Promo 2 Bacon Cheese Dobles', precioCentavos: 2990000, hay: true },
+    { gid: 'h-kmd', nombre: 'Combo La Km Doble', precioCentavos: 1700000, hay: true },
+    { gid: 'h-coca', nombre: 'Coca Cola 500 ml', precioCentavos: 250000, hay: true },
+    { gid: 'h-agua', nombre: 'Agua sin gas 500 ml', precioCentavos: 180000, hay: true },
+  ]);
+  const C17 = '5492944200017';
+  let r14 = await decir(C17, 'Quiero pedirte un combo');
+  chequear('"quiero pedirte un combo" arranca el pedido y pregunta cuál combo', textoPara(r14, C17).includes('¿Cuál de estos?') && textoPara(r14, C17).includes('Combo La Km Doble') && !textoPara(r14, C17).includes('Gracias por escribir'));
+  await decir(C17, '0');
+  r14 = await decir(C17, 'Combo 2 burguera');
+  chequear('"combo 2 burguera" ofrece los combos en vez de "no encontré"', textoPara(r14, C17).includes('No tengo "Combo 2 burguera"') && textoPara(r14, C17).includes('¿Cuál de estos?'));
+  r14 = await decir(C17, '1');
+  chequear('y se anota el elegido', textoPara(r14, C17).includes('Anotado'));
+  r14 = await decir(C17, 'Burger');
+  chequear('sin nada parecido, sigue diciendo que no lo encontró', textoPara(r14, C17).includes('No encontré "Burger"'));
+  decir(C17, 'cancelar');
+  r14 = await decir(C17, '¿Qué bebidas tienen?');
+  chequear('"¿qué bebidas tienen?" lista las bebidas', textoPara(r14, C17).includes('Coca Cola') && textoPara(r14, C17).includes('Agua sin gas') && !textoPara(r14, C17).includes('Combo'));
+  r14 = await decir(C17, '¿Tienen tacc?');
+  chequear('una pregunta sin respuesta no dice "no encontré ese producto"', textoPara(r14, C17).includes('no la sé responder') && !textoPara(r14, C17).includes('ese producto'));
+
   console.log(fallas ? `\n❌ ${fallas} chequeos de gastronomía fallaron` : '\n✅ Gastronomía OK');
   process.exit(fallas ? 1 : 0);
 })();
