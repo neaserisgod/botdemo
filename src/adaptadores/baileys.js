@@ -395,10 +395,20 @@ function crearAdaptador(config, hooks) {
   }
 
   // El catálogo de WhatsApp como lo necesita la app para traerlo a su carta, o null si no está conectado o no se pudo leer.
+  // Cuántos artículos devolvió WhatsApp, anotado cuando cambia: sin esto no se sabía si el bot leía 0 o no leía nada (primer
+  // celular real, 2026-10-21: un artículo cargado a mano no aparecía en "Traer de WhatsApp").
+  let ultimaLectura = null;
   async function leerCatalogoWa() {
     if (!sock || !abierto) return null;
     try {
-      return espejo.catalogoParaLaApp(await cargarCatalogoWa());
+      const productos = await cargarCatalogoWa();
+      const ocultos = productos.filter((p) => p.isHidden).length;
+      const resumen = `${productos.length} artículos${ocultos ? ` (${ocultos} ocultos)` : ''}`;
+      if (resumen !== ultimaLectura) {
+        console.log(`Catálogo de WhatsApp leído: ${resumen}.`);
+        ultimaLectura = resumen;
+      }
+      return espejo.catalogoParaLaApp(productos);
     } catch (e) {
       console.error('No pude leer el catálogo de WhatsApp:', e.message);
       return null;
