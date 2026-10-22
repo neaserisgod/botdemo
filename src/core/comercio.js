@@ -303,7 +303,9 @@ function empezarPedido(ctx) {
 // pudo). Cada producto del catálogo de WhatsApp lleva como "ID de contenido" (retailer id) el global_id del plato en Nodo Sur;
 // si no lo tiene, se busca por el nombre. El precio es el de Nodo Sur, no el que dice WhatsApp: es el que cobra la caja.
 function carritoDelCatalogo(ctx) {
-  const lineas = Array.isArray(ctx.msj.carrito) ? ctx.msj.carrito : [];
+  let lineas = Array.isArray(ctx.msj.carrito) ? ctx.msj.carrito : [];
+  const deducido = !lineas.length && carritoPorTotal(ctx.msj.carritoResumen);
+  if (deducido) lineas = deducido;
   if (!lineas.length) {
     // WhatsApp puede no dar el detalle: con lo que trae el mensaje, al menos se le confirma qué llegó.
     const r = ctx.msj.carritoResumen;
@@ -332,6 +334,31 @@ function carritoDelCatalogo(ctx) {
   const r = terminarPedido(ctx);
   r[0].texto = `🛒 Recibí tu carrito:\n${notas.join('\n')}\n\n${r[0].texto}`;
   return r;
+}
+
+// Sin el detalle, con cuántos productos y el total que trae el mensaje: la única combinación de la carta que da justo eso
+// ("1 producto, $16.000" en una carta con un solo plato de $16.000). Si hay más de una (o ninguna), null: que lo escriba.
+const MAX_DEDUCIR = 10;
+function carritoPorTotal(resumen) {
+  const { cantidad, totalCentavos } = resumen || {};
+  if (!catalogo.cargado() || !cantidad || cantidad > MAX_DEDUCIR || !totalCentavos) return null;
+  const platos = catalogo.todos().filter((x) => x.hay && !catalogo.esPesable(x) && x.precioCentavos > 0);
+  const soluciones = [];
+  const elegidos = [];
+  (function probar(desde, faltan, plata) {
+    if (soluciones.length > 1) return;
+    if (!faltan) { if (!plata) soluciones.push([...elegidos]); return; }
+    for (let i = desde; i < platos.length; i++) {
+      if (platos[i].precioCentavos > plata) continue;
+      elegidos.push(platos[i]);
+      probar(i, faltan - 1, plata - platos[i].precioCentavos);
+      elegidos.pop();
+    }
+  })(0, cantidad, totalCentavos);
+  if (soluciones.length !== 1) return null;
+  const porGid = new Map();
+  for (const x of soluciones[0]) porGid.set(x.gid, (porGid.get(x.gid) || 0) + 1);
+  return [...porGid].map(([gid, n]) => ({ retailerId: gid, nombre: null, cantidad: n }));
 }
 
 // La carta: el link del catálogo de WhatsApp si el local lo tiene, y si no, escrita (lo que hay hoy).

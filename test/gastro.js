@@ -250,6 +250,10 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   // Sin el detalle (WhatsApp no lo dio): lo que trae el mensaje, para que el cliente no lo vuelva a contar a ciegas.
   r = motor.procesarMensaje({ de: C7, texto: '', carrito: [], carritoResumen: { cantidad: 3, totalCentavos: 2500000 } });
   chequear('sin el detalle, dice cuántos productos y el total que vio', textoPara(r, C7).includes('3 productos') && textoPara(r, C7).includes('$25.000'));
+  r = motor.procesarMensaje({ de: C7, texto: '', carrito: [], carritoResumen: { cantidad: 3, totalCentavos: 890000 } });
+  tc = textoPara(r, C7);
+  chequear('sin el detalle, si una sola combinación da ese total, la anota', tc.includes('1 × Milanesa con papas') && tc.includes('2 × Empanada de carne') && !tc.includes('no pude leer'));
+  motor.procesarMensaje({ de: C7, texto: 'cancelar' });
   const C8 = '5492944200008';
   r = motor.procesarMensaje({ de: C8, texto: '', carrito: [{ retailerId: 'ns-g-empa', nombre: 'Empanada', cantidad: 12 }] });
   chequear('el ID de contenido con ns- de antes se sigue reconociendo', textoPara(r, C8).includes('12 × Empanada de carne'));
