@@ -98,6 +98,10 @@ const PRODUCTOS_COMERCIO = {
   azucar: ['azucar'], harina: ['harina'], aceite: ['aceite'], vino: ['vino'], tinto: ['tinto', 'vino'],
 };
 
+const VEGGIE = ['veggie', 'vegetariana', 'vegetariano', 'vegana', 'vegano', 'vegetal', 'lentejas', 'garbanzos'];
+const PROMO = ['promo', 'promocion', 'combo'];
+const BURGER = ['hamburguesa', 'burger', 'burguer'];
+
 const PRODUCTOS = {
   kiosco: { atado: ['cigarrillos'], caramelos: ['caramelo', 'caramelos', 'sugus', 'flynn'], turron: ['turron'] },
   fiambreria: {
@@ -111,6 +115,9 @@ const PRODUCTOS = {
   hamburgueseria: {
     fritas: ['papas'], papitas: ['papas'], cheese: ['cheddar', 'cheese'], cheddar: ['cheddar', 'cheese'],
     panceta: ['bacon', 'panceta'], bacon: ['bacon', 'panceta'],
+    amburguesa: BURGER, amburguesas: BURGER, hamburgueza: BURGER, hamburguezas: BURGER, amburgesa: BURGER, hamburgue: BURGER,
+    vegetariana: VEGGIE, vegetariano: VEGGIE, vegetarianas: VEGGIE, vegana: VEGGIE, vegano: VEGGIE, veggie: VEGGIE, vegie: VEGGIE,
+    promo: PROMO, promos: PROMO, promocion: PROMO, promociones: PROMO, combos: ['combo'],
   },
 };
 

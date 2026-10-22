@@ -17,6 +17,7 @@ const qClientas = require('../db/consultas/clientas');
 const qPedidos = require('../db/consultas/pedidos');
 const catalogo = require('./catalogo');
 const gastro = require('./gastro');
+const fechas = require('./fechas');
 const faq = require('./flujos/faq');
 const nlu = require('./nlu');
 const numeros = require('./diccionario/numeros');
@@ -31,14 +32,61 @@ const POR_DEFECTO = { envios: 'Por ahora los pedidos son para *retirar en el loc
 // Un local gastronómico dice lo que hace él (Nodo Gastro manda sus formas de entrega y zonas).
 function porDefecto(ctx) {
   if (!gastro.esGastro(ctx.config)) return POR_DEFECTO;
-  if (!gastro.formas(ctx.config).some((f) => f.envio)) return POR_DEFECTO;
+  // Cómo se paga lo sabe el bot (Nodo Gastro lo manda): no hace falta preguntarle al local.
+  const pagos = { pagos: `${textoPagos(ctx.config)}\nCuando quieras armar el pedido, escribime *pedido*.` };
+  if (!gastro.formas(ctx.config).some((f) => f.envio)) return { ...POR_DEFECTO, ...pagos };
   const zs = gastro.zonas(ctx.config);
   const costo = (z) => precioEnvio(gastro.costoEnvio({ envio: true }, z));
   // Con un solo precio de envío no hay zonas que listar.
   const lista = zs.length === 1 ? ` El envío sale ${costo(zs[0])}.`
     : zs.length ? `\n${zs.map((z) => `• ${z.nombre} — ${costo(z)}`).join('\n')}` : '';
-  return { envios: `¡Sí, te lo llevamos! 🛵${lista}\nCuando quieras armar el pedido, escribime *pedido*.` };
+  return { ...pagos, envios: `¡Sí, te lo llevamos! 🛵${lista}\nCuando quieras armar el pedido, escribime *pedido*.` };
 }
+
+// "Podés pagar al recibir, con Mercado Pago (tarjeta, débito o dinero en cuenta) o por transferencia."
+function textoPagos(config) {
+  const formas = {
+    al_entregar: 'al recibir (efectivo)', mp: 'con Mercado Pago (tarjeta, débito o dinero en cuenta)', alias: 'por transferencia',
+  };
+  const lista = gastro.pagos(config).map((p) => formas[p]);
+  const juntas = lista.length > 1 ? `${lista.slice(0, -1).join(', ')} o ${lista[lista.length - 1]}` : lista[0];
+  return `💳 Podés pagar ${juntas}.`;
+}
+
+// Si está abierto ahora y, si no, cuándo abre; y cuánto tarda en llegar o en estar listo. Null sin horario cargado.
+function textoAbierto(config) {
+  const forma = gastro.formas(config)[0];
+  const zona = forma.envio ? gastro.zonas(config)[0] : null;
+  const sale = gastro.cuandoSale(config, forma, zona);
+  if (!sale) return '😕 En este momento la cocina no está tomando pedidos.';
+  const minutos = Math.max(1, Math.round((sale.hora - fechas.ahora()) / 60000));
+  const verbo = forma.envio ? 'llega' : 'está listo';
+  if (!sale.programado) return `✅ Estamos abiertos. Si pedís ahora, ${verbo} en unos ${minutos} minutos (${gastro.textoHora(sale.hora)}).`;
+  return `🕐 Ahora estamos cerrados, pero podés dejar tu pedido y ${verbo} ${gastro.textoHora(sale.hora)}.`;
+}
+
+// El "3" y "¿están abiertos?" de un local gastronómico: si está abierto, los horarios, el envío y cómo se paga.
+function horariosGastro(ctx) {
+  const envio = porDefecto(ctx).envios;
+  const extra = envio && envio !== POR_DEFECTO.envios ? `\n\n${envio.split('\n')[0]}` : '';
+  return faq.conPin(responder(ctx, 'inicio', `${textoAbierto(ctx.config)}\n\n${faq.ubicacionYHorarios(ctx.config)}${extra}\n${textoPagos(ctx.config)}`), ctx.config);
+}
+
+const PIDE_RETIRO = /\b(?:retirar|retiro|retirarlo|paso a buscar|pasar a buscar|paso a retirar|buscarlo|take away|para llevar)\b/;
+
+// "¿qué hamburguesas tienen?", "burgers?", "¿qué hamburguesas hay?": la pregunta es solo por las hamburguesas.
+const BURGER = /^(?:hamburguesas?|hamburgesas?|burgers?|burguers?|hambur|burgas?)$/;
+const esPreguntaPorBurgers = (t) => { const c = catalogo.palabrasClave(t); return c.length > 0 && c.every((p) => BURGER.test(p)); };
+// Lo que no es bebida, papas, un extra, un combo ni un postre.
+const NO_BURGER = /\b(?:combo|promo|papas?|fritas|extra|agua|coca|cola|sprite|fanta|pepsi|gaseosa|cerveza|jugo|lata|nuggets?|brownie|helado|postre|flan|bastones|aros)\b/;
+function burgers(ctx, estado) {
+  if (!catalogo.cargado()) return sinCatalogo(ctx);
+  const lista = catalogo.todos().filter((x) => x.hay && !NO_BURGER.test(nlu.normalizar(x.nombre)));
+  if (!lista.length) return carta(ctx);
+  return responder(ctx, estado, `Estas son nuestras burgers 🍔\n\n${lista.map((x) => `• ${nombreConPrecio(x)}`).join('\n')}\n\nPara pedir, escribí *pedido* o mandame directo lo que querés.`);
+}
+
+const PIDE_DEMORA = /\b(?:tarda|tardan|tardas|demora|demoran|demoras|cuanto tiempo|en cuanto|a que hora llega|a que hora me llega|cuando llega|estan abiertos|estas abierto|esta abierto|abren hoy|atienden hoy|siguen abiertos|ya abrieron|abierto)\b/;
 
 // Un envío que no cuesta nada se dice como lo diría alguien del local, no "$0".
 const precioEnvio = (centavos) => (centavos > 0 ? catalogo.plata(centavos) : 'sin cargo');
@@ -102,6 +150,16 @@ const sinCatalogo = (ctx) => responder(ctx, 'inicio',
 const lineaProducto = (x) => `• ${nombreConPrecio(x)} ${x.hay ? '✅' : '❌ sin stock'}`;
 
 // ---------- inicio: consultas ----------
+const PIDE_CARTA = /\b(?:catalogo|carta|que tienen hoy|que hay hoy|para comer|que venden|que ofrecen)\b|^(?:que|q) (?:tienen|tenes|hay)$/;
+
+// "hola", "buenass", "holaaa, buenas noches": solo un saludo (con las letras estiradas que se escriben en el chat).
+const PALABRAS_SALUDO = new Set(['hola', 'ola', 'holis', 'buenas', 'buen', 'buenos', 'dia', 'dias', 'tardes', 'noches', 'que', 'tal',
+  'como', 'va', 'andas', 'estas', 'estan', 'onda', 'hey', 'ey', 'gente', 'chicos', 'todo', 'bien']);
+function esSoloSaludo(texto) {
+  const palabras = nlu.normalizar(texto).replace(/([a-z])\1+/g, '$1').split(' ').filter(Boolean);
+  return palabras.length > 0 && ['hola', 'ola', 'holis', 'buenas', 'buen', 'buenos', 'hey', 'ey'].includes(palabras[0])
+    && palabras.every((p) => PALABRAS_SALUDO.has(p));
+}
 const PIDE_PEDIDO = ['pedido', 'pedir', 'pedirte', 'pedirle', 'pedirles', 'hacer un pedido', 'quiero pedir', 'encargar', 'encargo', 'reservar'];
 const PIDE_PRECIO = ['precio', 'precios', 'cuanto', 'sale', 'cuesta', 'vale', 'hay', 'tienen', 'tenes', 'queda', 'quedan', 'stock'];
 
@@ -114,9 +172,11 @@ function inicio(ctx, estado = 'inicio') {
   const sinEntender = ctx.datos.sinEntender || 0;
   delete ctx.datos.sinEntender;
   if (!t || nlu.esRisa(t)) return [];
-  if (nlu.esCortesia(t)) return responder(ctx, 'inicio', '¡Gracias a vos! 😊 Cualquier cosa escribime *hola*.');
+  const soloSaludo = esSoloSaludo(t);
+  if (nlu.esCortesia(t) && !soloSaludo) return responder(ctx, 'inicio', '¡Gracias a vos! 😊 Cualquier cosa escribime *hola*.');
   const apurado = apuro(ctx);
   if (apurado) return apurado;
+  if (soloSaludo) return menu(ctx, saludo(ctx));
   // Las opciones del menú como las escriba ("1.", "el 1", "opción 2", "uno")
   const op = nlu.opcionMenu(t);
   if (op && op <= 4) t = String(op);
@@ -124,6 +184,7 @@ function inicio(ctx, estado = 'inicio') {
   if (t === '1' && gastro.esGastro(ctx.config)) return carta(ctx);
   if (t === '1') return responder(ctx, 'consultando', `Decime qué producto buscás y te paso el precio y si hay ${ctx.config.textos.emoji}\n(por ejemplo: *coca*, *pan lactal*)`);
   if (t === '2') return empezarPedido(ctx);
+  if (t === '3' && gastro.esGastro(ctx.config)) return horariosGastro(ctx);
   if (t === '3') return faq.conPin(responder(ctx, 'inicio', faq.ubicacionYHorarios(ctx.config)), ctx.config);
   if (t === '4') return derivarAHumano(ctx, '(pidió hablar con una persona)');
 
@@ -134,7 +195,19 @@ function inicio(ctx, estado = 'inicio') {
   const enMensaje = pedidoEnElMensaje(ctx);
   if (enMensaje) return enMensaje;
   // "¿me pasás el catálogo?", "¿qué tienen en la carta?": la carta (o el link del catálogo de WhatsApp).
-  if (gastro.esGastro(ctx.config) && /\b(?:catalogo|carta|que tienen hoy|que hay hoy)\b/.test(norm)) return carta(ctx);
+  // "¿qué tienen para comer?", "¿me pasás el menú?": en un local gastronómico el menú es la carta.
+  if (gastro.esGastro(ctx.config) && (PIDE_CARTA.test(norm) || (/\bmenu\b/.test(norm) && norm !== 'menu'))) return carta(ctx);
+  // "¿cuánto tarda?", "¿están abiertos?": si está abierto y en cuánto llega.
+  if (gastro.esGastro(ctx.config) && PIDE_DEMORA.test(norm)) {
+    if (/\babiert/.test(norm)) return horariosGastro(ctx);
+    return responder(ctx, 'inicio', `${textoAbierto(ctx.config)}\nCuando quieras armar el pedido, escribime *pedido*.`);
+  }
+  // "¿puedo pasar a buscarlo?" en un local que solo hace envíos.
+  if (gastro.esGastro(ctx.config) && PIDE_RETIRO.test(norm) && !gastro.formas(ctx.config).some((f) => !f.envio)) {
+    return responder(ctx, 'inicio', `Por ahora solo hacemos envíos 🛵${porDefecto(ctx).envios.replace(/^¡Sí, te lo llevamos! 🛵/, '')}`);
+  }
+  // "¿qué hamburguesas tienen?" en una hamburguesería: todas las burgers, aunque no digan "hamburguesa" en el nombre.
+  if (ctx.config.negocio.rubro === 'hamburgueseria' && esPreguntaPorBurgers(t)) return burgers(ctx, estado);
   if (PIDE_PEDIDO.some((k) => nlu.contiene(norm, tokens, k))) return empezarPedido(ctx);
 
   // Lo que pregunta en el mismo mensaje va antes que pasarlo a una persona: "¿alguien me atiende? quiero saber si tienen
@@ -213,8 +286,8 @@ function precioDePeso(ctx, estado) {
 
 // ---------- pedido ----------
 // Verbos de pedido de mostrador: "cortame", "¿me podés cortar…?", "preparame", "separame", "dame", "quiero", "me llevo".
-const VERBO_PEDIDO = '(?:me )?(?:podes |podrias |puedes |vas a )?(?:cortar|cortame|cortas|preparar|preparame|preparas|separar|separame|separas|guardar|guardame|guardas|anotar|anotame|anotas|dar|dame|das|mandar|mandame|quiero|quisiera|queria|necesito|me llevo|llevo|encargar|encargo|pedirte|pedirle|pedirles|pedir|pido|traeme|me traes)';
-const SALUDO_INICIAL = /^(?:(?:hola|holis|buenas|buen dia|buenos dias|buenas tardes|buenas noches|che|como va|que tal|disculpa|perdon)[\s,!.¡¿?]*)+/;
+const VERBO_PEDIDO = '(?:me )?(?:podes |podrias |puedes |vas a )?(?:cortar|cortame|cortas|preparar|preparame|preparas|separar|separame|separas|guardar|guardame|guardas|anotar|anotame|anotas|dar|dame|das|mandar|mandame|mandas|mandan|haceme|hacenme|me haces|me hacen|quiero|kiero|qiero|quisiera|queria|keria|necesito|me llevo|llevo|encargar|encargo|pedirte|pedirle|pedirles|pedir|pido|traeme|me traes)';
+const SALUDO_INICIAL = /^(?:(?:hola+|holis|buenas+|buen dia|buenos dias|noches|tardes|dias|che|como va|como andas|como estas|que tal|disculpa|perdon|gente)[\s,!.¡¿?]*)+/;
 const RELLENO_FINAL = /[\s,.!?¿¡]*(?:(?:porfa|por favor|gracias|plis|please|dale)[\s,.!?¿¡]*)*$/;
 
 // Si el mensaje es un pedido ("hola, ¿me podés cortar 200 de jamón y 1/4 de queso?", "quiero 2 cocas y 1/4 de jamón"),
@@ -226,6 +299,14 @@ function pedidoEnElMensaje(ctx) {
   const norm = nlu.normalizar(t);
   if (/\b(?:cuanto|cuanta|precio|precios|sale|salen|cuesta|cuestan|vale|valen)\b/.test(norm)) return null;
   // "quiero pedirte un combo": puede haber más de un verbo seguido.
+  // "… y 2 sprite. Para Belgrano 250": la dirección al final del mensaje (solo si el local lleva).
+  let direccion = null;
+  const conDir = gastro.esGastro(ctx.config) && gastro.formas(ctx.config).some((f) => f.envio) && t.match(DIRECCION_AL_FINAL);
+  if (conDir && !['anotar', 'elegir'].includes(leerLineaSola(ctx, conDir[1]).tipo)) {
+    const original = (ctx.msj.texto || '').match(new RegExp(`(.{${conDir[1].length}})\\s*$`));
+    direccion = (original ? original[1] : conDir[1]).trim().replace(/[.!]+$/, '');
+    t = t.slice(0, conDir.index);
+  }
   const conVerbo = new RegExp(`^(?:${VERBO_PEDIDO}\\b\\s*)+`);
   const verbo = conVerbo.test(t);
   t = t.replace(conVerbo, '').replace(RELLENO_FINAL, '');
@@ -243,10 +324,13 @@ function pedidoEnElMensaje(ctx) {
   if (!productos.length || !(verbo || conCantidad)) return null;
   if (gastro.pausada(ctx.config)) return cocinaPausada(ctx);
   ctx.datos = { items: [] };
+  if (direccion) ctx.datos.direccion = direccion;
   const r = anotarVarias(ctx, lineas, []);
   r[0].texto = `${encabezadoPedido(ctx)}\n\n${r[0].texto}`;
   return r;
 }
+
+const DIRECCION_AL_FINAL = /[\s,.;]+(?:para|a|en|envialo a|mandalo a|llevalo a|traelo a|direccion:?|dir:?|a la calle|en la calle)\s+((?:calle\s+|av\.?\s+|avenida\s+)?[a-zñ][a-zñ .]{2,40}\s\d{1,5}\b[^,]*)$/;
 
 // Un almacén prepara para retirar; un local gastronómico dice después cómo se entrega (ver `siguienteGastro`).
 const encabezadoPedido = (ctx) => (gastro.esGastro(ctx.config)
@@ -343,6 +427,43 @@ const cantidadYProducto = (texto) => { const { cantidad, busqueda } = leerCantid
 // Devuelve { tipo, ... }: 'nada' | 'no_encontre' | 'parecidos' (ninguno con todas las palabras, estos con algunas) |
 // 'cantidad_mala' | 'paquete' | 'elegir' | 'pesar' | 'anotar'.
 function leerLinea(ctx, linea) {
+  const r = leerLineaSola(ctx, linea);
+  if (!['no_encontre', 'parecidos'].includes(r.tipo)) return r;
+  // "1 clásica sin cebolla", "2 bacon, una bien cocida": lo de después es una aclaración para la cocina. Se prueba recién
+  // cuando la línea entera no es un producto, así "Agua sin gas" sigue siendo el agua.
+  const m = linea.match(ACLARACION);
+  if (!m || !m.index) return r;
+  const base = leerLineaSola(ctx, linea.slice(0, m.index));
+  if (!['anotar', 'elegir', 'pesar'].includes(base.tipo)) return r;
+  return { ...base, aclaracion: linea.slice(m.index).replace(/^[\s,.;:-]+|[\s,.;:-]+$/g, '').replace(/^pero\s+/i, '').slice(0, 80) };
+}
+const ACLARACION = /[\s,;-]+(?:pero\s+)?(?:sin|bien|poco|muy|jugosa|jugoso|a punto|con extra|extra|aparte|cortad[ao]|sin nada|que (?:sea|venga)|con mucho|con poco|una de (?:ellas|las)|la de|el de)\b/i;
+
+// Entre varios que calzan en un local gastronómico, lo que pidió de verdad: un combo o una promo solo si lo nombró ("una clásica" es la hamburguesa,
+// no el combo), y la versión base si las otras son la misma con algo más ("coca" es la Coca Cola, no la Coca Cola Zero).
+function preferidos(ctx, busqueda, resultados) {
+  const dichas = new Set(catalogo.palabrasClave(busqueda));
+  const palabras = (x) => nlu.normalizar(x.nombre).split(' ').filter(Boolean);
+  // Solo en un local gastronómico: un almacén pregunta cuál (es lo que pidió el dueño del primer almacén).
+  if (!gastro.esGastro(ctx.config)) return resultados;
+  let r = resultados;
+  if (![...dichas].some((p) => /^(?:combo|combos|promo|promos|promocion)$/.test(p))) {
+    const sueltos = r.filter((x) => !palabras(x).some((p) => /^(?:combo|promo)$/.test(p)));
+    if (sueltos.length) r = sueltos;
+  }
+  const base = r.filter((x) => r.every((y) => y === x || palabras(x).every((p) => palabras(y).includes(p))));
+  if (base.length === 1) return base;
+  // "2 papas fritas" son las Papas fritas, no las Papas con cheddar y bacon: el que trae a lo sumo una palabra que no dijo,
+  // cuando los otros traen al menos dos más que él ("fritas" no cuenta: es como se dice papas).
+  const RELLENO = new Set(['con', 'y', 'de', 'la', 'el', 'x', 'ml', 'l', 'g', 'kg', 'cc', 'fritas']);
+  const deMas = r.map((x) => palabras(x).filter((w) => !RELLENO.has(w) && !/^\d/.test(w)
+    && ![...dichas].some((p) => w === p || (p.length >= 3 && w.startsWith(p.replace(/s$/, ''))))).length);
+  const min = Math.min(...deMas);
+  if (min <= 1 && deMas.filter((n) => n < min + 2).length === 1) return [r[deMas.indexOf(min)]];
+  return r;
+}
+
+function leerLineaSola(ctx, linea) {
   const sin = sinonimos(ctx);
   const buscar = (t) => catalogo.buscar(t, 5, sin).resultados;
   const peso = numeros.pesoInicial(linea);
@@ -381,6 +502,7 @@ function leerLinea(ctx, linea) {
     const parecidos = catalogo.parecidos(busqueda, 5, sin);
     return parecidos.length ? { tipo: 'parecidos', busqueda, resultados: parecidos, cantidad } : { tipo: 'no_encontre', busqueda };
   }
+  if (resultados.length > 1) resultados = preferidos(ctx, busqueda, resultados);
   if (resultados.length > 1) return { tipo: 'elegir', resultados, cantidad, gramos: gramosDichos };
   const producto = resultados[0];
   if (catalogo.esPesable(producto)) return gramosDichos ? { tipo: 'anotar', producto, gramos: gramosDichos } : { tipo: 'pesar', producto };
@@ -399,6 +521,8 @@ function armando_pedido(ctx) {
   // "listo", y también "listo gracias", "eso es todo, gracias".
   if (TERMINAR.includes(norm) || (nlu.esCortesia(ctx.msj.texto || '') && /\b(?:listo|eso es todo|nada mas|ya esta|eso nomas)\b/.test(norm))) return terminarPedido(ctx);
   const texto = ctx.msj.texto || '';
+  const quitado = quitar(ctx, texto) || aclararUltimo(ctx, texto);
+  if (quitado) return responder(ctx, 'armando_pedido', `${quitado}\n\n¿Algo más? Si no, escribí *listo*.`);
   // "¿tienen cerveza?" mientras arma el pedido es una pregunta, no un renglón: si la contesta una pregunta de siempre o del
   // negocio, se contesta y no se anota nada. Con una cantidad ("¿me sumás 2 cervezas?") sí es un renglón.
   if (esPreguntaSinCantidad(texto)) {
@@ -417,7 +541,7 @@ function armando_pedido(ctx) {
     // "jamón y queso": dos productos, si cada uno existe por separado.
     const partes = texto.split(/\s+y\s+/i);
     if (partes.length > 1 && partes.every((x) => !['no_encontre', 'parecidos', 'nada'].includes(leerLinea(ctx, x).tipo))) return anotarVarias(ctx, partes, []);
-    if (r.tipo === 'parecidos') return preguntarCual(ctx, r.resultados, r.cantidad, [noJustoAsi(r.busqueda)]);
+    if (r.tipo === 'parecidos') return preguntarCual(ctx, r.resultados, r.cantidad, [noJustoAsi(r.busqueda)], null, r.aclaracion);
     anotarNoEntendido(ctx);
     return responder(ctx, 'armando_pedido', `No encontré "${r.busqueda.trim()}" 🤔 ${mirarCarta(ctx)}Probá con otro nombre, o *listo* para terminar.`);
   }
@@ -425,8 +549,55 @@ function armando_pedido(ctx) {
   if (r.tipo === 'cantidad_mala') return responder(ctx, 'armando_pedido', 'Esa cantidad no la puedo anotar 😅 Probá de nuevo (ej: *2 coca*).');
   if (r.tipo === 'paquete') return responder(ctx, 'armando_pedido', `${textoPaquete(r.producto)} ¿Cuántos querés? (ej: *1 ${catalogo.palabrasClave(r.producto.nombre)[0]}*)`);
   if (r.tipo === 'pesar') return preguntarPeso(ctx, r.producto, []);
-  if (r.tipo === 'elegir') return preguntarCual(ctx, r.resultados, r.cantidad, [], r.gramos);
+  if (r.tipo === 'elegir') return preguntarCual(ctx, r.resultados, r.cantidad, [], r.gramos, r.aclaracion);
   return agregar(ctx, r.producto, r);
+}
+
+// "sacame la coca", "sin las papas", "borrá una clásica", "al final no quiero la coca": se saca del pedido (con un número, esa
+// cantidad). Devuelve qué se hizo, o null si no es eso o no hay nada así en el pedido.
+const QUITAR = /^(?:al final\s+)?(?:sacame|saca|sacale|sacar|saque|quita|quitame|quitale|quitar|borra|borrame|borrar|elimina|eliminame|cancela|cancelame|no quiero|ya no quiero|sin)\s+(.+)$/;
+function quitar(ctx, texto) {
+  const items = ctx.datos.items || [];
+  const m = nlu.normalizar(texto).match(QUITAR);
+  if (!m || !items.length) return null;
+  const { cantidad, busqueda, como } = leerCantidad(m[1]);
+  const claves = catalogo.palabrasClave(busqueda);
+  if (!claves.length) return null;
+  const palabras = (x) => nlu.normalizar(x.nombre).split(' ');
+  const calza = items.filter((x) => claves.every((p) => palabras(x).some((w) => w === p || (p.length >= 3 && w.startsWith(p.replace(/s$/, ''))))));
+  // "sin cebolla" es una aclaración, no sacar algo; "sacame la coca" sin coca en el pedido se dice.
+  if (!calza.length && !/^sin\b/.test(m[0]) && catalogo.buscar(busqueda, 1, sinonimos(ctx)).resultados.length) return `No tenés ${busqueda.trim()} en el pedido 🙂`;
+  if (calza.length !== 1) return null;
+  const x = calza[0];
+  if (como && !x.gramos && cantidad < x.cantidad) {
+    x.cantidad -= cantidad;
+    return `Listo, saqué ${cantidad}. Quedan ${cuantoDe(x)} 👍`;
+  }
+  ctx.datos.items = items.filter((y) => y !== x);
+  const quedan = ctx.datos.items.length ? '' : '\nEl pedido quedó vacío.';
+  return `Listo, saqué ${cuantoDe(x)} 👍${quedan}`;
+}
+
+// "sin cebolla", "que sea bien cocida", "uno sin tomate" solos, después de anotar: son para lo último que pidió que no es para
+// tomar (si no es un producto). "Uno …" con varios anotados parte el renglón: 1 con la aclaración y el resto como estaba.
+const SOLO_ACLARACION = /^(?:pero\s+|y\s+)?(?:(?:uno|una|1|a uno|a una)\s+(?:de (?:ellos|ellas|esos|esas)\s+)?)?(?:sin|bien|poco|muy|con extra|que sea|que venga|jugosa|jugoso|a punto|con mucho|con poco)\b/;
+const PARA_TOMAR = /\b(?:coca|cola|sprite|fanta|pepsi|seven|agua|gaseosa|cerveza|birra|jugo|lata|limonada)\b/;
+function aclararUltimo(ctx, texto) {
+  const items = (ctx.datos.items || []).filter((x) => !x.gramos);
+  const norm = nlu.normalizar(texto);
+  if (!items.length || !SOLO_ACLARACION.test(norm) || ['anotar', 'elegir'].includes(leerLineaSola(ctx, texto).tipo)) return null;
+  const comida = items.filter((x) => !PARA_TOMAR.test(nlu.normalizar(x.nombre)));
+  const x = (comida.length ? comida : items)[(comida.length ? comida : items).length - 1];
+  const limpio = texto.trim().replace(/^(?:pero|y)\s+/i, '').replace(/^(?:a\s+)?(?:uno|una|1)\s+(?:de (?:ellos|ellas|esos|esas)\s+)?/i, '').replace(/[.!]+$/, '');
+  const aclaracion = [x.aclaracion, limpio].filter(Boolean).join(', ').slice(0, 80);
+  if (/^(?:pero\s+|y\s+)?(?:a\s+)?(?:uno|una|1)\b/.test(norm) && x.cantidad > 1) {
+    x.cantidad -= 1;
+    const uno = { ...x, cantidad: 1, aclaracion };
+    ctx.datos.items.splice(ctx.datos.items.indexOf(x) + 1, 0, uno);
+    return `Anotado: de esos, 1 ${limpio} ✍️`;
+  }
+  x.aclaracion = aclaracion;
+  return `Anotado: ${cuantoDe(x)} ✍️`;
 }
 
 const noJustoAsi = (busqueda) => `🤔 No tengo "${busqueda.trim()}" con ese nombre.`;
@@ -459,6 +630,8 @@ function anotarVarias(ctx, lineas, notas) {
   const resto = [...lineas];
   while (resto.length) {
     const linea = resto.shift();
+    const aclarado = aclararUltimo(ctx, linea);
+    if (aclarado) { notas.push(`✍️ ${aclarado.replace(/^Anotado: | ✍️$/g, '')}`); continue; }
     const r = leerLinea(ctx, linea);
     if (r.tipo === 'nada') continue;
     if (r.tipo === 'cantidad_mala') notas.push(`❌ "${linea}": esa cantidad no la puedo anotar`);
@@ -467,10 +640,10 @@ function anotarVarias(ctx, lineas, notas) {
     else if (r.tipo === 'anotar') notas.push(sumar(ctx, r.producto, r).nota);
     else if (r.tipo === 'parecidos') {
       ctx.datos.pendientes = resto;
-      return preguntarCual(ctx, r.resultados, r.cantidad, [...notas, noJustoAsi(r.busqueda)]);
+      return preguntarCual(ctx, r.resultados, r.cantidad, [...notas, noJustoAsi(r.busqueda)], null, r.aclaracion);
     } else {
       ctx.datos.pendientes = resto;
-      return r.tipo === 'pesar' ? preguntarPeso(ctx, r.producto, notas) : preguntarCual(ctx, r.resultados, r.cantidad, notas, r.gramos);
+      return r.tipo === 'pesar' ? preguntarPeso(ctx, r.producto, notas) : preguntarCual(ctx, r.resultados, r.cantidad, notas, r.gramos, r.aclaracion);
     }
   }
   delete ctx.datos.pendientes;
@@ -487,28 +660,69 @@ function seguir(ctx, notas) {
   return responder(ctx, 'armando_pedido', `${notas.join('\n')}\n\n¿Algo más? Si no, escribí *listo*.`);
 }
 
-function preguntarCual(ctx, resultados, cantidad, notas, gramos) {
+function preguntarCual(ctx, resultados, cantidad, notas, gramos, aclaracion) {
   ctx.datos.opciones = resultados.map((x) => x.gid);
   ctx.datos.cantidad = cantidad;
   if (gramos) ctx.datos.gramos = gramos; else delete ctx.datos.gramos;
+  if (aclaracion) ctx.datos.aclaracion = aclaracion; else delete ctx.datos.aclaracion;
   const antes = notas.length ? `${notas.join('\n')}\n\n` : '';
-  const lista = resultados.map((x, i) => `*${i + 1}* — ${nombreConPrecio(x)}${x.hay ? '' : ' (sin stock)'}`).join('\n');
-  return responder(ctx, 'eligiendo_producto', `${antes}¿Cuál de estos?\n\n${lista}\n\nRespondé con el número, o *0* para buscar otro.`);
+  return responder(ctx, 'eligiendo_producto', `${antes}¿Cuál de estos?\n\n${listaOpciones(resultados)}\n\nRespondé con el número o el nombre, o *0* para buscar otro.`);
+}
+const listaOpciones = (resultados) => resultados.map((x, i) => `*${i + 1}* — ${nombreConPrecio(x)}${x.hay ? '' : ' (sin stock)'}`).join('\n');
+
+// La opción que nombró ("la doble", "la zero", "el combo", "la común"): la única con más palabras dichas que las demás.
+function opcionPorNombre(texto, productos) {
+  const dichas = catalogo.palabrasClave(texto).filter((p) => !['la', 'el', 'de', 'quiero', 'esa', 'ese'].includes(p));
+  if (!dichas.length) return null;
+  const palabras = (x) => nlu.normalizar(x.nombre).split(' ');
+  const puntos = productos.map((x) => dichas.filter((p) => palabras(x).some((w) => w === p || (p.length >= 3 && w.startsWith(p)))).length);
+  const max = Math.max(...puntos);
+  if (max > 0 && puntos.filter((n) => n === max).length === 1) return productos[puntos.indexOf(max)];
+  // "la común", "sola", "la normal": la que no es combo ni trae algo de más.
+  if (/\b(?:comun|normal|sola|solo|sin combo|nada mas|la primera|el primero)\b/.test(nlu.normalizar(texto))) {
+    const base = productos.filter((x) => productos.every((y) => y === x || palabras(x).every((p) => palabras(y).includes(p))));
+    if (base.length === 1) return base[0];
+  }
+  return null;
 }
 
 function eligiendo_producto(ctx) {
-  const limpiar = () => { delete ctx.datos.opciones; delete ctx.datos.cantidad; delete ctx.datos.gramos; };
-  if (ctx.texto === '0') { limpiar(); return seguir(ctx, []); }
-  const n = numerosDe(ctx.texto)[0];
-  const gid = n ? (ctx.datos.opciones || [])[n - 1] : null;
-  const producto = gid ? catalogo.porGid(gid) : null;
-  if (!producto) return noEntendi(ctx, 'Elegí un número de la lista, o *0* para buscar otro.');
-  const { cantidad = 1, gramos } = ctx.datos;
+  const opciones = (ctx.datos.opciones || []).map((gid) => catalogo.porGid(gid)).filter(Boolean);
+  const limpiar = () => { delete ctx.datos.opciones; delete ctx.datos.cantidad; delete ctx.datos.gramos; delete ctx.datos.aclaracion; };
+  if (ctx.texto === '0' || nlu.esNo(ctx.texto) || /^(?:ninguno|ninguna|ningun|otro|otra)$/.test(nlu.normalizar(ctx.texto))) { limpiar(); return seguir(ctx, []); }
+  const norm = nlu.normalizar(ctx.texto);
+  // "y unas papas", "también 2 cocas": es otra cosa para el pedido, no la respuesta.
+  const otraCosa = /^(?:y|tambien|ademas|sumale|sumame|agregale|agregame)\b/.test(norm) || (/^(?:\d+|un|una|unos|unas|dos|tres)\s+\S/.test(norm) && !nlu.opcionMenu(ctx.texto));
+  const n = otraCosa ? null : (nlu.opcionMenu(ctx.texto) || (/^\d+$/.test(norm) ? Number(norm) : null));
+  const producto = otraCosa ? null : ((n && n <= opciones.length ? opciones[n - 1] : null) || opcionPorNombre(ctx.msj.texto || '', opciones));
+  if (!producto) return otraCosaAlElegir(ctx, opciones);
+  const { cantidad = 1, gramos, aclaracion } = ctx.datos;
   limpiar();
   if (catalogo.esPesable(producto) && !gramos) return preguntarPeso(ctx, producto, []);
-  const pedido = catalogo.esPesable(producto) ? { gramos } : { cantidad: Math.min(cantidad, 999) };
+  const pedido = catalogo.esPesable(producto) ? { gramos } : { cantidad: Math.min(cantidad, 999), aclaracion };
   if (ctx.datos.pendientes) return anotarVarias(ctx, ctx.datos.pendientes, [sumar(ctx, producto, pedido).nota]);
   return agregar(ctx, producto, pedido);
+}
+
+// Mientras tiene que elegir, escribió otra cosa: "listo" (le falta elegir), otro producto ("y una coca": se anota y se
+// vuelve a preguntar), una pregunta (se contesta). Solo lo que no se entiende cuenta como no entendido.
+function otraCosaAlElegir(ctx, opciones) {
+  const norm = nlu.normalizar(ctx.texto);
+  const reAsk = (antes) => responder(ctx, 'eligiendo_producto', `${antes}¿Cuál de estos querés?\n\n${listaOpciones(opciones)}\n\nRespondé con el número, o *0* si no va.`);
+  if (TERMINAR.includes(norm) && norm !== 'no') return reAsk('Antes de cerrar me falta una cosa 🙂 ');
+  const lineas = separarLineas(ctx.msj.texto || '');
+  const leidas = lineas.map((l) => ({ l, r: leerLinea(ctx, l) }));
+  if (leidas.some(({ r }) => ['anotar', 'elegir', 'pesar'].includes(r.tipo))) {
+    const notas = [];
+    const despues = [];
+    for (const { l, r } of leidas) {
+      if (r.tipo === 'anotar') notas.push(sumar(ctx, r.producto, r).nota);
+      else if (r.tipo === 'elegir' || r.tipo === 'pesar') despues.push(l);
+    }
+    if (despues.length) ctx.datos.pendientes = [...despues, ...(ctx.datos.pendientes || [])];
+    return reAsk(notas.length ? `${notas.join('\n')}\n\nY de lo anterior, ` : '');
+  }
+  return noEntendi(ctx, `Decime cuál con el número 🙂\n\n${listaOpciones(opciones)}\n\n(o *0* si no va)`);
 }
 
 // Un pesable sin cantidad ("jamón cocido"): ¿cuánto?
@@ -537,18 +751,21 @@ function eligiendo_peso(ctx) {
 const nombreConPrecio = (x) => (catalogo.esPesable(x)
   ? `${catalogo.nombreCorto(x)} — ${catalogo.plata(x.precioCentavos)} el kilo`
   : `${x.nombre} — ${catalogo.plata(x.precioCentavos)}`);
-const cuantoDe = (x) => (x.gramos ? `${numeros.textoPeso(x.gramos)} de ${catalogo.nombreCorto(x)}` : `${x.cantidad} × ${x.nombre}`);
+const cuantoDe = (x) => (x.gramos ? `${numeros.textoPeso(x.gramos)} de ${catalogo.nombreCorto(x)}` : `${x.cantidad} × ${x.nombre}${x.aclaracion ? ` (${x.aclaracion})` : ''}`);
+// Las aclaraciones para la cocina viajan en la nota del pedido: "1 × Hamburguesa Clásica: sin cebolla".
+const notaDe = (items) => items.filter((x) => x.aclaracion).map((x) => `${x.cantidad} × ${x.nombre}: ${x.aclaracion}`).join('\n');
 const subtotal = (x) => (x.gramos ? catalogo.precioDeGramos(x.precioCentavos, x.gramos) : x.precioCentavos * x.cantidad);
 
 // Suma el producto al pedido (si hay stock y entra): { cantidad } por unidad o { gramos } si se pesa. Devuelve si se
 // anotó y la línea para contarlo.
-function sumar(ctx, producto, { cantidad, gramos }) {
+function sumar(ctx, producto, { cantidad, gramos, aclaracion }) {
   if (!producto.hay) return { ok: false, nota: `❌ No hay stock de *${catalogo.esPesable(producto) ? catalogo.nombreCorto(producto) : producto.nombre}* ahora 😕` };
   const items = ctx.datos.items || [];
   const nuevo = gramos
     ? { gid: producto.gid, nombre: producto.nombre, gramos, precioCentavos: producto.precioCentavos }
-    : { gid: producto.gid, nombre: producto.nombre, cantidad, precioCentavos: producto.precioCentavos };
-  const ya = items.find((x) => x.gid === producto.gid && !!x.gramos === !!gramos);
+    : { gid: producto.gid, nombre: producto.nombre, cantidad, precioCentavos: producto.precioCentavos, ...(aclaracion ? { aclaracion } : {}) };
+  // Con otra aclaración es otro renglón ("1 clásica" y "1 clásica sin cebolla").
+  const ya = items.find((x) => x.gid === producto.gid && !!x.gramos === !!gramos && (x.aclaracion || '') === (aclaracion || ''));
   if (ya && gramos) ya.gramos = Math.min(50000, ya.gramos + gramos);
   else if (ya) ya.cantidad = Math.min(999, ya.cantidad + cantidad);
   else {
@@ -678,23 +895,47 @@ function ofreciendo_extras(ctx) {
   const productos = (ctx.datos.extras || []).map((gid) => catalogo.porGid(gid)).filter(Boolean);
   delete ctx.datos.extras;
   const norm = nlu.normalizar(ctx.texto);
-  const n = nlu.esSi(ctx.texto) && productos.length === 1 ? 1 : (nlu.opcionMenu(ctx.texto) || numerosDe(ctx.texto)[0]);
-  // "unas papas", "la coca": por el nombre.
+  const seguirCon = (elegidos, antes = []) => {
+    const notas = [...antes, ...elegidos.map((x) => sumar(ctx, x, { cantidad: 1 }).nota)];
+    const r = siguienteGastro(ctx);
+    if (notas.length) r[0].texto = `${notas.join('\n')}\n\n${r[0].texto}`;
+    return r;
+  };
+  if (ctx.texto === '0' || nlu.esNo(ctx.texto) || /^(?:no|nada|asi esta bien|asi nomas|esta bien asi|solo eso|eso nomas)\b/.test(norm)) return seguirCon([]);
+  const n = nlu.opcionMenu(ctx.texto) || numerosDe(ctx.texto)[0];
+  if (/\b(?:las dos|ambas|los dos|todo|las 2|los 2)\b/.test(norm) || (productos.length > 1 && n === productos.length + 1)) return seguirCon(productos);
+  if (n >= 1 && n <= productos.length) return seguirCon([productos[n - 1]]);
+  // "unas papas", "si, la coca", "papas y bebida": por el nombre o por lo que es.
   const claves = catalogo.palabrasClave(ctx.texto);
-  const porNombre = productos.filter((x) => claves.some((p) => nlu.normalizar(x.nombre).split(' ').includes(p)));
-  let elegidos;
-  if (ctx.texto === '0' || nlu.esNo(ctx.texto) || /^(?:no|nada|asi esta bien|asi nomas)\b/.test(norm)) elegidos = [];
-  else if (/\b(?:las dos|ambas|los dos|todo)\b/.test(norm) || (productos.length > 1 && n === productos.length + 1)) elegidos = productos;
-  else if (n >= 1 && n <= productos.length) elegidos = [productos[n - 1]];
-  else if (porNombre.length) elegidos = porNombre;
-  else {
+  const porNombre = productos.filter((x) => claves.some((p) => nlu.normalizar(x.nombre).split(' ').includes(p))
+    || (/\b(?:papa|papas|papitas|fritas)\b/.test(norm) && /papa|frita/i.test(x.nombre))
+    || (/\b(?:bebida|gaseosa|tomar|bebible)\b/.test(norm) && !/papa|frita/i.test(x.nombre)));
+  if (porNombre.length) return seguirCon(porNombre);
+  // "sí" con dos opciones: ¿cuál?
+  if (nlu.esSi(ctx.texto) && productos.length > 1) {
     ctx.datos.extras = productos.map((x) => x.gid);
-    return noEntendi(ctx, 'Respondé con el número, o *0* si así está bien.');
+    return responder(ctx, 'ofreciendo_extras', `¿Qué te sumo? 🙂\n\n${productos.map((x, i) => `*${i + 1}* — ${nombreConPrecio(x)}`).join('\n')}\n*${productos.length + 1}* — Las dos`);
   }
-  const notas = elegidos.map((x) => sumar(ctx, x, { cantidad: 1 }).nota);
+  if (nlu.esSi(ctx.texto)) return seguirCon(productos);
+  // Otra cosa de la carta ("una sprite"): se suma eso.
+  const otras = separarLineas(ctx.msj.texto || '').map((l) => leerLinea(ctx, l)).filter((r) => r.tipo === 'anotar');
+  if (otras.length) return seguirCon([], otras.map((r) => sumar(ctx, r.producto, r).nota));
+  // Siguió de largo (mandó la dirección, el nombre…): es un no, y el mensaje es para el paso que sigue.
   const r = siguienteGastro(ctx);
-  if (notas.length) r[0].texto = `${notas.join('\n')}\n\n${r[0].texto}`;
-  return r;
+  const paso = { pidiendo_direccion, pidiendo_nombre, eligiendo_entrega, eligiendo_zona, eligiendo_pago }[siguientePaso(ctx)];
+  return paso ? paso(ctx) : r;
+}
+
+// El paso al que va `siguienteGastro` (sin preguntar nada): para pasarle un mensaje que ya contestaba eso.
+function siguientePaso(ctx) {
+  const d = ctx.datos;
+  const forma = gastro.FORMAS[d.entrega];
+  if (!forma) return 'eligiendo_entrega';
+  if (forma.envio && !d.direccion) return 'pidiendo_direccion';
+  if (forma.envio && !d.zona) return 'eligiendo_zona';
+  if (!ctx.clienta.nombre) return 'pidiendo_nombre';
+  if (!d.pago) return 'eligiendo_pago';
+  return null;
 }
 
 // Lo de la entrega que va al pedido y al resumen: la forma, la zona elegida y lo que sale el envío.
@@ -705,7 +946,10 @@ function entregaDe(ctx) {
 }
 
 function pidiendo_nombre(ctx) {
-  const nombre = (ctx.msj.texto || '').trim();
+  // "soy Bruno", "a nombre de Bruno", "me llamo Bruno", "Bruno!".
+  const nombre = (ctx.msj.texto || '').trim()
+    .replace(/^(?:hola[\s,!.]*)?(?:soy|me llamo|mi nombre es|a nombre de|de|para|ponele|pone|anotalo a nombre de|a)\s+/i, '')
+    .replace(/[\s,.!]+$/, '').replace(/^\p{Ll}/u, (c) => c.toUpperCase());
   if (nombre === '0') { ctx.datos = {}; return responder(ctx, 'inicio', 'Listo, no anoté nada. Cuando quieras escribí *hola* 😊'); }
   const letras = (nombre.match(/[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]/g) || []).length;
   if (nombre.includes('?') || letras < 2 || nombre.length > 40) {
@@ -754,6 +998,7 @@ function confirmarGastro(ctx) {
   qPedidos.crear(ctx.clienta.id, {
     cliente: { nombre: ctx.clienta.nombre, telefono: ctx.clienta.telefono },
     items,
+    ...(notaDe(items) ? { nota: notaDe(items) } : {}),
     entrega: { forma: forma.clave, ...(forma.envio ? { direccion: ctx.datos.direccion, zona: ctx.datos.zona, costoEnvioCentavos: costo } : {}) },
     pago: ctx.datos.pago || 'al_entregar',
     horaEstimada: sale.hora.getTime(),
@@ -768,15 +1013,35 @@ function confirmarGastro(ctx) {
   return responder(ctx, 'inicio', `¡Listo, gracias! 🙌 Ya le pasé tu pedido a la cocina. En un ratito te confirmo por acá.${pagar}`);
 }
 
+const conNota = (r, nota) => { r[0].texto = `${nota}\n\n${r[0].texto}`; return r; };
+
 function confirmando_pedido(ctx) {
-  if (nlu.esSi(ctx.texto) || /^(?:confirmo|confirmar|confirmado|mandalo|pedilo)$/.test(nlu.normalizar(ctx.texto))) ctx.texto = '1';
+  const norm = nlu.normalizar(ctx.texto);
+  const cambia = /\b(?:no|cancel\w*|saca\w*|quita\w*|agreg\w*|suma\w*|cambi\w*|sin|falta\w*|olvide)\b/.test(norm);
+  if (nlu.esSi(ctx.texto) || nlu.esCortesia(ctx.msj.texto || '')
+    || (!cambia && /\b(?:si|dale|ok|perfecto|perfecta|joya|genial|confirm\w*|mandalo|pedilo|de una|esta bien|todo bien|barbaro|listo|correcto|asi)\b/.test(norm))) ctx.texto = '1';
+  if (/^(?:agregar|agrego|sumar|quiero agregar|algo mas|me olvide)$/.test(norm)) ctx.texto = '2';
+  if (/^(?:cancelar|cancela|cancelo|cancelalo|no quiero nada|dejalo)$/.test(norm)) ctx.texto = '0';
   if (ctx.texto === '2') return responder(ctx, 'armando_pedido', 'Dale, decime qué más querés.');
   if (ctx.texto === '0') { ctx.datos = {}; return responder(ctx, 'inicio', 'Listo, no anoté nada. Cuando quieras escribí *hola* 😊'); }
-  if (ctx.texto !== '1') return noEntendi(ctx, 'Respondé *1* para confirmar, *2* para agregar algo o *0* para cancelar.');
+  if (ctx.texto !== '1') {
+    // "sacame la coca", "sumale unas papas": se cambia el pedido y se vuelve a mostrar.
+    const quitado = quitar(ctx, ctx.msj.texto || '') || aclararUltimo(ctx, ctx.msj.texto || '');
+    if (quitado && !ctx.datos.items.length) return responder(ctx, 'armando_pedido', `${quitado} Decime qué querés, o *0* para cancelar.`);
+    if (quitado) return conNota(resumen(ctx), quitado);
+    const texto = (ctx.msj.texto || '').replace(/^(?:y\s+)?(?:sumale|sumame|suma|agregale|agregame|agrega|agregar|tambien|y)\s+/i, '');
+    const leidas = separarLineas(texto).map((l) => leerLinea(ctx, l));
+    if (leidas.length && leidas.every((r) => r.tipo === 'anotar')) return conNota(resumen(ctx), leidas.map((r) => sumar(ctx, r.producto, r).nota).join('\n'));
+    // Algo para sumar que hay que elegir: se sigue armando y con *listo* vuelve el resumen.
+    if (leidas.some((r) => ['anotar', 'elegir', 'pesar', 'parecidos'].includes(r.tipo))) return anotarVarias(ctx, separarLineas(texto), []);
+    if (nlu.esNo(ctx.texto)) return responder(ctx, 'confirmando_pedido', '¿Qué querés cambiar? Podés decirme *sacame la coca* o *sumale unas papas*.\n\n*1* — Así está bien, confirmar\n*2* — Agregar algo\n*0* — Cancelar todo');
+    return noEntendi(ctx, 'Respondé *1* para confirmar, *2* para agregar algo o *0* para cancelar.');
+  }
   if (gastro.esGastro(ctx.config)) return confirmarGastro(ctx);
   qPedidos.crear(ctx.clienta.id, {
     cliente: { nombre: ctx.clienta.nombre, telefono: ctx.clienta.telefono },
     items: ctx.datos.items,
+    ...(notaDe(ctx.datos.items) ? { nota: notaDe(ctx.datos.items) } : {}),
   });
   ctx.datos = {};
   return responder(ctx, 'inicio', '¡Listo! Le pasé tu pedido al local 🙌 Te aviso por acá apenas lo confirmen.');
@@ -796,7 +1061,7 @@ function entenderEnPaso(ctx, ayuda) {
   const tm = nlu.tema(ctx.config, t);
   if (tm) {
     const r = responderTema(ctx, tm, porDefecto(ctx), estado);
-    r[0].texto += `\n\n${ayuda}`;
+    r[0].texto = `${r[0].texto.replace('\nCuando quieras armar el pedido, escribime *pedido*.', '')}\n\n${ayuda}`;
     return r;
   }
   if (nlu.interpretar(t).intencion === 'humano') return derivarAHumano(ctx, ctx.msj.texto);

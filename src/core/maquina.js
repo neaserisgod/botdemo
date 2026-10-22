@@ -315,7 +315,7 @@ function apuro(ctx, ayuda) {
   ctx.datos.apuros = veces;
   return responder(ctx, ctx.clienta.estado_conv || 'inicio', ayuda
     ? `Acá estoy 🙂 ${ayuda}`
-    : `Acá estoy 🙂 Escribime lo que necesitás, como te salga: un turno, precios, horarios… o *4* para hablar con ${ctx.config.textos.quien_atiende}.`);
+    : `Acá estoy 🙂 Escribime lo que necesitás, como te salga: ${ctx.config.forma === 'productos' ? 'un pedido' : 'un turno'}, precios, horarios… o *4* para hablar con ${ctx.config.textos.quien_atiende}.`);
 }
 
 // Enojo (insultos, 😡) sin otro pedido en el mensaje: no se discute ni se manda el menú. Perdón, y una persona.

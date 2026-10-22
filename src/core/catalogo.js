@@ -47,6 +47,7 @@ const VACIAS = new Set([
   'che', 'gracias', 'porfa', 'bueno', 'ahora', 'hoy', 'todavia', 'aun', 'les', 'le', 'lo', 'mi', 'tu', 'su', 'algun',
   'alguno', 'alguna', 'algunos', 'algunas', 'atado', 'paquete', 'unidad', 'unidades', 'kilo', 'kilos', 'kg', 'si', 'no',
   'queda', 'quedo', 'tenes', 'tiene', 'tendran', 'hacen', 'cuantos', 'cual', 'cuales',
+  'opcion', 'opciones', 'variedad', 'variedades',
   'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve', 'diez', 'doce', 'par', 'docena', 'media',
   // Charla, no producto: "buen día, ¿cómo va?", "¿alguien me atiende? quiero saber si tienen leche".
   'como', 'va', 'andas', 'estas', 'onda', 'tal', 'alguien', 'atiende', 'atienden', 'hablar', 'persona', 'favor', 'holis',

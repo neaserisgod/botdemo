@@ -120,11 +120,12 @@ const ES_PAPAS = /\b(?:papas?|papitas|fritas)\b/;
 const ES_BEBIDA = /\b(?:coca|cola|sprite|fanta|pepsi|seven|7up|manaos|schweppes|aquarius|levite|agua|gaseosa|bebida|jugo|cerveza|birra|limonada|lata)\b/;
 
 // Lo que le falta al pedido de eso (papas, bebida) y la carta tiene hoy: lo más barato de cada uno, que es lo que se suma sin
-// pensar. "Combo con papas y bebida" ya cuenta como las dos.
+// pensar; de tomar, una gaseosa antes que el agua. "Combo con papas y bebida" ya cuenta como las dos.
 function extrasQueFaltan(items, carta) {
   const lleva = (re) => items.some((x) => re.test(normal(x.nombre)));
-  const masBarato = (re) => carta.filter((x) => x.hay && !/\bcombo\b/.test(normal(x.nombre)) && re.test(normal(x.nombre)))
-    .sort((a, b) => a.precioCentavos - b.precioCentavos)[0];
+  const agua = (x) => (/\bagua\b/.test(normal(x.nombre)) ? 1 : 0);
+  const masBarato = (re) => carta.filter((x) => x.hay && !/\b(?:combo|promo)\b/.test(normal(x.nombre)) && re.test(normal(x.nombre)))
+    .sort((a, b) => agua(a) - agua(b) || a.precioCentavos - b.precioCentavos)[0];
   return [ES_PAPAS, ES_BEBIDA].filter((re) => !lleva(re)).map(masBarato).filter(Boolean);
 }
 

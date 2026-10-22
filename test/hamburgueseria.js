@@ -1,5 +1,6 @@
-// La hamburguesería (ejemplos/burger-demo.json): el saludo de alguien del local, solo envío con un precio fijo, y al cerrar el
-// pedido ofrece papas o algo para tomar si no lleva (una sola vez).
+// La hamburguesería (ejemplos/burger-demo.json): el saludo de alguien del local, solo envío con un precio fijo, al cerrar el
+// pedido ofrece papas o algo para tomar si no lleva (una sola vez), y las charlas de verdad que tiene que entender a la primera
+// (aclaraciones, sacar algo, elegir por el nombre, la dirección en el mismo mensaje).
 process.env.TZ = 'America/Argentina/Buenos_Aires';
 const os = require('os');
 const path = require('path');
@@ -96,6 +97,89 @@ const textoPara = (salientes, quien) => salientes.filter((s) => s.para === quien
   await decir(C4, 'listo');
   r = await decir(C4, '3');
   chequear('"las dos" suma papas y coca', textoPara(r, C4).includes('Papas fritas') && textoPara(r, C4).includes('Coca Cola'));
+
+  console.log('\n— 4. Que entienda a la primera —');
+  catalogo.fijar([
+    { gid: 'clasica', nombre: 'Hamburguesa Clásica', precioCentavos: 900000, hay: true },
+    { gid: 'cheese', nombre: 'Cheeseburger Doble', precioCentavos: 1100000, hay: true },
+    { gid: 'baconS', nombre: 'Bacon Cheese Simple', precioCentavos: 1050000, hay: true },
+    { gid: 'baconD', nombre: 'Bacon Cheese Doble', precioCentavos: 1300000, hay: true },
+    { gid: 'veggie', nombre: 'Veggie Burger', precioCentavos: 950000, hay: true },
+    { gid: 'combo1', nombre: 'Combo Clásica con papas y bebida', precioCentavos: 1300000, hay: true },
+    { gid: 'papas', nombre: 'Papas fritas', precioCentavos: 300000, hay: true },
+    { gid: 'papasch', nombre: 'Papas con cheddar y bacon', precioCentavos: 480000, hay: true },
+    { gid: 'coca', nombre: 'Coca Cola 500 ml', precioCentavos: 250000, hay: true },
+    { gid: 'cocaz', nombre: 'Coca Cola Zero 500 ml', precioCentavos: 250000, hay: true },
+    { gid: 'sprite', nombre: 'Sprite 500 ml', precioCentavos: 250000, hay: true },
+    { gid: 'agua', nombre: 'Agua sin gas 500 ml', precioCentavos: 180000, hay: true },
+  ]);
+  let n = 10;
+  const nuevo = () => `54929443000${n++}`;
+  const charla = async (tel, ...textos) => { let r; for (const t of textos) r = await decir(tel, t); return textoPara(r, tel); };
+
+  let t = await charla(nuevo(), 'buenass');
+  chequear('"buenass" es un saludo, no un gracias', t.includes('¿Cómo andás?'));
+  const P = nuevo();
+  t = await charla(P, '¿aceptan mercado pago?');
+  chequear('cómo se paga lo contesta el bot (no lo pasa al local)', t.includes('Podés pagar al recibir (efectivo) o con Mercado Pago'));
+  t = await charla(P, '¿cuánto tarda?');
+  chequear('"¿cuánto tarda?": abierto y en cuánto llega', t.includes('Estamos abiertos') && t.includes('llega en unos'));
+  t = await charla(P, '¿puedo pasar a buscarlo?');
+  chequear('solo envío: lo dice', t.includes('Por ahora solo hacemos envíos'));
+  t = await charla(P, '¿qué hamburguesas tienen?');
+  chequear('"¿qué hamburguesas tienen?" lista todas las burgers', t.includes('Cheeseburger Doble') && t.includes('Bacon Cheese Simple') && !t.includes('Papas') && !t.includes('Combo'));
+  t = await charla(P, '¿tienen opción vegetariana?');
+  chequear('"vegetariana" es la veggie', t.includes('Veggie Burger'));
+
+  t = await charla(nuevo(), 'hola quiero 2 hamburguesas clasicas y una coca');
+  chequear('"clásica" es la burger (no el combo) y "coca" la común (no la zero)', t.includes('2 × Hamburguesa Clásica') && t.includes('1 × Coca Cola 500 ml') && !t.includes('¿Cuál'));
+  t = await charla(nuevo(), 'kiero una amburguesa clasica');
+  chequear('con errores de tipeo igual la anota', t.includes('1 × Hamburguesa Clásica'));
+  t = await charla(nuevo(), 'quiero 2 papas fritas');
+  chequear('"papas fritas" son las fritas, no las de cheddar', t.includes('2 × Papas fritas') && !t.includes('¿Cuál'));
+
+  const L = nuevo();
+  t = await charla(L, 'Hola buenas noches! queria pedir 2 combos clasicos, uno sin tomate, y 2 sprite. para Belgrano 250');
+  chequear('mensaje largo: anota todo y la aclaración', t.includes('2 × Combo Clásica') && t.includes('de esos, 1 sin tomate') && t.includes('2 × Sprite'));
+  t = await charla(L, 'listo');
+  chequear('con combos no ofrece extras, y la dirección del mensaje ya está', !t.includes('¿Le sumamos') && t.includes('¿A nombre de quién'));
+  t = await charla(L, 'soy Sofi', '1');
+  chequear('resumen con la aclaración y la dirección', t.includes('Sofi, así quedó') && t.includes('(sin tomate)') && t.includes('Envío a Belgrano 250'));
+  await charla(L, 'esta perfecto gracias');
+  const pl = qPedidos.porEnviar().pop();
+  chequear('"está perfecto, gracias" confirma, y la aclaración va en la nota del pedido', pl.datos.cliente.nombre === 'Sofi'
+    && pl.datos.nota === '1 × Combo Clásica con papas y bebida: sin tomate' && pl.datos.entrega.direccion === 'Belgrano 250');
+
+  const S = nuevo();
+  await charla(S, 'quiero 2 clasicas y una coca');
+  t = await charla(S, 'sin cebolla');
+  chequear('"sin cebolla" suelto va a la burger, no a la coca', t.includes('2 × Hamburguesa Clásica (sin cebolla)'));
+  t = await charla(S, 'sacame la coca');
+  chequear('"sacame la coca" la saca', t.includes('saqué 1 × Coca Cola'));
+  t = await charla(S, 'sacame la sprite');
+  chequear('lo que no está en el pedido lo dice', t.includes('No tenés la sprite en el pedido'));
+
+  const E = nuevo();
+  t = await charla(E, 'pedido', 'una bacon');
+  chequear('"una bacon" pregunta cuál', t.includes('¿Cuál de estos?'));
+  t = await charla(E, 'y una coca zero');
+  chequear('otro producto mientras elige: lo anota y vuelve a preguntar', t.includes('1 × Coca Cola Zero') && t.includes('¿Cuál de estos querés?'));
+  t = await charla(E, 'listo');
+  chequear('"listo" sin elegir: le recuerda qué falta', t.includes('Antes de cerrar me falta una cosa'));
+  t = await charla(E, 'la simple');
+  chequear('elige por el nombre', t.includes('Bacon Cheese Simple'));
+  t = await charla(E, 'listo');
+  chequear('ofrece papas (ya tiene bebida)', t.includes('Papas fritas') && !t.includes('Coca Cola 500'));
+  t = await charla(E, 'Mitre 100');
+  chequear('si sigue de largo con la dirección, es un no y la toma', t.includes('¿A nombre de quién') && !t.includes('no te estoy entendiendo'));
+
+  const X = nuevo();
+  t = await charla(X, 'una veggie', 'listo', 'si');
+  chequear('"sí" con dos para sumar: pregunta cuál, sin pasarlo a una persona', t.includes('¿Qué te sumo?'));
+  t = await charla(X, 'las dos');
+  chequear('y "las dos" suma las dos', t.includes('Papas fritas') && t.includes('Coca Cola 500 ml'));
+  t = await charla(X, 'Mitre 5', 'Eva', '1', 'sumale una sprite');
+  chequear('en el resumen, "sumale una sprite" la suma y vuelve a mostrarlo', t.includes('1 × Sprite') && t.includes('Eva, así quedó'));
 
   console.log(fallas ? `\n❌ ${fallas} chequeos de hamburguesería fallaron` : '\n✅ Hamburguesería OK');
   process.exit(fallas ? 1 : 0);
