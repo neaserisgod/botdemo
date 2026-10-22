@@ -322,9 +322,10 @@ function inicio(ctx, estado = 'inicio') {
       return responder(ctx, estado, `No encontré "${ctx.msj.texto.trim()}" 🤔 Probá con otro nombre, escribí *4* para preguntarle a una persona o *menú* para ver las opciones.`);
     }
     if (pregunta && inter.intencion !== 'saludo') {
-      const parecidos = catalogo.parecidos(t, 5, sinonimos(ctx));
-      const ia = parecidos.length ? null : pedirIA(ctx);
+      // La IA va antes que "lo más parecido": entiende mejor lo que quiso decir ("las que tienen panceta, las grandes").
+      const ia = pedirIA(ctx);
       if (ia) return ia;
+      const parecidos = catalogo.parecidos(t, 5, sinonimos(ctx));
       anotarNoEntendido(ctx);
       if (parecidos.length) {
         recordar(ctx, parecidos, t);
@@ -373,7 +374,7 @@ function precioDePeso(ctx, estado) {
 
 // ---------- pedido ----------
 // Verbos de pedido de mostrador: "cortame", "¿me podés cortar…?", "preparame", "separame", "dame", "quiero", "me llevo".
-const VERBO_PEDIDO = '(?:me )?(?:podes |podrias |puedes |vas a )?(?:cortar|cortame|cortas|preparar|preparame|preparas|separar|separame|separas|guardar|guardame|guardas|anotar|anotame|anotas|dar|dame|das|mandar|mandame|mandas|mandan|haceme|hacenme|me haces|me hacen|quiero|kiero|qiero|quisiera|queria|keria|necesito|me llevo|llevo|encargar|encargo|pedirte|pedirle|pedirles|pedir|pido|traeme|me traes)';
+const VERBO_PEDIDO = '(?:me )?(?:podes |podrias |puedes |vas a )?(?:cortar|cortame|cortas|preparar|preparame|preparas|separar|separame|separas|guardar|guardame|guardas|anotar|anotame|anotas|dar|dame|das|mandar|mandame|mandas|mandan|haceme|hacenme|me haces|me hacen|quiero|kiero|qiero|quisiera|queria|keria|necesito|me llevo|llevo|encargar|encargo|pedirte|pedirle|pedirles|pedir|pido|traeme|me traes|tirame|tirate)';
 const SALUDO_INICIAL = /^(?:(?:hola+|holis|buenas+|buen dia|buenos dias|noches|tardes|dias|che|como va|como andas|como estas|que tal|disculpa|perdon|gente)[\s,!.¡¿?]*)+/;
 const RELLENO_FINAL = /[\s,.!?¿¡]*(?:(?:porfa|por favor|gracias|plis|please|dale)[\s,.!?¿¡]*)*$/;
 
@@ -1197,7 +1198,7 @@ function contextoIA(ctx) {
   const c = ctx.config;
   const d = ctx.datos;
   const estado = ctx.clienta.estado_conv || 'inicio';
-  const nombres = (gids) => (gids || []).map((g) => catalogo.porGid(g)).filter(Boolean).map((x) => x.nombre);
+  const nombres = (gids) => (gids || []).map((g) => catalogo.porGid(g)).filter(Boolean).map(nombreConPrecio);
   const opciones = {
     eligiendo_producto: nombres(d.opciones),
     ofreciendo_extras: [...nombres(d.extras), ...((d.extras || []).length > 1 ? ['Las dos'] : [])],
@@ -1211,7 +1212,8 @@ function contextoIA(ctx) {
     paso: PASOS[estado] || PASOS.inicio,
     ...(opciones.length ? { opciones: opciones.map((o, i) => `${i + 1}. ${o}`) } : {}),
     ...((d.items || []).length ? { pedido: d.items.map(cuantoDe) } : {}),
-    carta: catalogo.todos().filter((x) => x.hay).slice(0, 150).map((x) => x.nombre),
+    // Con el precio, para "la más barata" o "la de 10 lucas".
+    carta: catalogo.todos().filter((x) => x.hay).slice(0, 150).map((x) => ({ nombre: x.nombre, precio: catalogo.plata(x.precioCentavos) })),
     mensaje: (ctx.msj.texto || '').slice(0, 500),
   };
 }

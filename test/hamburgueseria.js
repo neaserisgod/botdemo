@@ -12,6 +12,9 @@ const { armar, ejemplo, validar } = require('../src/config');
 const burger = require('../ejemplos/burger-demo.json');
 const SIEMPRE = { lunes: null, martes: null, miercoles: null, jueves: null, viernes: null, sabado: null, domingo: null };
 const config = armar(ejemplo(), { ...burger, servicios: [] });
+// La IA se prueba aparte (sección 6), con una Gemini simulada.
+const iaDelEjemplo = config.ia;
+delete config.ia;
 const db = require('../src/db');
 db.abrir(RUTA_DB);
 const { crearMotor } = require('../src/core/motor');
@@ -27,6 +30,7 @@ function chequear(nombre, cond) {
 
 console.log('\n— 1. La configuración —');
 chequear('pasa la validación', validar(config).length === 0);
+chequear('trae la IA prendida (falta la clave)', iaDelEjemplo && iaDelEjemplo.habilitada === true && iaDelEjemplo.clave_gemini === '');
 chequear('es un local gastronómico con 🍔', gastro.esGastro(config) && config.textos.emoji === '🍔');
 chequear('solo envío', gastro.formas(config).map((f) => f.clave).join() === 'CADETE');
 chequear('sin alias todavía: al recibir o Mercado Pago', gastro.pagos(config).join() === 'al_entregar,mp');
@@ -219,13 +223,13 @@ const textoPara = (salientes, quien) => salientes.filter((s) => s.para === quien
   config.ia = { habilitada: true };
   const I = nuevo();
   t = await conIA(I, raro, gemini('1 Cheeseburger Doble\n1 Coca Cola 500 ml'));
-  chequear('lo que no entiende se lo pasa a la IA con la carta y el paso', visto && visto.mensaje === raro && visto.carta.includes('Cheeseburger Doble') && /Charla libre/.test(visto.paso));
+  chequear('lo que no entiende se lo pasa a la IA con la carta y el paso', visto && visto.mensaje === raro && visto.carta.some((x) => x.nombre === 'Cheeseburger Doble' && x.precio === '$11.000') && /Charla libre/.test(visto.paso));
   chequear('y el mensaje reescrito lo anotan las reglas de siempre (con los precios del catálogo)', t.includes('1 × Cheeseburger Doble — $11.000') && t.includes('1 × Coca Cola 500 ml'));
   await charla(I, 'listo');
   const I2 = nuevo();
   await charla(I2, 'una veggie', 'listo');
   t = await conIA(I2, 'mmm ni ahí loco, sale así', gemini('0'));
-  chequear('en un paso con opciones le pasa las opciones, y "0" sigue', visto.opciones && visto.opciones[0] === '1. Papas fritas' && t.includes('¿A qué dirección'));
+  chequear('en un paso con opciones le pasa las opciones, y "0" sigue', visto.opciones && visto.opciones[0] === '1. Papas fritas — $3.000' && t.includes('¿A qué dirección'));
   const I3 = nuevo();
   await charla(I3, 'una veggie', 'listo');
   t = await conIA(I3, 'mmm', gemini(null));

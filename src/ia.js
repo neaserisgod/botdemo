@@ -24,7 +24,7 @@ const INSTRUCCIONES = `Sos el traductor de un bot de WhatsApp que toma pedidos p
 reescribís el último mensaje del cliente para que el bot lo entienda. No le contestás al cliente.
 
 Reglas:
-- Para pedir: un renglón por producto, "cantidad nombre", con el nombre EXACTO de la carta. Si hay una aclaración para la cocina, \
+- Para pedir: un renglón por producto, "cantidad nombre", con el nombre EXACTO de la carta (sin el precio). Si hay una aclaración para la cocina, \
 va después del nombre: "1 Hamburguesa Clásica sin cebolla".
 - Si el paso tiene opciones numeradas y el mensaje elige una, devolvé solo el número. Para no elegir ninguna, "0".
 - Si el paso pide un dato (dirección, nombre), devolvé solo ese dato.
@@ -44,6 +44,8 @@ async function reescribir(config, contexto) {
     contents: [{ role: 'user', parts: [{ text: JSON.stringify(contexto) }] }],
     generationConfig: {
       temperature: 0,
+      // Que conteste rápido: el cliente está esperando en WhatsApp.
+      thinkingConfig: { thinkingLevel: 'minimal' },
       responseMimeType: 'application/json',
       responseSchema: {
         type: 'OBJECT',
