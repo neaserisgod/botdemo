@@ -83,6 +83,7 @@ function burgers(ctx, estado) {
   if (!catalogo.cargado()) return sinCatalogo(ctx);
   const lista = catalogo.todos().filter((x) => x.hay && !NO_BURGER.test(nlu.normalizar(x.nombre)));
   if (!lista.length) return carta(ctx);
+  recordar(ctx, lista, '');
   return responder(ctx, estado, `Estas son nuestras burgers 🍔\n\n${lista.map((x) => `• ${nombreConPrecio(x)}`).join('\n')}\n\nPara pedir, escribí *pedido* o mandame directo lo que querés.`);
 }
 
@@ -149,6 +150,77 @@ const sinCatalogo = (ctx) => responder(ctx, 'inicio',
 // Una línea por producto: "Coca 2,25 L — $3.500 ✅" o "… ❌ sin stock".
 const lineaProducto = (x) => `• ${nombreConPrecio(x)} ${x.hay ? '✅' : '❌ sin stock'}`;
 
+// ---------- lo que vio en el mensaje anterior ----------
+// Los productos que se le acaban de mostrar (una consulta, la carta), para entender el mensaje siguiente.
+function recordar(ctx, productos, busqueda) {
+  ctx.datos.vistos = productos.slice(0, MAX_CARTA).map((x) => x.gid);
+  ctx.datos.buscado = catalogo.palabrasClave(busqueda).join(' ');
+}
+
+const ORDINALES = { primera: 1, primero: 1, primer: 1, segunda: 2, segundo: 2, tercera: 3, tercero: 3, tercer: 3, cuarta: 4, cuarto: 4, quinta: 5, quinto: 5 };
+// Palabras que dicen "eso que me mostraste" o "lo quiero", sin nombrar un producto.
+const SEÑALA = new Set(['esa', 'ese', 'esas', 'esos', 'esta', 'este', 'misma', 'mismo', 'mismas', 'mismos', 'quiero', 'quiero', 'kiero', 'dame',
+  'pasame', 'mandame', 'traeme', 'anotame', 'ponele', 'poneme', 'sumame', 'pedime', 'preparame', 'das', 'pasas', 'mandas', 'traes', 'dale',
+  'si', 'quisiera', 'queria', 'pido', 'llevo', 'agrego', 'encargo']);
+// "ok", "perfecto", "gracias" después de un precio son un gracias, no un pedido: no están acá.
+const RELLENO_SEÑA = new Set(['me', 'la', 'lo', 'las', 'los', 'de', 'el', 'porfa', 'por', 'favor', 'entonces', 'una', 'uno', 'un', 'unas', 'unos',
+  'y', 'ahi', 'eso', 'esto', 'nomas', 'pedir', 'pedirla', 'pedirlo', 'opcion', 'numero', 'vez', 'ultima', 'ultimo', 'te', 'mas']);
+
+function loQueVio(ctx, gids, buscado, estado) {
+  const vistos = gids.map((g) => catalogo.porGid(g)).filter(Boolean);
+  if (!vistos.length) return null;
+  const norm = nlu.normalizar(ctx.texto).replace(/[?]/g, '');
+  const palabras = norm.split(' ').filter(Boolean);
+  // "la segunda", "la 2", "la última"
+  let orden = null;
+  for (const p of palabras) if (ORDINALES[p]) orden = ORDINALES[p];
+  if (/\b(?:ultima|ultimo)\b/.test(norm)) orden = vistos.length;
+  const nro = norm.match(/^(?:la|el|opcion|numero)\s+(\d{1,2})$/);
+  if (nro) orden = Number(nro[1]);
+  // "¿cuánto sale?", "¿precio?", sin decir de qué: lo que acaba de ver.
+  if (!catalogo.palabrasClave(norm).length && /\b(?:cuanto|precio|precios|sale|salen|cuesta|cuestan|vale|valen)\b/.test(norm) && vistos.length <= 5) {
+    recordar(ctx, vistos, buscado);
+    return responder(ctx, estado, `${vistos.map(lineaProducto).join('\n')}\n\n${AVISO_PRECIO}\nPara pedir, decime cuántos querés.`);
+  }
+  // "quiero esa", "pasame 2", "dale, quiero una", "la segunda": pedir lo que vio, sin nombrarlo.
+  const cant = numeros.cantidadInicial(palabras.filter((p) => !SEÑALA.has(p) && !['me', 'la', 'lo', 'las', 'los', 'de', 'el', 'y', 'porfa'].includes(p)).join(' '));
+  const sinNombre = palabras.every((p) => SEÑALA.has(p) || RELLENO_SEÑA.has(p) || ORDINALES[p] || /^\d{1,2}$/.test(p)
+    || ['dos', 'tres', 'cuatro', 'cinco', 'seis'].includes(p) || (cant && p === norm.split(' ').find((x) => x === p)));
+  const señala = palabras.some((p) => SEÑALA.has(p)) || orden;
+  if (sinNombre && señala && !(palabras.length === 1 && /^\d$/.test(palabras[0]))) {
+    const cantidad = Math.min(Math.max((cant && cant.cantidad) || Number((norm.match(/\b(\d{1,2})\b/) || [])[1]) || 1, 1), 99);
+    if (orden && !nro) return pedirLoVisto(ctx, [vistos[orden - 1]].filter(Boolean), cantidad);
+    if (orden) return pedirLoVisto(ctx, [vistos[orden - 1]].filter(Boolean), 1);
+    // "dale" o "quiero" después de la carta entera: arranca el pedido como siempre.
+    if (vistos.length > 5) return palabras.some((p) => ['dale', 'si', 'quiero', 'pido'].includes(p)) ? empezarPedido(ctx) : null;
+    // "dame esa" con la burger y su combo a la vista: la burger (como si la hubiera nombrado).
+    return pedirLoVisto(ctx, preferidos(ctx, buscado, vistos), cantidad);
+  }
+  // "y la doble?", "¿y en combo?", "la doble": lo mismo que buscó, con esto. "bacon simple" → "y la doble?" es "bacon doble":
+  // si con todo no hay nada, se va dejando lo último que había dicho.
+  if (buscado && palabras.length <= 5 && /^(?:y|la|el|las|los|en|con|sin|de|tenes|tienen|hay)\b/.test(norm) && catalogo.palabrasClave(norm).length) {
+    const nuevo = catalogo.palabrasClave(norm).join(' ');
+    const dicho = buscado.split(' ');
+    let r = [];
+    for (let k = dicho.length; k > 0 && !r.length; k--) r = catalogo.buscar(`${dicho.slice(0, k).join(' ')} ${nuevo}`, 5, sinonimos(ctx)).resultados;
+    if (r.length) {
+      recordar(ctx, r, `${buscado} ${norm}`);
+      return responder(ctx, estado, `${r.map(lineaProducto).join('\n')}\n\n${AVISO_PRECIO}\nPara pedir, decime cuántos querés.`);
+    }
+  }
+  return null;
+}
+
+// Arranca el pedido con lo que vio: si es uno, anotado; si son varios, ¿cuál?
+function pedirLoVisto(ctx, productos, cantidad) {
+  if (!productos.length) return null;
+  if (gastro.pausada(ctx.config)) return cocinaPausada(ctx);
+  ctx.datos = { items: [] };
+  if (productos.length > 1) return preguntarCual(ctx, productos, cantidad, [encabezadoPedido(ctx)]);
+  const r = sumar(ctx, productos[0], { cantidad });
+  return responder(ctx, 'armando_pedido', `${encabezadoPedido(ctx)}\n\n${r.nota}\n\n¿Algo más? Si no, escribí *listo*.`);
+}
+
 // ---------- inicio: consultas ----------
 const PIDE_CARTA = /\b(?:catalogo|carta|que tienen hoy|que hay hoy|para comer|que venden|que ofrecen)\b|^(?:que|q) (?:tienen|tenes|hay)$/;
 
@@ -172,6 +244,12 @@ function inicio(ctx, estado = 'inicio') {
   const sinEntender = ctx.datos.sinEntender || 0;
   delete ctx.datos.sinEntender;
   if (!t || nlu.esRisa(t)) return [];
+  // Lo que le mostramos en el mensaje anterior vale solo para este: "quiero esa", "pasame 2", "la segunda", "y la doble?".
+  const { vistos, buscado: antes } = ctx.datos;
+  delete ctx.datos.vistos;
+  delete ctx.datos.buscado;
+  const conContexto = vistos && vistos.length ? loQueVio(ctx, vistos, antes || '', estado) : null;
+  if (conContexto) return conContexto;
   const soloSaludo = esSoloSaludo(t);
   if (nlu.esCortesia(t) && !soloSaludo) return responder(ctx, 'inicio', '¡Gracias a vos! 😊 Cualquier cosa escribime *hola*.');
   const apurado = apuro(ctx);
@@ -232,6 +310,7 @@ function inicio(ctx, estado = 'inicio') {
     if (resultados.length) {
       const mas = total > resultados.length ? `\n…y ${total - resultados.length} más: decime algo más específico.` : '';
       const persona = inter.intencion === 'humano' ? '\nSi igual querés hablar con una persona, escribí *4*.' : '';
+      recordar(ctx, resultados, t);
       return responder(ctx, estado, `${resultados.map(lineaProducto).join('\n')}${mas}\n\n${AVISO_PRECIO}\nPara pedir, escribí *pedido*.${persona}`);
     }
     // Preguntó por algo que no está (o está consultando): no es que no lo entendimos, pero queda anotado (puede ser
@@ -244,6 +323,7 @@ function inicio(ctx, estado = 'inicio') {
       anotarNoEntendido(ctx);
       const parecidos = catalogo.parecidos(t, 5, sinonimos(ctx));
       if (parecidos.length) {
+        recordar(ctx, parecidos, t);
         return responder(ctx, estado, `No tengo justo eso 🤔 Lo más parecido:\n${parecidos.map(lineaProducto).join('\n')}\n\n${AVISO_PRECIO}\nPara pedir, escribí *pedido*.`);
       }
       // "¿De qué están hechas?", "¿tienen tacc?": en un local gastronómico casi siempre es una pregunta sobre la comida, no
@@ -400,6 +480,7 @@ function carta(ctx) {
   if (!hay.length) return responder(ctx, 'inicio', 'Hoy ya no nos queda nada para ofrecer 😕 Escribí *4* para hablar con una persona.');
   const lineas = hay.slice(0, MAX_CARTA).map((x) => `• ${nombreConPrecio(x)}`).join('\n');
   const mas = hay.length > MAX_CARTA ? `\n…y ${hay.length - MAX_CARTA} más: preguntame por lo que buscás.` : '';
+  recordar(ctx, hay.slice(0, MAX_CARTA), '');
   return responder(ctx, 'consultando', `Nuestra carta de hoy ${ctx.config.textos.emoji}\n\n${lineas}${mas}\n\nPara pedir, escribí *pedido*.`);
 }
 
@@ -521,7 +602,7 @@ function armando_pedido(ctx) {
   // "listo", y también "listo gracias", "eso es todo, gracias".
   if (TERMINAR.includes(norm) || (nlu.esCortesia(ctx.msj.texto || '') && /\b(?:listo|eso es todo|nada mas|ya esta|eso nomas)\b/.test(norm))) return terminarPedido(ctx);
   const texto = ctx.msj.texto || '';
-  const quitado = quitar(ctx, texto) || aclararUltimo(ctx, texto);
+  const quitado = quitar(ctx, texto) || aclararUltimo(ctx, texto) || cambiarUltimo(ctx, texto);
   if (quitado) return responder(ctx, 'armando_pedido', `${quitado}\n\n¿Algo más? Si no, escribí *listo*.`);
   // "¿tienen cerveza?" mientras arma el pedido es una pregunta, no un renglón: si la contesta una pregunta de siempre o del
   // negocio, se contesta y no se anota nada. Con una cantidad ("¿me sumás 2 cervezas?") sí es un renglón.
@@ -598,6 +679,31 @@ function aclararUltimo(ctx, texto) {
   }
   x.aclaracion = aclaracion;
   return `Anotado: ${cuantoDe(x)} ✍️`;
+}
+
+// Lo último que anotó: "otra", "otra más", "una más", "otra igual", "2 más" (suma) y "que sean 3", "mejor 3", "poneme 3"
+// (cambia la cantidad).
+function cambiarUltimo(ctx, texto) {
+  const items = (ctx.datos.items || []).filter((x) => !x.gramos);
+  if (!items.length) return null;
+  const norm = nlu.normalizar(texto);
+  const x = items[items.length - 1];
+  const sumarle = norm.match(/^(?:y\s+)?(?:otra|otro|una|uno|(\d{1,2}|dos|tres|cuatro|cinco))\s*(?:mas|igual|iguales|de esas|de esos|de la misma|del mismo|mas igual)?(?:\s+(?:porfa|por favor))?$/);
+  const otraVez = /^(?:otra|otro|lo mismo|otra igual|otro igual|otra mas|otro mas|una mas|uno mas|repeti|repetila|repetilo)$/.test(norm);
+  if (sumarle && (otraVez || /\b(?:mas|igual|iguales)\b/.test(norm))) {
+    const n = sumarle[1] ? (Number(sumarle[1]) || numeros.cantidadInicial(`${sumarle[1]} x`)?.cantidad || 1) : 1;
+    x.cantidad = Math.min(999, x.cantidad + n);
+    return `Anotado: ${cuantoDe(x)} — ${catalogo.plata(subtotal(x))} ✍️`;
+  }
+  if (otraVez) { x.cantidad = Math.min(999, x.cantidad + 1); return `Anotado: ${cuantoDe(x)} — ${catalogo.plata(subtotal(x))} ✍️`; }
+  const fija = norm.match(/^(?:que sean|mejor|poneme|ponele|cambialo a|cambiala a|hacelo|hacela|son|en realidad son|eran)\s+(\d{1,3}|dos|tres|cuatro|cinco|seis)$/);
+  if (fija) {
+    const n = Number(fija[1]) || numeros.cantidadInicial(`${fija[1]} x`)?.cantidad;
+    if (!n) return null;
+    x.cantidad = Math.min(999, n);
+    return `Listo, ${cuantoDe(x)} — ${catalogo.plata(subtotal(x))} ✍️`;
+  }
+  return null;
 }
 
 const noJustoAsi = (busqueda) => `🤔 No tengo "${busqueda.trim()}" con ese nombre.`;
@@ -1026,7 +1132,7 @@ function confirmando_pedido(ctx) {
   if (ctx.texto === '0') { ctx.datos = {}; return responder(ctx, 'inicio', 'Listo, no anoté nada. Cuando quieras escribí *hola* 😊'); }
   if (ctx.texto !== '1') {
     // "sacame la coca", "sumale unas papas": se cambia el pedido y se vuelve a mostrar.
-    const quitado = quitar(ctx, ctx.msj.texto || '') || aclararUltimo(ctx, ctx.msj.texto || '');
+    const quitado = quitar(ctx, ctx.msj.texto || '') || aclararUltimo(ctx, ctx.msj.texto || '') || cambiarUltimo(ctx, ctx.msj.texto || '');
     if (quitado && !ctx.datos.items.length) return responder(ctx, 'armando_pedido', `${quitado} Decime qué querés, o *0* para cancelar.`);
     if (quitado) return conNota(resumen(ctx), quitado);
     const texto = (ctx.msj.texto || '').replace(/^(?:y\s+)?(?:sumale|sumame|suma|agregale|agregame|agrega|agregar|tambien|y)\s+/i, '');

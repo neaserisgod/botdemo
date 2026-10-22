@@ -181,6 +181,34 @@ const textoPara = (salientes, quien) => salientes.filter((s) => s.para === quien
   t = await charla(X, 'Mitre 5', 'Eva', '1', 'sumale una sprite');
   chequear('en el resumen, "sumale una sprite" la suma y vuelve a mostrarlo', t.includes('1 × Sprite') && t.includes('Eva, así quedó'));
 
+  console.log('\n— 5. Con el contexto del mensaje anterior —');
+  t = await charla(nuevo(), '¿tienen veggie?', 'dale, quiero una');
+  chequear('"¿tienen veggie?" → "dale, quiero una" la anota', t.includes('1 × Veggie Burger'));
+  t = await charla(nuevo(), '¿cuánto sale la bacon simple?', 'pasame 2');
+  chequear('"pasame 2" después del precio: 2 de esa', t.includes('2 × Bacon Cheese Simple'));
+  const D = nuevo();
+  t = await charla(D, '¿cuánto sale la bacon simple?', '¿y la doble?');
+  chequear('"¿y la doble?" es la bacon doble (no cualquier doble)', t.includes('Bacon Cheese Doble') && !t.includes('Cheeseburger'));
+  t = await charla(D, 'dame esa');
+  chequear('"dame esa" con la burger y su combo a la vista: la burger', t.includes('1 × Bacon Cheese Doble') && !t.includes('¿Cuál'));
+  t = await charla(nuevo(), '¿qué hamburguesas tienen?', 'la segunda');
+  chequear('"la segunda" de la lista', t.includes('1 × Cheeseburger Doble'));
+  t = await charla(nuevo(), '¿cuánto sale la cheeseburger?', 'quiero esa');
+  chequear('"quiero esa"', t.includes('1 × Cheeseburger Doble'));
+  const V = nuevo();
+  t = await charla(V, '¿tienen veggie?', '¿cuánto sale?');
+  chequear('"¿cuánto sale?" sin decir qué: lo que acaba de ver', t.includes('Veggie Burger — $9.500'));
+  t = await charla(nuevo(), '¿tienen veggie?', 'ok gracias');
+  chequear('"ok gracias" después de un precio no es un pedido', t.includes('Gracias a vos') && !t.includes('Veggie'));
+  const O = nuevo();
+  await charla(O, 'quiero una clasica');
+  t = await charla(O, 'otra más');
+  chequear('"otra más" suma una de lo último', t.includes('2 × Hamburguesa Clásica'));
+  t = await charla(O, 'que sean 3');
+  chequear('"que sean 3" cambia la cantidad', t.includes('3 × Hamburguesa Clásica'));
+  t = await charla(O, 'y una coca', 'otra');
+  chequear('"otra" después de la coca suma una coca', t.includes('2 × Coca Cola 500 ml'));
+
   console.log(fallas ? `\n❌ ${fallas} chequeos de hamburguesería fallaron` : '\n✅ Hamburguesería OK');
   process.exit(fallas ? 1 : 0);
 })();
