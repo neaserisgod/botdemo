@@ -102,7 +102,7 @@ function procesar(config, clienta, msj) {
     console.error(`datos_conv inválido en ${clienta.id}, reiniciando su estado`);
     clienta.estado_conv = 'inicio';
   }
-  const ctx = { config, clienta, datos, msj, texto: texto.toLowerCase(), entender: entenderEnPaso };
+  const ctx = { config, clienta, datos, msj, texto: texto.toLowerCase(), entender: (c, ayuda) => entenderEnPaso(c, ayuda) || pedirIA(c) };
 
   if (nlu.esVolverAlMenu(texto)) {
     ctx.datos = {};
@@ -316,12 +316,16 @@ function inicio(ctx, estado = 'inicio') {
     // Preguntó por algo que no está (o está consultando): no es que no lo entendimos, pero queda anotado (puede ser
     // una palabra que le falta al diccionario).
     if (estado === 'consultando' && inter.intencion !== 'saludo') {
+      const ia = pedirIA(ctx);
+      if (ia) return ia;
       anotarNoEntendido(ctx);
       return responder(ctx, estado, `No encontré "${ctx.msj.texto.trim()}" 🤔 Probá con otro nombre, escribí *4* para preguntarle a una persona o *menú* para ver las opciones.`);
     }
     if (pregunta && inter.intencion !== 'saludo') {
-      anotarNoEntendido(ctx);
       const parecidos = catalogo.parecidos(t, 5, sinonimos(ctx));
+      const ia = parecidos.length ? null : pedirIA(ctx);
+      if (ia) return ia;
+      anotarNoEntendido(ctx);
       if (parecidos.length) {
         recordar(ctx, parecidos, t);
         return responder(ctx, estado, `No tengo justo eso 🤔 Lo más parecido:\n${parecidos.map(lineaProducto).join('\n')}\n\n${AVISO_PRECIO}\nPara pedir, escribí *pedido*.`);
@@ -339,7 +343,10 @@ function inicio(ctx, estado = 'inicio') {
   const enojado = enojo(ctx);
   if (enojado) return enojado;
   if (inter.intencion === 'saludo') return menu(ctx, saludo(ctx));
-  // Lo que no se entendió queda anotado; a la segunda seguida, una persona en vez del menú otra vez.
+  // Lo que no se entendió: primero la IA (si está prendida); si tampoco, queda anotado y a la segunda seguida, una persona en
+  // vez del menú otra vez.
+  const ia = pedirIA(ctx);
+  if (ia) return ia;
   anotarNoEntendido(ctx);
   if (sinEntender >= 1) {
     return derivarAHumano(ctx, ctx.msj.texto, `Perdón, no te estoy entendiendo 😅 Ya le aviso ${aQuienAtiende(ctx.config.textos)} para que te responda personalmente.`);
@@ -623,6 +630,8 @@ function armando_pedido(ctx) {
     const partes = texto.split(/\s+y\s+/i);
     if (partes.length > 1 && partes.every((x) => !['no_encontre', 'parecidos', 'nada'].includes(leerLinea(ctx, x).tipo))) return anotarVarias(ctx, partes, []);
     if (r.tipo === 'parecidos') return preguntarCual(ctx, r.resultados, r.cantidad, [noJustoAsi(r.busqueda)], null, r.aclaracion);
+    const ia = pedirIA(ctx);
+    if (ia) return ia;
     anotarNoEntendido(ctx);
     return responder(ctx, 'armando_pedido', `No encontré "${r.busqueda.trim()}" 🤔 ${mirarCarta(ctx)}Probá con otro nombre, o *listo* para terminar.`);
   }
@@ -1026,10 +1035,17 @@ function ofreciendo_extras(ctx) {
   // Otra cosa de la carta ("una sprite"): se suma eso.
   const otras = separarLineas(ctx.msj.texto || '').map((l) => leerLinea(ctx, l)).filter((r) => r.tipo === 'anotar');
   if (otras.length) return seguirCon([], otras.map((r) => sumar(ctx, r.producto, r).nota));
-  // Siguió de largo (mandó la dirección, el nombre…): es un no, y el mensaje es para el paso que sigue.
-  const r = siguienteGastro(ctx);
-  const paso = { pidiendo_direccion, pidiendo_nombre, eligiendo_entrega, eligiendo_zona, eligiendo_pago }[siguientePaso(ctx)];
-  return paso ? paso(ctx) : r;
+  // Siguió de largo (mandó la dirección, el nombre…): es un no, y el mensaje es para el paso que sigue, si parece eso.
+  const proximo = siguientePaso({ ...ctx, datos: { ...ctx.datos, entrega: ctx.datos.entrega || (gastro.formas(ctx.config).length === 1 ? gastro.formas(ctx.config)[0].clave : null) } });
+  const texto = (ctx.msj.texto || '').trim();
+  const pareceEso = { pidiendo_direccion: /[a-záéíóúñ].*\d|\d.*[a-záéíóúñ]/i.test(texto), pidiendo_nombre: /^[a-záéíóúñü' ]{2,30}$/i.test(texto) && texto.split(/\s+/).length <= 3 }[proximo];
+  if (pareceEso) {
+    siguienteGastro(ctx);
+    return { pidiendo_direccion, pidiendo_nombre }[proximo](ctx);
+  }
+  // Ni eso: la IA, o se vuelve a preguntar.
+  ctx.datos.extras = productos.map((x) => x.gid);
+  return noEntendi(ctx, `Perdón, no te entendí 😅 ¿Le sumamos algo?\n\n${productos.map((x, i) => `*${i + 1}* — ${nombreConPrecio(x)}`).join('\n')}${productos.length > 1 ? `\n*${productos.length + 1}* — Las dos` : ''}\n*0* — No, así está bien`);
 }
 
 // El paso al que va `siguienteGastro` (sin preguntar nada): para pasarle un mensaje que ya contestaba eso.
@@ -1151,6 +1167,53 @@ function confirmando_pedido(ctx) {
   });
   ctx.datos = {};
   return responder(ctx, 'inicio', '¡Listo! Le pasé tu pedido al local 🙌 Te aviso por acá apenas lo confirmen.');
+}
+
+// ---------- la IA, para lo que las reglas no entienden ----------
+// Con la IA prendida (`config.ia`, ver src/ia.js), lo que el bot no entiende no se contesta todavía: sale un pedido de
+// reescritura ({ ia: contexto }) y el motor (`procesarConIA`) vuelve a pasar el mensaje reescrito. En esa segunda pasada (o si la
+// IA no pudo) no se vuelve a pedir: sigue como siempre. Nada se guardó todavía, así que la segunda pasada arranca igual.
+function pedirIA(ctx) {
+  if (!ctx.config.ia?.habilitada || ctx.msj.reescrito || ctx.msj.sinIA || !(ctx.msj.texto || '').trim()) return null;
+  return [{ para: ctx.clienta.telefono, ia: contextoIA(ctx) }];
+}
+
+const PASOS = {
+  inicio: 'Charla libre: puede pedir productos o hacer una pregunta.',
+  consultando: 'Charla libre: está mirando precios; puede pedir productos o hacer una pregunta.',
+  armando_pedido: 'Está armando el pedido: puede sumar productos, sacar algo, aclarar algo para la cocina o decir "listo" si terminó.',
+  eligiendo_producto: 'El bot le preguntó cuál de estas opciones quiere.',
+  eligiendo_peso: 'El bot le preguntó cuánto quiere (en gramos o kilos).',
+  ofreciendo_extras: 'El bot le ofreció sumar algo al pedido.',
+  eligiendo_entrega: 'El bot le preguntó cómo lo quiere recibir.',
+  pidiendo_direccion: 'El bot le pidió la dirección de entrega.',
+  eligiendo_zona: 'El bot le preguntó en qué zona está.',
+  pidiendo_nombre: 'El bot le pidió un nombre para el pedido.',
+  eligiendo_pago: 'El bot le preguntó cómo paga.',
+  confirmando_pedido: 'El bot le mostró el resumen del pedido y le preguntó si lo confirma.',
+};
+
+function contextoIA(ctx) {
+  const c = ctx.config;
+  const d = ctx.datos;
+  const estado = ctx.clienta.estado_conv || 'inicio';
+  const nombres = (gids) => (gids || []).map((g) => catalogo.porGid(g)).filter(Boolean).map((x) => x.nombre);
+  const opciones = {
+    eligiendo_producto: nombres(d.opciones),
+    ofreciendo_extras: [...nombres(d.extras), ...((d.extras || []).length > 1 ? ['Las dos'] : [])],
+    eligiendo_entrega: gastro.formas(c).map((f) => f.texto),
+    eligiendo_zona: gastro.zonas(c).map((z) => z.nombre),
+    eligiendo_pago: gastro.pagos(c).map((p) => gastro.TEXTO_PAGO[p]),
+    confirmando_pedido: ['Sí, confirmar', 'Quiero agregar algo'],
+  }[estado] || [];
+  return {
+    negocio: `${c.negocio.nombre} (${c.textos.emoji})`,
+    paso: PASOS[estado] || PASOS.inicio,
+    ...(opciones.length ? { opciones: opciones.map((o, i) => `${i + 1}. ${o}`) } : {}),
+    ...((d.items || []).length ? { pedido: d.items.map(cuantoDe) } : {}),
+    carta: catalogo.todos().filter((x) => x.hay).slice(0, 150).map((x) => x.nombre),
+    mensaje: (ctx.msj.texto || '').slice(0, 500),
+  };
 }
 
 // `ctx.entender` del comercio (ver noEntendi en maquina.js), también al principio de cada renglón del pedido: una risa no

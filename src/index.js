@@ -25,6 +25,7 @@ process.on('unhandledRejection', (e) => {
   console.error('[PROMESA RECHAZADA]', e && e.stack ? e.stack : e);
 });
 const { crearMotor } = require('./core/motor');
+const ia = require('./ia');
 const recordatorios = require('./core/recordatorios');
 const salud = require('./salud');
 const { iniciarPanel } = require('./panel/server');
@@ -88,9 +89,10 @@ const { crearAdaptador } = require(`./adaptadores/${nombreAdaptador}`);
 // Sin Nodo Sur no hay a dónde mandar los pedidos (queda en no hacer nada).
 let mandarPedidosYa = () => {};
 const adaptador = crearAdaptador(config, {
-  alRecibir: (msj) => {
+  alRecibir: async (msj) => {
     estadoApp.mensajeRecibido();
-    const salientes = motor.procesarMensaje(msj);
+    // Lo que el bot no entiende, con la IA prendida (config.ia), se lo reescribe Gemini y se vuelve a procesar (src/ia.js).
+    const salientes = await motor.procesarConIA(msj, (contexto) => ia.reescribir(config, contexto));
     // Un pedido recién confirmado sale a Nodo Sur ya, no en la vuelta de cada 10 minutos: el local lo tiene que ver mientras
     // el cliente espera la respuesta. Si falla, queda en la bandeja para la vuelta siguiente.
     mandarPedidosYa();

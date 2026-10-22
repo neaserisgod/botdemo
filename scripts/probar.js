@@ -19,6 +19,7 @@ const configuracion = require('../src/config');
 const db = require('../src/db');
 const catalogo = require('../src/core/catalogo');
 const { crearMotor } = require('../src/core/motor');
+const ia = require('../src/ia');
 const qNoEntendidos = require('../src/db/consultas/noEntendidos');
 
 // Arma el simulador sobre una configuración ya cargada. Devuelve la app de Express (los tests la usan sin abrir puerto).
@@ -37,13 +38,14 @@ function crearSimulador(config) {
   app.get('/', (_req, res) => res.type('html').send(PAGINA(config)));
 
   // { como: 'cliente' | 'duena', texto } → lo que contestó el bot, a quién.
-  app.post('/mensaje', (req, res) => {
+  app.post('/mensaje', async (req, res) => {
     const { como, texto } = req.body || {};
     if (typeof texto !== 'string' || !texto.trim() || texto.length > 2000) return res.status(400).json({ error: 'texto' });
     const de = como === 'duena' ? config.numero_duena : cliente;
     let salientes;
     try {
-      salientes = motor.procesarMensaje({ de, texto });
+      // Con la IA prendida en config.json, la prueba también la usa (es lo que hay que ver al probar).
+      salientes = await motor.procesarConIA({ de, texto }, (contexto) => ia.reescribir(config, contexto));
     } catch (e) {
       // Un error del bot se muestra en la pantalla (es justo lo que hay que ver al probar).
       return res.json({ respuestas: [{ a: 'error', texto: `El bot falló: ${e.message}` }] });

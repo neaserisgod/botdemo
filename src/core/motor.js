@@ -80,7 +80,19 @@ function crearMotor(config) {
     qClientas.derivar(clienta.id, config.pausa_minutos);
   }
 
-  return { procesarMensaje, pausar, enPrueba };
+  // Lo mismo, con la IA para lo que no entiende (src/ia.js): si el comercio pidió reescribir el mensaje, se le pregunta a la IA
+  // y se vuelve a procesar el mensaje reescrito; si la IA no pudo, el original como si no hubiera IA. `reescribir(contexto)`
+  // devuelve el texto o null.
+  async function procesarConIA(msj, reescribir) {
+    const salientes = procesarMensaje(msj);
+    const pedido = salientes.find((s) => s.ia);
+    if (!pedido) return salientes;
+    let texto = null;
+    try { texto = await reescribir(pedido.ia); } catch (e) { console.error(`IA: ${e.message}`); }
+    return procesarMensaje(texto ? { ...msj, texto, reescrito: true, original: msj.texto } : { ...msj, sinIA: true });
+  }
+
+  return { procesarMensaje, procesarConIA, pausar, enPrueba };
 }
 
 module.exports = { crearMotor };

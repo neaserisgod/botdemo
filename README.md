@@ -37,6 +37,22 @@ npm run probar
 
 Para sumar la transferencia, completá `pedidos.alias` y `pedidos.titular`.
 
+### IA para lo que el bot no entiende (Gemini, gratis)
+
+Cuando las reglas no entienden un mensaje, Gemini lo reescribe como una frase simple ("che tirame la de queso y algo cola" →
+"1 Cheeseburger Doble / 1 Coca Cola 500 ml") y el bot lo vuelve a procesar con sus reglas: los precios, el stock y lo que se
+anota salen siempre del catálogo, nunca de la IA. Si Gemini no está segura, tarda más de 8 segundos o se pasó del máximo del
+día, el bot sigue como sin IA (le avisa a una persona). En la consola queda `IA: "lo que escribió" → "cómo lo entendió"`:
+sirve para sumar esas frases al diccionario.
+
+1. Sacá la clave gratis en **aistudio.google.com › Get API key**.
+2. En `config.json` (o `config.local.json`): `"ia": { "habilitada": true, "clave_gemini": "AIza…" }`. También se puede
+   pasar como variable `GEMINI_API_KEY`. Opcionales: `"modelo"` (por defecto `gemini-3.5-flash-lite`) y `"maximo_por_dia"`
+   (por defecto 200).
+
+Ojo: con la clave gratuita, Google puede usar lo que se le manda para mejorar sus productos. Solo viajan los mensajes que el
+bot no entendió, el paso en que está el pedido y los nombres de la carta.
+
 ## Probar el bot sin otro celular
 
 ```bash

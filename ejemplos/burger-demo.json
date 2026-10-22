@@ -16,6 +16,12 @@
     "domingo": { "desde": "19:00", "hasta": "23:00" }
   },
 
+  "ia": {
+    "habilitada": true,
+    "clave_gemini": "",
+    "maximo_por_dia": 200
+  },
+
   "pedidos": {
     "retiro": false,
     "cadete": true,

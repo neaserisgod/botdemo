@@ -298,7 +298,7 @@ function crearAdaptador(config, hooks) {
 
     // Audio o nota de voz: el bot no los escucha, pero le avisa al cliente (ver motor.js).
     const tipo = m.audioMessage ? 'audio' : null;
-    const salientes = hooks.alRecibir({ de, texto, rutaImagen, productoId, tipo, ...(leido ? { carrito: leido.productos, carritoResumen: leido.resumen } : {}) });
+    const salientes = await hooks.alRecibir({ de, texto, rutaImagen, productoId, tipo, ...(leido ? { carrito: leido.productos, carritoResumen: leido.resumen } : {}) });
     await enviarTodos(salientes, { respondiendo: de });
   }
 
@@ -345,7 +345,7 @@ function crearAdaptador(config, hooks) {
     const numero = encuestas.votar(id, voto.selectedOptions);
     if (numero === null) return; // sacó el voto
     if (process.env.DEPURAR) console.log(`[voto] de=${de} encuesta=${id} opción=${numero}`);
-    const salientes = hooks.alRecibir({ de, texto: String(numero) });
+    const salientes = await hooks.alRecibir({ de, texto: String(numero) });
     await enviarTodos(salientes, { respondiendo: de });
   }
 

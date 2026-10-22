@@ -209,6 +209,54 @@ const textoPara = (salientes, quien) => salientes.filter((s) => s.para === quien
   t = await charla(O, 'y una coca', 'otra');
   chequear('"otra" después de la coca suma una coca', t.includes('2 × Coca Cola 500 ml'));
 
+  console.log('\n— 6. La IA para lo que no entiende (Gemini simulada) —');
+  const conIA = (tel, texto, reescribir) => motor.procesarConIA({ de: tel, texto }, reescribir).then((r) => textoPara(r, tel));
+  let visto = null;
+  const gemini = (respuesta) => async (contexto) => { visto = contexto; return respuesta; };
+  const raro = 'che maestro tirame la mas barata de carne con queso y algo cola';
+  t = textoPara(await decir(nuevo(), raro), '');
+  chequear('sin la IA prendida no se pide nada (sigue como siempre)', !(await motor.procesarConIA({ de: nuevo(), texto: raro }, gemini('x'))).some((s) => s.ia) && visto === null);
+  config.ia = { habilitada: true };
+  const I = nuevo();
+  t = await conIA(I, raro, gemini('1 Cheeseburger Doble\n1 Coca Cola 500 ml'));
+  chequear('lo que no entiende se lo pasa a la IA con la carta y el paso', visto && visto.mensaje === raro && visto.carta.includes('Cheeseburger Doble') && /Charla libre/.test(visto.paso));
+  chequear('y el mensaje reescrito lo anotan las reglas de siempre (con los precios del catálogo)', t.includes('1 × Cheeseburger Doble — $11.000') && t.includes('1 × Coca Cola 500 ml'));
+  await charla(I, 'listo');
+  const I2 = nuevo();
+  await charla(I2, 'una veggie', 'listo');
+  t = await conIA(I2, 'mmm ni ahí loco, sale así', gemini('0'));
+  chequear('en un paso con opciones le pasa las opciones, y "0" sigue', visto.opciones && visto.opciones[0] === '1. Papas fritas' && t.includes('¿A qué dirección'));
+  const I3 = nuevo();
+  await charla(I3, 'una veggie', 'listo');
+  t = await conIA(I3, 'mmm', gemini(null));
+  chequear('si la IA no entiende, vuelve a preguntar (y "mmm" no queda como dirección)', t.includes('no te entendí') && t.includes('¿Le sumamos algo?'));
+  const F = nuevo();
+  t = await conIA(F, raro, async () => { throw new Error('sin internet'); });
+  chequear('si la IA falla, contesta igual (no se cae)', t.length > 0);
+  t = await conIA(nuevo(), 'zzz qqq', gemini('zzz qqq'));
+  chequear('si lo reescrito tampoco se entiende, no vuelve a preguntarle a la IA', t.length > 0);
+  delete config.ia;
+
+  console.log('\n— 7. El pedido a Gemini —');
+  const ia = require('../src/ia');
+  const fetchReal = global.fetch;
+  let pedidoHttp = null;
+  global.fetch = async (url, op) => {
+    pedidoHttp = { url, op, cuerpo: JSON.parse(op.body) };
+    return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: '{"entendido":true,"texto":"1 Veggie Burger"}' }] } }] }) };
+  };
+  const cfg = { ia: { habilitada: true, clave_gemini: 'AIza-prueba' } };
+  const sale = await ia.reescribir(cfg, { mensaje: 'la verde', carta: ['Veggie Burger'] });
+  chequear('llama a generateContent con la clave en el header y pide JSON', pedidoHttp.url.includes(':generateContent') && pedidoHttp.op.headers['x-goog-api-key'] === 'AIza-prueba'
+    && pedidoHttp.cuerpo.generationConfig.responseMimeType === 'application/json');
+  chequear('devuelve el texto reescrito', sale === '1 Veggie Burger');
+  global.fetch = async () => ({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: '{"entendido":false,"texto":""}' }] } }] }) });
+  chequear('si no entendió, null', (await ia.reescribir(cfg, { mensaje: 'x' })) === null);
+  global.fetch = async () => ({ ok: false, status: 429, text: async () => 'cuota' });
+  chequear('si Google dice que no (cuota), null', (await ia.reescribir(cfg, { mensaje: 'x' })) === null);
+  chequear('sin clave no llama', (await ia.reescribir({ ia: { habilitada: true } }, { mensaje: 'x' })) === null || process.env.GEMINI_API_KEY);
+  global.fetch = fetchReal;
+
   console.log(fallas ? `\n❌ ${fallas} chequeos de hamburguesería fallaron` : '\n✅ Hamburguesería OK');
   process.exit(fallas ? 1 : 0);
 })();

@@ -31,7 +31,7 @@ function crearAdaptador(config, hooks) {
     rl.setPrompt(`${remitente}> `);
     rl.prompt();
 
-    rl.on('line', (linea) => {
+    rl.on('line', async (linea) => {
       const t = linea.trim();
       let msj = null;
 
@@ -51,7 +51,7 @@ function crearAdaptador(config, hooks) {
         msj = { de: remitente, texto: t, rutaImagen: null, productoId: null };
       }
 
-      if (msj) mostrar(hooks.alRecibir(msj));
+      if (msj) mostrar(await hooks.alRecibir(msj));
       rl.setPrompt(`${remitente}> `);
       rl.prompt();
     });
