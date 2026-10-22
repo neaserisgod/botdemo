@@ -170,6 +170,9 @@ const PLANTILLAS = {
   // Un local gastronómico (Nodo Gastro): mismo bot de comercio, y con `config.pedidos` (lo manda la app) suma la entrega, la
   // hora y el pago (`core/gastro.js`).
   rotiseria: comercio('Rotisería', '🍗'),
+  // Una hamburguesería es una rotisería con otra carta: saluda como alguien del local y, al cerrar el pedido, ofrece papas o
+  // algo para tomar si no lleva (`gastro.ofreceExtras`).
+  hamburgueseria: comercio('Hamburguesería', '🍔'),
   otro: comercio('Otro comercio', '🏪'),
 };
 

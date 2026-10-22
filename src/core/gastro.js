@@ -111,6 +111,24 @@ function textoAlias(config, total) {
 const conCatalogoWhatsapp = (config) => !!(config.pedidos?.catalogo_whatsapp || config.negocio?.catalogo_whatsapp);
 const linkCatalogo = (config) => (conCatalogoWhatsapp(config) ? `https://wa.me/c/${config.numero_actual}` : null);
 
+// Al cerrar el pedido, ofrecer papas o algo para tomar si no lleva: de fábrica en una hamburguesería; cualquier local lo prende
+// o lo apaga con `negocio.ofrecer_extras`. Se ofrece una sola vez por pedido.
+const ofreceExtras = (config) => config.negocio?.ofrecer_extras ?? config.negocio?.rubro === 'hamburgueseria';
+
+const normal = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const ES_PAPAS = /\b(?:papas?|papitas|fritas)\b/;
+const ES_BEBIDA = /\b(?:coca|cola|sprite|fanta|pepsi|seven|7up|manaos|schweppes|aquarius|levite|agua|gaseosa|bebida|jugo|cerveza|birra|limonada|lata)\b/;
+
+// Lo que le falta al pedido de eso (papas, bebida) y la carta tiene hoy: lo más barato de cada uno, que es lo que se suma sin
+// pensar. "Combo con papas y bebida" ya cuenta como las dos.
+function extrasQueFaltan(items, carta) {
+  const lleva = (re) => items.some((x) => re.test(normal(x.nombre)));
+  const masBarato = (re) => carta.filter((x) => x.hay && !/\bcombo\b/.test(normal(x.nombre)) && re.test(normal(x.nombre)))
+    .sort((a, b) => a.precioCentavos - b.precioCentavos)[0];
+  return [ES_PAPAS, ES_BEBIDA].filter((re) => !lleva(re)).map(masBarato).filter(Boolean);
+}
+
 module.exports = {
   esGastro, formas, zonas, costoEnvio, pausada, cuandoSale, textoHora, pagos, TEXTO_PAGO, textoAlias, linkCatalogo, conCatalogoWhatsapp, FORMAS,
+  ofreceExtras, extrasQueFaltan,
 };

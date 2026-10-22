@@ -23,6 +23,20 @@ Para instalar una rama que todavía no está en `main` (el instalador también t
 curl -fsSL https://raw.githubusercontent.com/neaserisgod/botdemo/<rama>/instalar.sh | RAMA=<rama> bash
 ```
 
+## Hamburguesería (Burger DEMO)
+
+Rubro `hamburgueseria`: saluda como alguien del local (🍔) y, al cerrar el pedido, ofrece papas o una bebida si el pedido no
+las trae (una sola vez, lo más barato de la carta; se apaga con `"negocio": { "ofrecer_extras": false }`). La configuración
+de Burger DEMO (solo delivery a $2.500, viernes a domingo de 19 a 23, pago al recibir o Mercado Pago, alias pendiente) está
+en `ejemplos/burger-demo.json`:
+
+```bash
+cp ejemplos/burger-demo.json config.local.json   # pisa también lo que venga de la app; borralo para volver a la app
+npm run probar
+```
+
+Para sumar la transferencia, completá `pedidos.alias` y `pedidos.titular`.
+
 ## Probar el bot sin otro celular
 
 ```bash

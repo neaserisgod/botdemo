@@ -1,0 +1,32 @@
+{
+  "negocio": {
+    "nombre": "Burger DEMO",
+    "rubro": "hamburgueseria",
+    "direccion": "",
+    "ubicacion_maps": ""
+  },
+
+  "horarios": {
+    "lunes": null,
+    "martes": null,
+    "miercoles": null,
+    "jueves": null,
+    "viernes": { "desde": "19:00", "hasta": "23:00" },
+    "sabado":  { "desde": "19:00", "hasta": "23:00" },
+    "domingo": { "desde": "19:00", "hasta": "23:00" }
+  },
+
+  "pedidos": {
+    "retiro": false,
+    "cadete": true,
+    "reparto": false,
+    "zonas": [{ "nombre": "Envío", "costo": 2500, "demora_min": 0 }],
+    "pago": "a_elegir",
+    "mp": true,
+    "alias": "",
+    "titular": "",
+    "cocina": "normal",
+    "minutos_normal": 30,
+    "minutos_demorada": 60
+  }
+}

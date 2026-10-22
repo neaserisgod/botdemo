@@ -108,6 +108,10 @@ const PRODUCTOS = {
     mila: ['milanesa'], milas: ['milanesa'], milanga: ['milanesa'], empa: ['empanada'], empas: ['empanada'],
     fritas: ['papas'], pure: ['pure'], tallarines: ['tallarin', 'fideos'], ravioles: ['raviol', 'ravioles'], pollito: ['pollo'],
   },
+  hamburgueseria: {
+    fritas: ['papas'], papitas: ['papas'], cheese: ['cheddar', 'cheese'], cheddar: ['cheddar', 'cheese'],
+    panceta: ['bacon', 'panceta'], bacon: ['bacon', 'panceta'],
+  },
 };
 
 const serviciosDe = (rubro) => SERVICIOS[rubro] || {};

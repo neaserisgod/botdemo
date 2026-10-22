@@ -33,7 +33,10 @@ function porDefecto(ctx) {
   if (!gastro.esGastro(ctx.config)) return POR_DEFECTO;
   if (!gastro.formas(ctx.config).some((f) => f.envio)) return POR_DEFECTO;
   const zs = gastro.zonas(ctx.config);
-  const lista = zs.length ? `\n${zs.map((z) => `• ${z.nombre} — ${precioEnvio(gastro.costoEnvio({ envio: true }, z))}`).join('\n')}` : '';
+  const costo = (z) => precioEnvio(gastro.costoEnvio({ envio: true }, z));
+  // Con un solo precio de envío no hay zonas que listar.
+  const lista = zs.length === 1 ? ` El envío sale ${costo(zs[0])}.`
+    : zs.length ? `\n${zs.map((z) => `• ${z.nombre} — ${costo(z)}`).join('\n')}` : '';
   return { envios: `¡Sí, te lo llevamos! 🛵${lista}\nCuando quieras armar el pedido, escribime *pedido*.` };
 }
 
@@ -60,7 +63,7 @@ function procesar(config, clienta, msj) {
   if (msj.carrito) return carritoDelCatalogo(ctx);
   const manejadores = {
     inicio, consultando, armando_pedido, eligiendo_producto, eligiendo_peso, pidiendo_nombre, confirmando_pedido,
-    eligiendo_entrega, pidiendo_direccion, eligiendo_zona, eligiendo_pago,
+    eligiendo_entrega, pidiendo_direccion, eligiendo_zona, eligiendo_pago, ofreciendo_extras,
   };
   return (manejadores[clienta.estado_conv] || inicio)(ctx);
 }
@@ -85,9 +88,12 @@ function ejemploDeLaCarta(ctx, antes = '', despues = '') {
 }
 
 // El saludo: un local gastronómico agradece como lo haría alguien del local; el resto se presenta como asistente.
-const saludo = (ctx) => (gastro.esGastro(ctx.config)
-  ? `¡Hola! 👋 Gracias por escribir a *${ctx.config.negocio.nombre}*.`
-  : `¡Hola! 👋 Soy el asistente de *${ctx.config.negocio.nombre}*.`);
+// Una hamburguesería habla como el que atiende el mostrador.
+function saludo(ctx) {
+  const nombre = ctx.config.negocio.nombre;
+  if (ctx.config.negocio.rubro === 'hamburgueseria') return `¡Hola! ¿Cómo andás? 👋 Te atendemos de *${nombre}* ${ctx.config.textos.emoji}`;
+  return gastro.esGastro(ctx.config) ? `¡Hola! 👋 Gracias por escribir a *${nombre}*.` : `¡Hola! 👋 Soy el asistente de *${nombre}*.`;
+}
 
 const sinCatalogo = (ctx) => responder(ctx, 'inicio',
   'Todavía no tengo cargada la lista de precios 😅 Escribí *4* y te responde una persona.');
@@ -577,6 +583,16 @@ function terminarPedido(ctx) {
 function siguienteGastro(ctx) {
   const c = ctx.config;
   const d = ctx.datos;
+  if (gastro.ofreceExtras(c) && !d.extrasOfrecidos) {
+    d.extrasOfrecidos = true;
+    const extras = gastro.extrasQueFaltan(d.items, catalogo.todos());
+    if (extras.length) {
+      d.extras = extras.map((x) => x.gid);
+      const lista = extras.map((x, i) => `*${i + 1}* — ${nombreConPrecio(x)}`).join('\n');
+      const dos = extras.length > 1 ? `\n*${extras.length + 1}* — Las dos` : '';
+      return responder(ctx, 'ofreciendo_extras', `¿Le sumamos algo? 🍟🥤\n\n${lista}${dos}\n*0* — No, así está bien`);
+    }
+  }
   const formas = gastro.formas(c);
   if (!d.entrega && formas.length === 1) d.entrega = formas[0].clave;
   if (!d.entrega) {
@@ -657,6 +673,30 @@ function eligiendo_pago(ctx) {
   return siguienteGastro(ctx);
 }
 
+// Papas, bebida o las dos (ver `siguienteGastro`): lo elegido se suma de a uno y sigue el pedido. "No" o "0" sigue sin nada.
+function ofreciendo_extras(ctx) {
+  const productos = (ctx.datos.extras || []).map((gid) => catalogo.porGid(gid)).filter(Boolean);
+  delete ctx.datos.extras;
+  const norm = nlu.normalizar(ctx.texto);
+  const n = nlu.esSi(ctx.texto) && productos.length === 1 ? 1 : (nlu.opcionMenu(ctx.texto) || numerosDe(ctx.texto)[0]);
+  // "unas papas", "la coca": por el nombre.
+  const claves = catalogo.palabrasClave(ctx.texto);
+  const porNombre = productos.filter((x) => claves.some((p) => nlu.normalizar(x.nombre).split(' ').includes(p)));
+  let elegidos;
+  if (ctx.texto === '0' || nlu.esNo(ctx.texto) || /^(?:no|nada|asi esta bien|asi nomas)\b/.test(norm)) elegidos = [];
+  else if (/\b(?:las dos|ambas|los dos|todo)\b/.test(norm) || (productos.length > 1 && n === productos.length + 1)) elegidos = productos;
+  else if (n >= 1 && n <= productos.length) elegidos = [productos[n - 1]];
+  else if (porNombre.length) elegidos = porNombre;
+  else {
+    ctx.datos.extras = productos.map((x) => x.gid);
+    return noEntendi(ctx, 'Respondé con el número, o *0* si así está bien.');
+  }
+  const notas = elegidos.map((x) => sumar(ctx, x, { cantidad: 1 }).nota);
+  const r = siguienteGastro(ctx);
+  if (notas.length) r[0].texto = `${notas.join('\n')}\n\n${r[0].texto}`;
+  return r;
+}
+
 // Lo de la entrega que va al pedido y al resumen: la forma, la zona elegida y lo que sale el envío.
 function entregaDe(ctx) {
   const forma = gastro.FORMAS[ctx.datos.entrega] || gastro.FORMAS.RETIRO;
@@ -694,7 +734,8 @@ function resumenGastro(ctx) {
   if (!sale) return cocinaPausada(ctx);
   const total = items.reduce((s, x) => s + subtotal(x), 0) + costo;
   const lineas = items.map((x) => `• ${cuantoDe(x)} — ${catalogo.plata(subtotal(x))}`).join('\n');
-  const envio = forma.envio ? `\n🛵 Envío a ${ctx.datos.direccion} (${ctx.datos.zona}) — ${precioEnvio(costo)}` : '';
+  const zona = gastro.zonas(ctx.config).length > 1 ? ` (${ctx.datos.zona})` : '';
+  const envio = forma.envio ? `\n🛵 Envío a ${ctx.datos.direccion}${zona} — ${precioEnvio(costo)}` : '';
   const donde = forma.envio ? '' : '\n📍 Lo retirás en el local.';
   const cuando = sale.programado
     ? `🕐 Ahora estamos cerrados: lo dejamos programado y está ${forma.envio ? 'llegando' : 'listo'} ${gastro.textoHora(sale.hora)}.`
