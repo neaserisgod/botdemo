@@ -46,6 +46,8 @@ function crearCliente({ sitio, token, fetch = globalThis.fetch }) {
     catalogo: () => pedir('/api/bot/catalogo'),
     mandarCatalogoWa: (items) => pedir('/api/bot/catalogo-wa', { metodo: 'POST', cuerpo: { items } }),
     mandarPedido: (p) => pedir('/api/bot/pedido', { metodo: 'POST', cuerpo: p }),
+    // La IA de Google con la clave del negocio (`/api/bot/ia`): `cuerpo` es el JSON de generateContent como texto; devuelve lo de Google.
+    ia: (modelo, cuerpo) => pedir('/api/bot/ia', { metodo: 'POST', cuerpo: { modelo, cuerpo } }),
     pedidos: (desde) => pedir(`/api/bot/pedidos?desde=${encodeURIComponent(desde)}`),
     reservarTurno: (t) => pedir('/api/bot/turno', { metodo: 'POST', cuerpo: t }),
     cambiarTurno: (c) => pedir('/api/bot/turno/cambio', { metodo: 'POST', cuerpo: c }),

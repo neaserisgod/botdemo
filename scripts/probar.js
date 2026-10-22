@@ -20,6 +20,13 @@ const db = require('../src/db');
 const catalogo = require('../src/core/catalogo');
 const { crearMotor } = require('../src/core/motor');
 const ia = require('../src/ia');
+// Con el equipo vinculado a Nodo Sur, la prueba usa la IA del negocio como el bot de verdad (no toca nada más de Nodo Sur).
+function iaPorNodoSur() {
+  const cuenta = require('../src/nube/cuenta').leer();
+  if (!cuenta) return null;
+  const cliente = require('../src/nube/cliente').crearCliente({ sitio: cuenta.sitio, token: cuenta.token });
+  return (modelo, cuerpo) => cliente.ia(modelo, cuerpo);
+}
 const qNoEntendidos = require('../src/db/consultas/noEntendidos');
 
 // Arma el simulador sobre una configuración ya cargada. Devuelve la app de Express (los tests la usan sin abrir puerto).
@@ -45,7 +52,7 @@ function crearSimulador(config) {
     let salientes;
     try {
       // Con la IA prendida en config.json, la prueba también la usa (es lo que hay que ver al probar).
-      salientes = await motor.procesarConIA({ de, texto }, (contexto) => ia.reescribir(config, contexto));
+      salientes = await motor.procesarConIA({ de, texto }, (contexto) => ia.reescribir(config, contexto, { nube: iaPorNodoSur() }));
     } catch (e) {
       // Un error del bot se muestra en la pantalla (es justo lo que hay que ver al probar).
       return res.json({ respuestas: [{ a: 'error', texto: `El bot falló: ${e.message}` }] });

@@ -3,14 +3,18 @@
 // 1 Coca Cola 500 ml"), y el bot sigue como siempre: los precios, el stock y lo que se anota salen del catálogo, nunca de la IA.
 // Si la IA no está segura, no hay clave, se pasó del máximo del día o tarda, el bot sigue como sin IA (le avisa a una persona).
 //
-// Gemini, con la clave gratuita de Google AI Studio (aistudio.google.com › Get API key). En config.json:
-//   "ia": { "habilitada": true, "clave_gemini": "AIza…" }   (o la variable GEMINI_API_KEY)
+// Gemini, de dos formas:
+//  * con el bot vinculado a Nodo Sur, la clave del negocio que el dueño cargó en la app (Configuración › Asistente IA): el bot le
+//    pide a Nodo Sur (`/api/bot/ia`) y la clave nunca pasa por el celular;
+//  * o una clave propia (la gratuita de aistudio.google.com › Get API key) en config.json, que va directo a Google:
+//      "ia": { "habilitada": true, "clave_gemini": "AIza…" }   (o la variable GEMINI_API_KEY)
 // Opcionales: "modelo" (por defecto gemini-3.5-flash-lite) y "maximo_por_dia" (por defecto 200, para no pasarse del plan gratis).
 const MODELO = 'gemini-3.5-flash-lite';
 const ESPERA_MS = 8000;
 
 const clave = (config) => config.ia?.clave_gemini || process.env.GEMINI_API_KEY || '';
-const disponible = (config) => !!(config.ia?.habilitada && clave(config));
+// `nube`: con el bot vinculado, `(modelo, cuerpo) => respuesta de Google` por Nodo Sur (`cliente.ia`).
+const disponible = (config, nube) => !!(config.ia?.habilitada && (clave(config) || nube));
 
 let dia = '';
 let usadas = 0;
@@ -35,8 +39,8 @@ va después del nombre: "1 Hamburguesa Clásica sin cebolla".
 - Si no estás seguro de qué quiere, o pide algo que la carta no tiene, respondé entendido: false.`;
 
 // Lo que pasa el bot (`comercio.js`, pedirIA): { mensaje, paso, opciones, pedido, carta, negocio }.
-async function reescribir(config, contexto) {
-  if (!disponible(config) || !quedanHoy(config)) return null;
+async function reescribir(config, contexto, { nube } = {}) {
+  if (!disponible(config, nube) || !quedanHoy(config)) return null;
   usadas++;
   const modelo = config.ia.modelo || MODELO;
   const cuerpo = {
@@ -57,17 +61,26 @@ async function reescribir(config, contexto) {
   const corte = new AbortController();
   const reloj = setTimeout(() => corte.abort(), ESPERA_MS);
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': clave(config) },
-      body: JSON.stringify(cuerpo),
-      signal: corte.signal,
-    });
-    if (!r.ok) {
-      console.error(`IA: Gemini contestó ${r.status} ${(await r.text()).slice(0, 200)}`);
-      return null;
+    let datos;
+    if (clave(config)) {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': clave(config) },
+        body: JSON.stringify(cuerpo),
+        signal: corte.signal,
+      });
+      if (!r.ok) {
+        console.error(`IA: Gemini contestó ${r.status} ${(await r.text()).slice(0, 200)}`);
+        return null;
+      }
+      datos = await r.json();
+    } else {
+      // Por Nodo Sur, con la clave del negocio. Se espera lo mismo que directo.
+      datos = await Promise.race([
+        nube(modelo, JSON.stringify(cuerpo)),
+        new Promise((_, no) => corte.signal.addEventListener('abort', () => no(Object.assign(new Error('tardó'), { name: 'AbortError' })))),
+      ]);
     }
-    const datos = await r.json();
     const texto = (datos.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
     const sale = JSON.parse(texto);
     const reescrito = typeof sale.texto === 'string' ? sale.texto.trim().slice(0, 500) : '';

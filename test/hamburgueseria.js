@@ -261,6 +261,31 @@ const textoPara = (salientes, quien) => salientes.filter((s) => s.para === quien
   chequear('sin clave no llama', (await ia.reescribir({ ia: { habilitada: true } }, { mensaje: 'x' })) === null || process.env.GEMINI_API_KEY);
   global.fetch = fetchReal;
 
+  console.log('\n— 8. Por Nodo Sur, con la clave del negocio —');
+  const respuesta = (texto) => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({ entendido: true, texto }) }] } }] });
+  let porNube = null;
+  const nube = async (modelo, cuerpo) => { porNube = { modelo, cuerpo: JSON.parse(cuerpo) }; return respuesta('1 Veggie Burger'); };
+  const sinClave = { ia: { habilitada: true } };
+  chequear('vinculado, sin clave propia: le pide a Nodo Sur (la clave no pasa por el celular)',
+    (await ia.reescribir(sinClave, { mensaje: 'la verde' }, { nube })) === '1 Veggie Burger' && porNube.modelo === 'gemini-3.5-flash-lite'
+    && porNube.cuerpo.contents[0].parts[0].text.includes('la verde'));
+  chequear('si Nodo Sur no puede (sin clave cargada, sin internet), null',
+    (await ia.reescribir(sinClave, { mensaje: 'x' }, { nube: async () => { throw new Error('Nodo Sur contestó 409 (ia_sin_clave)'); } })) === null);
+  chequear('apagada, no pide nada', (await ia.reescribir({ ia: { habilitada: false } }, { mensaje: 'x' }, { nube })) === null);
+
+  console.log('\n— 9. La edición beta de Nodo Gastro (src/edicion.js) —');
+  const antes = process.env.BOT_EDICION;
+  delete process.env.BOT_EDICION;
+  const gastroApp = armar(ejemplo(), { negocio: { rubro: 'rotiseria', nombre: 'Burger DEMO' }, servicios: [], pedidos: { retiro: true } });
+  chequear('el rubro de gastronomía de la app se atiende como hamburguesería', gastroApp.negocio.rubro === 'hamburgueseria' && gastroApp.textos.emoji === '🍔' && validar(gastroApp).length === 0);
+  chequear('con la IA prendida', gastroApp.ia && gastroApp.ia.habilitada === true);
+  chequear('que se puede apagar', armar(ejemplo(), { negocio: { rubro: 'rotiseria' }, servicios: [], ia: { habilitada: false } }).ia.habilitada === false);
+  const almacenApp = armar(ejemplo(), { negocio: { rubro: 'almacen' }, servicios: [] });
+  chequear('un almacén no cambia', almacenApp.negocio.rubro === 'almacen' && !almacenApp.ia);
+  process.env.BOT_EDICION = 'base';
+  chequear('con BOT_EDICION=base, como main', armar(ejemplo(), { negocio: { rubro: 'rotiseria' }, servicios: [] }).negocio.rubro === 'rotiseria');
+  if (antes === undefined) delete process.env.BOT_EDICION; else process.env.BOT_EDICION = antes;
+
   console.log(fallas ? `\n❌ ${fallas} chequeos de hamburguesería fallaron` : '\n✅ Hamburguesería OK');
   process.exit(fallas ? 1 : 0);
 })();

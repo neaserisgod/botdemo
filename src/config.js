@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { PLANTILLAS, plantillaDe, claveDeRubro } = require('./plantillas');
+const edicion = require('./edicion');
 
 const RAIZ = path.join(__dirname, '..');
 
@@ -147,11 +148,16 @@ function recargar(actual) {
 // da cómo habla el bot en una barbería o un salón de uñas, y cada negocio
 // puede pisar cualquier texto en "textos" (ej. "quien_atiende": "Juli").
 function aplicarPlantilla(config) {
-  const plantilla = plantillaDe(config.negocio?.rubro);
+  // Esta edición atiende la gastronomía de Nodo Gastro como hamburguesería, con la IA prendida (src/edicion.js).
+  const rubroBase = claveDeRubro(config.negocio?.rubro);
+  const comoEdicion = rubroBase === 'rotiseria' && edicion.gastronomiaComo();
+  const rubro = comoEdicion || rubroBase;
+  const plantilla = plantillaDe(rubro);
   if (!plantilla) return config; // validar() lo informa
   return {
     ...config,
-    negocio: { ...config.negocio, rubro: claveDeRubro(config.negocio.rubro) },
+    ...(comoEdicion ? { ia: { habilitada: true, ...(config.ia || {}) } } : {}),
+    negocio: { ...config.negocio, rubro },
     // Lo decide el rubro, no config.json: un almacén no da turnos y una barbería no toma pedidos de productos.
     forma: plantilla.forma,
     textos: mezclar(plantilla.textos, config.textos || {}),

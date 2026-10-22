@@ -37,6 +37,14 @@ npm run probar
 
 Para sumar la transferencia, completá `pedidos.alias` y `pedidos.titular`.
 
+### Esta rama: la beta de Nodo Gastro para la hamburguesería
+
+Esta rama es una **edición** (`src/edicion.js`): el rubro de gastronomía que manda Nodo Gastro (`rotiseria`) se atiende como
+hamburguesería, con la IA prendida y la clave de Gemini del negocio (la de Configuración › Asistente IA de la app, por
+`/api/bot/ia` de Nodo Sur: no pasa por el celular). Va adentro de la app solo en una **beta** de Nodo Gastro
+(Nodo-Sur-Pos › Actions › publicar-apk: canal `beta`, edición `gastronomia`, `bot_ref` = esta rama); la estable sigue con el
+bot de `main`. `npm test` corre con `BOT_EDICION=base` (como `main`) y la edición se prueba en `test/hamburgueseria.js`.
+
 ### IA para lo que el bot no entiende (Gemini, gratis)
 
 Cuando las reglas no entienden un mensaje, Gemini lo reescribe como una frase simple ("che tirame la de queso y algo cola" →

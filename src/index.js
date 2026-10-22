@@ -88,11 +88,13 @@ const { crearAdaptador } = require(`./adaptadores/${nombreAdaptador}`);
 
 // Sin Nodo Sur no hay a dónde mandar los pedidos (queda en no hacer nada).
 let mandarPedidosYa = () => {};
+// Con Nodo Sur, la IA usa la clave de Gemini del negocio (`/api/bot/ia`); sin, solo una clave propia en config.json.
+let iaPorNodoSur = null;
 const adaptador = crearAdaptador(config, {
   alRecibir: async (msj) => {
     estadoApp.mensajeRecibido();
     // Lo que el bot no entiende, con la IA prendida (config.ia), se lo reescribe Gemini y se vuelve a procesar (src/ia.js).
-    const salientes = await motor.procesarConIA(msj, (contexto) => ia.reescribir(config, contexto));
+    const salientes = await motor.procesarConIA(msj, (contexto) => ia.reescribir(config, contexto, { nube: iaPorNodoSur }));
     // Un pedido recién confirmado sale a Nodo Sur ya, no en la vuelta de cada 10 minutos: el local lo tiene que ver mientras
     // el cliente espera la respuesta. Si falla, queda en la bandeja para la vuelta siguiente.
     mandarPedidosYa();
@@ -252,6 +254,7 @@ let sincronizador = null;
 if (cuentaNube) {
   const { crearCliente } = require('./nube/cliente');
   const cliente = crearCliente({ sitio: cuentaNube.sitio, token: cuentaNube.token });
+  iaPorNodoSur = (modelo, cuerpo) => cliente.ia(modelo, cuerpo);
   sincronizador = nube.crearSincronizador({
     config, recargarConfig, enviar: enviarAhora,
     cliente,
