@@ -54,6 +54,7 @@ const VACIAS = new Set([
   'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve', 'diez', 'doce', 'par', 'docena', 'media',
   // Charla, no producto: "buen día, ¿cómo va?", "¿alguien me atiende? quiero saber si tienen leche".
   'como', 'va', 'andas', 'estas', 'onda', 'tal', 'alguien', 'atiende', 'atienden', 'hablar', 'persona', 'favor', 'holis',
+  'dale', 'bueno', 'joya', 'entonces',
 ]);
 
 // Verbos de pedir y preguntar, en cualquier forma: "¿consiguen fernet?", "¿traerán leche?", "¿me vendés…?"
@@ -124,6 +125,15 @@ function parecidos(texto, max = 5, sinonimos = {}) {
     .slice(0, max);
 }
 
+// ¿Lo que escribió es justo el nombre de [producto] (sin lo de entre paréntesis)? "bacon cheese" es la Bacon Cheese y no la
+// Bacon Cheese Doble, aunque las dos tengan esas palabras: cada palabra del nombre está en lo pedido, y no sobra ninguna.
+function nombreJusto(texto, producto, sinonimos = {}) {
+  const pedido = palabrasClave(texto);
+  const nombre = palabrasClave(sinDescripcion(producto.nombre));
+  if (!nombre.length || nombre.length !== pedido.length) return false;
+  return nombre.every((n) => pedido.some((q) => formas(q, sinonimos).some((f) => f === n || nlu.distancia1(f, n))));
+}
+
 const porGid = (gid) => items.find((x) => x.gid === gid) || null;
 
 // Lo que se vende pesado (fiambres, quesos, pan): la app de Nodo Sur lo publica como "Jamón cocido (por kg)" con el
@@ -155,6 +165,7 @@ function plata(centavos) {
 }
 
 module.exports = {
+  nombreJusto,
   fijar, todos, cargado, cuando, buscar, parecidos, porGid, palabrasClave, plata, medidas, RE_MEDIDA, gramosPorUnidad, esPesable, nombreCorto,
   precioDeGramos,
 };

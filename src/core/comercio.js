@@ -252,7 +252,9 @@ function precioDePeso(ctx, estado) {
 // ---------- pedido ----------
 // Verbos de pedido de mostrador: "cortame", "¿me podés cortar…?", "preparame", "separame", "dame", "quiero", "me llevo".
 const VERBO_PEDIDO = '(?:me )?(?:podes |podrias |puedes |vas a )?(?:cortar|cortame|cortas|preparar|preparame|preparas|separar|separame|separas|guardar|guardame|guardas|anotar|anotame|anotas|dar|dame|das|mandar|mandame|quiero|quisiera|queria|necesito|me llevo|llevo|encargar|encargo|pedirte|pedirle|pedirles|pedir|pido|traeme|me traes)';
-const SALUDO_INICIAL = /^(?:(?:hola|holis|buenas|buen dia|buenos dias|buenas tardes|buenas noches|che|como va|que tal|disculpa|perdon)[\s,!.¡¿?]*)+/;
+// También las muletillas de arranque ("dale quiero una doble", "bueno, 2 especiales"): sin esto el verbo no quedaba al
+// principio y el pedido se tomaba como charla (El dueño, 2026-10-23, prueba con la carta de Groove).
+const SALUDO_INICIAL = /^(?:(?:hola|holis|holaa+|buenas|buen dia|buenos dias|buenas tardes|buenas noches|che|como va|que tal|disculpa|perdon|dale|bueno|buenisimo|ok|okey|oka|joya|perfecto|genial|barbaro|entonces|si)[\s,!.¡¿?]*)+/;
 const RELLENO_FINAL = /[\s,.!?¿¡]*(?:(?:porfa|por favor|gracias|plis|please|dale)[\s,.!?¿¡]*)*$/;
 
 // "Quería una doble. Para De los Satélites 12963", "2 empanadas, dirección Mitre 150, timbre B": la dirección que viene con
@@ -546,6 +548,11 @@ function leerLinea(ctx, linea) {
     const parecidos = catalogo.parecidos(busqueda, 5, sin);
     return parecidos.length ? { tipo: 'parecidos', busqueda, resultados: parecidos, cantidad } : { tipo: 'no_encontre', busqueda };
   }
+  // "1 bacon cheese" con Bacon Cheese y Bacon Cheese Doble en la carta: el que se llama justo así, sin preguntar.
+  if (resultados.length > 1) {
+    const justos = resultados.filter((x) => catalogo.nombreJusto(busqueda, x, sin));
+    if (justos.length === 1) resultados = justos;
+  }
   if (resultados.length > 1) return { tipo: 'elegir', resultados, cantidad, gramos: gramosDichos };
   const producto = resultados[0];
   if (catalogo.esPesable(producto)) return gramosDichos ? { tipo: 'anotar', producto, gramos: gramosDichos } : { tipo: 'pesar', producto };
@@ -573,6 +580,9 @@ function armando_pedido(ctx) {
   // "Para el sábado": el día que lo quiere.
   const diaDicho = anotarDia(ctx);
   if (diaDicho) return responder(ctx, 'armando_pedido', `${diaDicho}\n¿Algo más? Si no, escribí *listo*.`);
+  // "Una sin cebolla" después de anotar: aclaración de lo último.
+  const suelta = aclaracionSuelta(ctx, ctx.msj.texto || '');
+  if (suelta) return responder(ctx, 'armando_pedido', `${suelta}\n¿Algo más? Si no, escribí *listo*.`);
   // "Lo quiero para las 22": queda como aclaración del pedido.
   if (anotarHora(ctx)) return responder(ctx, 'armando_pedido', `🕐 Anotado: lo querés para las ${ctx.datos.hora}.\n¿Algo más? Si no, escribí *listo*.`);
   // Mandó la ubicación mientras arma: es para que se lo lleven ahí.
@@ -680,6 +690,20 @@ function leerConAclaracion(ctx, linea) {
   return { ...base, nota: m[2].trim().slice(0, 120) };
 }
 
+// "Una sin cebolla", "las dos bien cocidas", "sin cheddar": una aclaración sin producto va con lo último que anotó. Devuelve
+// cómo se anotó, o null si no es eso (o no hay nada anotado todavía).
+const ACLARACION_SUELTA = /^(?:(?:una|uno|1|una de las|uno de los|las dos|los dos|ambas|ambos|todas|todos)\s+)?(?:pero\s+)?(?:sin|bien|poco|poca|muy|jugos[ao]s?|a punto|vuelta y vuelta|aparte|separad[ao]s?|cortad[ao]s?|con poc[ao]|con much[ao])\b/i;
+function aclaracionSuelta(ctx, linea) {
+  const items = ctx.datos.items || [];
+  const ultimo = items[items.length - 1];
+  const t = String(linea).trim();
+  if (!ultimo || !ACLARACION_SUELTA.test(nlu.normalizar(t))) return null;
+  if (!['no_encontre', 'parecidos', 'nada'].includes(leerLinea(ctx, t).tipo)) return null; // "Agua sin gas" es un producto
+  const nota = `${sinDescripcion(ultimo.nombre)}: ${t.slice(0, 120)}`;
+  ctx.datos.aclaraciones = [...(ctx.datos.aclaraciones || []), nota].slice(-10);
+  return `📝 ${nota}`;
+}
+
 // "Mejor que sean 3", "que sean 2", "ponele 4", "no, una sola", "solo 1": cambia la cantidad del último renglón.
 function cambiarCantidad(ctx, norm) {
   const m = norm.match(/^(?:no\s+)?(?:mejor\s+)?(?:que sean|que sea|ponele|pone|poneme|cambialo a|cambia a|dejalo en|solo|solamente|son)\s+(.+)$/)
@@ -777,6 +801,9 @@ function anotarVarias(ctx, lineas, notas) {
   const resto = [...lineas];
   while (resto.length) {
     const linea = resto.shift();
+    // "2 especiales, una sin cebolla": la aclaración suelta es de lo anterior, no un producto.
+    const suelta = aclaracionSuelta(ctx, linea);
+    if (suelta) { notas.push(suelta); continue; }
     const r = leerConAclaracion(ctx, linea);
     if (r.tipo === 'nada') continue;
     if (r.tipo === 'cantidad_mala') notas.push(`❌ "${linea}": esa cantidad no la puedo anotar`);
