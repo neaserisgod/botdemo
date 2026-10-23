@@ -20,6 +20,7 @@ const gastro = require('./gastro');
 const faq = require('./flujos/faq');
 const nlu = require('./nlu');
 const numeros = require('./diccionario/numeros');
+const fechas = require('./fechas');
 const rubros = require('./diccionario/rubros');
 const { responder, noEntendi, anotarNoEntendido, derivarAHumano, responderTema, numerosDe, apuro, enojo, menuVisto } = require('./maquina');
 const { aQuienAtiende } = require('../plantillas');
@@ -83,7 +84,7 @@ function procesar(config, clienta, msj) {
   if (msj.carrito) return carritoDelCatalogo(ctx);
   const manejadores = {
     inicio, consultando, armando_pedido, eligiendo_producto, eligiendo_peso, pidiendo_nombre, confirmando_pedido,
-    eligiendo_entrega, pidiendo_direccion, eligiendo_zona, eligiendo_pago,
+    eligiendo_entrega, pidiendo_direccion, eligiendo_zona, eligiendo_pago, eligiendo_dia,
   };
   return (manejadores[clienta.estado_conv] || inicio)(ctx);
 }
@@ -104,13 +105,22 @@ function menu(ctx, saludo) {
 function ejemploDeLaCarta(ctx, antes = '', despues = '') {
   if (!catalogo.cargado()) return '';
   const hay = catalogo.todos().filter((x) => x.hay).sort((a, b) => a.nombre.length - b.nombre.length);
-  return hay.length ? `${antes}*1 ${hay[0].nombre.toLowerCase()}*${despues}` : '';
+  return hay.length ? `${antes}*1 ${sinDescripcion(hay[0].nombre).toLowerCase()}*${despues}` : '';
 }
 
 // El saludo: un local gastronómico agradece como lo haría alguien del local; el resto se presenta como asistente.
 const saludo = (ctx) => (gastro.esGastro(ctx.config)
-  ? `¡Hola! 👋 Gracias por escribir a *${ctx.config.negocio.nombre}*.`
+  ? `¡Hola! 👋 Gracias por escribir a *${ctx.config.negocio.nombre}*.${avisoDeDias(ctx)}`
   : `¡Hola! 👋 Soy el asistente de *${ctx.config.negocio.nombre}*.`);
+
+// Hoy no hay entregas (un local que entrega solo el finde): se dice de entrada para cuándo toma pedidos.
+function avisoDeDias(ctx) {
+  const dias = gastro.proximosDias(ctx.config, 3);
+  if (!dias.length || dias[0].ymd === fechas.hoyYmd()) return '';
+  const nombres = dias.map((x) => fechas.diaLindo(x.ymd).split(' ')[0]);
+  const lista = nombres.length > 1 ? `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}` : nombres[0];
+  return `\n🗓️ Hoy no hacemos entregas, pero ya tomamos pedidos para el ${lista.toLowerCase()} 🙌`;
+}
 
 const sinCatalogo = (ctx) => responder(ctx, 'inicio',
   'Todavía no tengo cargada la lista de precios 😅 Escribí *4* y te responde una persona.');
@@ -560,6 +570,9 @@ function armando_pedido(ctx) {
   // "Mejor que sean 3", "no, una sola": la cantidad de lo último que anotó.
   const otraCantidad = cambiarCantidad(ctx, norm);
   if (otraCantidad) return otraCantidad;
+  // "Para el sábado": el día que lo quiere.
+  const diaDicho = anotarDia(ctx);
+  if (diaDicho) return responder(ctx, 'armando_pedido', `${diaDicho}\n¿Algo más? Si no, escribí *listo*.`);
   // "Lo quiero para las 22": queda como aclaración del pedido.
   if (anotarHora(ctx)) return responder(ctx, 'armando_pedido', `🕐 Anotado: lo querés para las ${ctx.datos.hora}.\n¿Algo más? Si no, escribí *listo*.`);
   // Mandó la ubicación mientras arma: es para que se lo lleven ahí.
@@ -883,7 +896,9 @@ function eligiendo_peso(ctx) {
 const nombreConPrecio = (x) => (catalogo.esPesable(x)
   ? `${catalogo.nombreCorto(x)} — ${catalogo.plata(x.precioCentavos)} el kilo`
   : `${x.nombre} — ${catalogo.plata(x.precioCentavos)}`);
-const cuantoDe = (x) => (x.gramos ? `${numeros.textoPeso(x.gramos)} de ${catalogo.nombreCorto(x)}` : `${x.cantidad} × ${x.nombre}`);
+// El nombre sin lo de entre paréntesis ("Especial (doble medallón, …)" → "Especial"): el renglón del pedido se lee de un vistazo.
+const sinDescripcion = (nombre) => String(nombre).replace(/\s*\((?!\s*por kg)[^)]*\)\s*$/i, '').trim() || String(nombre);
+const cuantoDe = (x) => (x.gramos ? `${numeros.textoPeso(x.gramos)} de ${catalogo.nombreCorto(x)}` : `${x.cantidad} × ${sinDescripcion(x.nombre)}`);
 const subtotal = (x) => (x.gramos ? catalogo.precioDeGramos(x.precioCentavos, x.gramos) : x.precioCentavos * x.cantidad);
 
 // Suma el producto al pedido (si hay stock y entra): { cantidad } por unidad o { gramos } si se pesa. Devuelve si se
@@ -893,7 +908,7 @@ function sumar(ctx, producto, { cantidad, gramos, nota }) {
   const items = ctx.datos.items || [];
   const nuevo = gramos
     ? { gid: producto.gid, nombre: producto.nombre, gramos, precioCentavos: producto.precioCentavos }
-    : { gid: producto.gid, nombre: producto.nombre, cantidad, precioCentavos: producto.precioCentavos };
+    : { gid: producto.gid, nombre: sinDescripcion(producto.nombre), cantidad, precioCentavos: producto.precioCentavos };
   const ya = items.find((x) => x.gid === producto.gid && !!x.gramos === !!gramos);
   if (ya && gramos) ya.gramos = Math.min(50000, ya.gramos + gramos);
   else if (ya) ya.cantidad = Math.min(999, ya.cantidad + cantidad);
@@ -903,7 +918,7 @@ function sumar(ctx, producto, { cantidad, gramos, nota }) {
   }
   ctx.datos.items = items;
   // La aclaración ("sin cebolla") viaja en la nota del pedido, que la app muestra a la cocina.
-  if (nota) ctx.datos.aclaraciones = [...(ctx.datos.aclaraciones || []), `${producto.nombre}: ${nota}`].slice(-10);
+  if (nota) ctx.datos.aclaraciones = [...(ctx.datos.aclaraciones || []), `${sinDescripcion(producto.nombre)}: ${nota}`].slice(-10);
   return { ok: true, nota: `✍️ ${cuantoDe(nuevo)} — ${catalogo.plata(subtotal(nuevo))}${gramos ? ' aprox. ⚖️' : ''}${nota ? ` (${nota})` : ''}` };
 }
 
@@ -953,6 +968,16 @@ function siguienteGastro(ctx) {
   if (!d.pago) {
     const lista = pagos.map((p, i) => `*${i + 1}* — ${gastro.TEXTO_PAGO[p]}`).join('\n');
     return responder(ctx, 'eligiendo_pago', `¿Cómo pagás?\n\n${lista}`);
+  }
+  // Hoy no hay entregas: que elija el día (El dueño, 2026-10-23), en vez de programarlo solo para el primero que abre.
+  if (!d.dia) {
+    const zona = forma.envio ? zs.find((z) => z.nombre === d.zona) || null : null;
+    const ahora = gastro.cuandoSale(c, forma, zona);
+    const dias = gastro.proximosDias(c, 3);
+    if (ahora && ahora.programado && dias.length > 1) {
+      const lista = dias.map((x, i) => `*${i + 1}* — ${fechas.diaLindo(x.ymd)}`).join('\n');
+      return responder(ctx, 'eligiendo_dia', `🗓️ Hoy no hacemos ${forma.envio ? 'envíos' : 'entregas'}. ¿Para qué día lo querés?\n\n${lista}`);
+    }
   }
   return resumen(ctx);
 }
@@ -1049,6 +1074,35 @@ function eligiendo_pago(ctx) {
   return siguienteGastro(ctx);
 }
 
+// "El sábado", "2", "viernes": el día que eligió de la lista.
+function eligiendo_dia(ctx) {
+  const dias = gastro.proximosDias(ctx.config, 3);
+  const r = elegir(ctx, dias.length, (t) => dias.findIndex((x) => t.includes(fechas.nombreDia(x.ymd)) || (t.includes('manana') && x.ymd === manianaYmd())));
+  if (r.cancelar) return cancelar(ctx);
+  if (r.i === undefined) return noEntendi(ctx, 'Respondé con el número del día, o *0* para cancelar.');
+  ctx.datos.dia = dias[r.i].ymd;
+  return siguienteGastro(ctx);
+}
+const manianaYmd = () => { const a = fechas.ahora(); return fechas.aTexto(new Date(a.getFullYear(), a.getMonth(), a.getDate() + 1)).slice(0, 10); };
+
+// "Para el sábado", "lo quiero el viernes": el día, si es uno de los que entregan. Devuelve el texto de lo anotado, o null.
+function anotarDia(ctx) {
+  if (!gastro.esGastro(ctx.config)) return null;
+  const t = nlu.normalizar(ctx.msj.texto || '');
+  const m = t.match(/\b(?:para|el|lo quiero|seria) (?:el )?(lunes|martes|miercoles|jueves|viernes|sabado|domingo|manana)\b/);
+  if (!m) return null;
+  const dia = gastro.proximosDias(ctx.config, 7).find((x) => (m[1] === 'manana' ? x.ymd === manianaYmd() : fechas.nombreDia(x.ymd) === m[1]));
+  if (!dia) return `😕 Ese día no hacemos ${gastro.formas(ctx.config).some((f) => f.envio) ? 'envíos' : 'entregas'}.`;
+  ctx.datos.dia = dia.ymd;
+  return `🗓️ Anotado: para el ${fechas.diaLindo(dia.ymd)}.`;
+}
+
+// Cuándo sale este pedido: el día que eligió, o lo primero que se pueda.
+function saleDelPedido(ctx, forma, zona) {
+  if (ctx.datos.dia) return gastro.saleElDia(ctx.config, forma, zona, ctx.datos.dia) || gastro.cuandoSale(ctx.config, forma, zona);
+  return gastro.cuandoSale(ctx.config, forma, zona);
+}
+
 // Lo de la entrega que va al pedido y al resumen: la forma, la zona elegida y lo que sale el envío.
 function entregaDe(ctx) {
   const forma = gastro.FORMAS[ctx.datos.entrega] || gastro.FORMAS.RETIRO;
@@ -1083,20 +1137,22 @@ function resumen(ctx) {
 function resumenGastro(ctx) {
   const items = ctx.datos.items;
   const { forma, costo } = entregaDe(ctx);
-  const sale = gastro.cuandoSale(ctx.config, forma, entregaDe(ctx).zona);
+  const sale = saleDelPedido(ctx, forma, entregaDe(ctx).zona);
   if (!sale) return cocinaPausada(ctx);
   const total = items.reduce((s, x) => s + subtotal(x), 0) + costo;
   const lineas = items.map((x) => `• ${cuantoDe(x)} — ${catalogo.plata(subtotal(x))}`).join('\n');
   const envio = forma.envio ? `\n🛵 Envío a ${ctx.datos.direccion} (${ctx.datos.zona}) — ${precioEnvio(costo)}` : '';
   const donde = forma.envio ? '' : '\n📍 Lo retirás en el local.';
-  const cuando = sale.programado
+  const cuando = sale.programado && ctx.datos.dia
+    ? `🗓️ ${forma.envio ? 'Llega' : 'Está listo'} ${gastro.textoHora(sale.hora)} aprox.`
+    : sale.programado
     ? `🕐 Ahora estamos cerrados: lo dejamos programado y está ${forma.envio ? 'llegando' : 'listo'} ${gastro.textoHora(sale.hora)}.`
     : `🕐 ${forma.envio ? 'Llega' : 'Está listo'} ${gastro.textoHora(sale.hora)} aprox.`;
   const pago = { alias: '\n💳 Pagás ahora por transferencia.', mp: '\n💳 Pagás ahora con Mercado Pago (te paso el link).' }[ctx.datos.pago]
     || `\n💵 Pagás al recibir${ctx.datos.vuelto ? ` (con ${catalogo.plata(ctx.datos.vuelto)})` : ''}.`;
   const aclaraciones = notaDelPedido(ctx) ? `\n📝 ${notaDelPedido(ctx)}` : '';
   return responder(ctx, 'confirmando_pedido',
-    `${ctx.clienta.nombre}, así quedó tu pedido:\n\n${lineas}${envio}${aclaraciones}\n\n💰 Total: ${catalogo.plata(total)}${donde}\n${cuando}${pago}\n\n¿Te lo confirmo?\n*1* — Sí, confirmar\n*2* — Quiero agregar algo\n*0* — Cancelar\n(También podés escribirme qué cambiar: *sacá la coca*, *sumá unas papas*)`);
+    `${ctx.clienta.nombre}, así quedó tu pedido:\n\n${lineas}${envio}${aclaraciones}\n\n💰 Total: ${catalogo.plata(total)}${donde}\n${cuando}${pago}\n\n¿Te lo confirmo?\n*1* — Sí, confirmar\n*2* — Quiero agregar algo\n*0* — Cancelar\n(También podés escribirme qué cambiar, por ejemplo *sacá ${items[0] && !items[0].gramos ? `la ${sinDescripcion(items[0].nombre).toLowerCase()}` : 'eso'}*)`);
 }
 
 // Lo que la cocina tiene que saber y no es un producto: aclaraciones, la hora que pidió y con cuánto paga. Viaja como la nota
@@ -1113,7 +1169,7 @@ function notaDelPedido(ctx) {
 // El pedido de un local gastronómico: la hora se vuelve a sacar al confirmar (la cocina pudo cambiar mientras tanto).
 function confirmarGastro(ctx) {
   const { forma, zona, costo } = entregaDe(ctx);
-  const sale = gastro.cuandoSale(ctx.config, forma, zona);
+  const sale = saleDelPedido(ctx, forma, zona);
   if (!sale) return cocinaPausada(ctx);
   const items = ctx.datos.items;
   qPedidos.crear(ctx.clienta.id, {
@@ -1161,6 +1217,7 @@ function cambiarEnElResumen(ctx, norm) {
   const quitar = norm.match(QUITAR);
   let r = null;
   if (quitar) r = quitarDelPedido(ctx, norm.slice(quitar[0].length));
+  else if (anotarDia(ctx)) r = [{ texto: anotarDia(ctx) }];
   else if (anotarHora(ctx)) r = [{ texto: `🕐 Anotado: lo querés para las ${ctx.datos.hora}.` }];
   else if (/\b(?:llevo|pago con|abono con|tengo)\b/.test(norm) && (anotarVuelto(ctx), ctx.datos.vuelto)) r = [{ texto: `💵 Anotado: pagás con ${catalogo.plata(ctx.datos.vuelto)}.` }];
   else r = cambiarCantidad(ctx, norm);

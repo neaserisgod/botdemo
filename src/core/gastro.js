@@ -78,6 +78,33 @@ function cuandoSale(config, forma, zona, ahora = fechas.ahora()) {
   return null;
 }
 
+// Los próximos días con horario (hoy también, si todavía no cerró), con la hora desde la que se puede entregar: para que el
+// cliente elija para cuándo lo quiere cuando hoy no hay entregas (El dueño, 2026-10-23: "tomamos pedidos para el finde, que
+// elija qué día"). Vacío si el horario no tiene días abiertos.
+function proximosDias(config, n = 3, ahora = fechas.ahora()) {
+  const horarios = config.horarios || {};
+  const dias = [];
+  for (let d = 0; d < 8 && dias.length < n; d++) {
+    const dia = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate() + d);
+    const franja = horarios[fechas.DIAS[dia.getDay()]];
+    if (!franja || !franja.desde || !franja.hasta) continue;
+    const abre = new Date(dia.getTime() + aMinutos(franja.desde) * 60000);
+    const cierra = new Date(dia.getTime() + aMinutos(franja.hasta) * 60000);
+    if (cierra <= ahora) continue;
+    dias.push({ ymd: fechas.aTexto(dia).slice(0, 10), abre: abre > ahora ? abre : ahora });
+  }
+  return dias;
+}
+
+// Cuándo sale si lo quiere para el día [ymd] (uno de `proximosDias`): desde que abre ese día. Null si ese día no hay horario
+// o la cocina está pausada.
+function saleElDia(config, forma, zona, ymd, ahora = fechas.ahora()) {
+  const dia = proximosDias(config, 8, ahora).find((x) => x.ymd === ymd);
+  if (!dia) return null;
+  const hora = horaEstimada(config, dia.abre, forma, zona);
+  return hora && { hora, programado: dia.abre > ahora };
+}
+
 // "a las 21:30", "mañana a las 20:30", "el Sábado 18/10 a las 20:30".
 function textoHora(hora, ahora = fechas.ahora()) {
   const t = fechas.aTexto(hora);
@@ -112,5 +139,5 @@ const conCatalogoWhatsapp = (config) => !!(config.pedidos?.catalogo_whatsapp || 
 const linkCatalogo = (config) => (conCatalogoWhatsapp(config) ? `https://wa.me/c/${config.numero_actual}` : null);
 
 module.exports = {
-  esGastro, formas, zonas, costoEnvio, pausada, cuandoSale, minutosDePreparacion, textoHora, pagos, TEXTO_PAGO, textoAlias, linkCatalogo, conCatalogoWhatsapp, FORMAS,
+  esGastro, formas, zonas, costoEnvio, pausada, cuandoSale, minutosDePreparacion, proximosDias, saleElDia, textoHora, pagos, TEXTO_PAGO, textoAlias, linkCatalogo, conCatalogoWhatsapp, FORMAS,
 };
