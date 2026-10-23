@@ -378,6 +378,93 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   r15 = await decir(C21, 'listo');
   chequear('y la dirección que dijo queda', !textoPara(r15, C21).includes('¿A qué dirección') && !textoPara(r15, C21).includes('¿Cómo lo querés'));
 
+  console.log('\n— 16. Blindaje de los flujos del cliente (El dueño, 2026-10-23: "pensá todos los flujos") —');
+  catalogo.fijar([
+    { gid: 'b-hd', nombre: 'Hamburguesa Doble', precioCentavos: 1500000, hay: true },
+    { gid: 'b-cbd', nombre: 'Combo Bacon Cheese Doble', precioCentavos: 1650000, hay: true },
+    { gid: 'b-hs', nombre: 'Hamburguesa Simple', precioCentavos: 1100000, hay: true },
+    { gid: 'b-coca', nombre: 'Coca-Cola 500 ml', precioCentavos: 250000, hay: true },
+    { gid: 'b-par', nombre: 'Combo pareja (2 dobles + papas + 2 cocas)', precioCentavos: 3800000, hay: true },
+    { gid: 'b-veg', nombre: 'Hamburguesa Veggie', precioCentavos: 1200000, hay: true },
+  ]);
+  const B = (n) => `54929443000${String(n).padStart(2, '0')}`;
+  const ultimo = () => qPedidos.porEnviar().pop();
+  let b;
+  // Lo de entre paréntesis describe: "2 dobles" no es el combo pareja.
+  decir(B(1), 'pedido');
+  b = decir(B(1), '2 dobles');
+  chequear('"2 dobles" no anota el combo que los describe entre paréntesis', textoPara(b, B(1)).includes('¿Cuál de estos?') && !textoPara(b, B(1)).includes('Combo pareja'));
+  // Elegir por el nombre; "listo" no es no entender.
+  b = decir(B(1), 'listo');
+  chequear('"listo" mientras elige: vuelve a preguntar, sin pasarlo a una persona', textoPara(b, B(1)).includes('Antes decime cuál') && b.every((x) => x.para === B(1)));
+  b = decir(B(1), 'la hamburguesa');
+  chequear('elige por el nombre ("la hamburguesa")', textoPara(b, B(1)).includes('2 × Hamburguesa Doble'));
+  // Un renglón nuevo mientras elige no es "la opción 1".
+  b = decir(B(1), '1 doble sin cebolla');
+  b = decir(B(1), '1 hamburguesa simple');
+  chequear('"1 hamburguesa simple" mientras elige no toma la opción 1', textoPara(b, B(1)).includes('1 × Hamburguesa Simple') && textoPara(b, B(1)).includes('quedó sin anotar'));
+  decir(B(1), 'cancelar');
+
+  // Aclaraciones, vuelto, hora y cambios en el resumen: todo llega a la nota del pedido.
+  decir(B(2), 'pedido');
+  b = decir(B(2), '1 hamburguesa doble sin cebolla');
+  chequear('"sin cebolla" es una aclaración, no parte del nombre', textoPara(b, B(2)).includes('1 × Hamburguesa Doble') && textoPara(b, B(2)).includes('(sin cebolla)'));
+  b = decir(B(2), 'tienen vegetariana?');
+  chequear('"vegetariana" encuentra la veggie y no la anota', textoPara(b, B(2)).includes('Hamburguesa Veggie') && textoPara(b, B(2)).includes('¿Cuál de estos?'));
+  decir(B(2), '0');
+  b = decir(B(2), 'retiro');
+  chequear('"retiro" mientras arma queda elegido', textoPara(b, B(2)).includes('lo retirás en el local'));
+  b = decir(B(2), 'que sean 2');
+  chequear('"que sean 2" cambia la cantidad', textoPara(b, B(2)).includes('2 × Hamburguesa Doble'));
+  b = decir(B(2), 'listo');
+  chequear('con el retiro ya dicho, no lo vuelve a preguntar', !textoPara(b, B(2)).includes('¿Cómo lo querés'));
+  decir(B(2), 'soy Vero');
+  b = decir(B(2), 'efectivo, llevo 50 mil');
+  chequear('el nombre sin "soy" y el vuelto en el resumen', textoPara(b, B(2)).includes('Vero, así quedó') && textoPara(b, B(2)).includes('Paga con $50.000'));
+  b = decir(B(2), 'sumale una coca');
+  chequear('en el resumen, "sumale una coca" la agrega y vuelve a mostrarlo', textoPara(b, B(2)).includes('1 × Coca-Cola 500 ml') && textoPara(b, B(2)).includes('así quedó'));
+  b = decir(B(2), 'para las 22');
+  chequear('"para las 22" queda anotado', textoPara(b, B(2)).includes('para las 22:00'));
+  b = decir(B(2), 'ok');
+  chequear('"ok" confirma', textoPara(b, B(2)).includes('Ya le pasé tu pedido'));
+  const pv = ultimo();
+  chequear('la nota del pedido lleva aclaración, hora y vuelto', pv.datos.nota.includes('Hamburguesa Doble: sin cebolla') && pv.datos.nota.includes('para las 22:00') && pv.datos.nota.includes('Paga con $50.000'));
+
+  // Después de confirmar: cuánto falta, cancelar (lo resuelve el local) y repetir.
+  b = decir(B(2), 'cuanto falta?');
+  chequear('"¿cuánto falta?" dice cómo va el pedido', textoPara(b, B(2)).includes('Tu pedido'));
+  b = decir(B(2), 'lo mismo que la otra vez');
+  chequear('"lo mismo que la otra vez" arma el último pedido', textoPara(b, B(2)).includes('2 × Hamburguesa Doble') && textoPara(b, B(2)).includes('1 × Coca-Cola'));
+  decir(B(2), 'cancelar');
+  b = decir(B(2), 'quiero cancelar el pedido');
+  chequear('cancelar un pedido ya mandado lo pasa al local', textoPara(b, B(2)).includes('Le aviso al local para cancelarlo') && b.some((x) => x.para === D && x.texto.includes('CANCELAR')));
+
+  // Pagos, ubicación y comprobante.
+  b = decir(B(3), 'aceptan transferencia?');
+  chequear('las formas de pago las contesta el bot', textoPara(b, B(3)).includes('alias *la.rotiseria*') && !b.some((x) => x.para === D));
+  decir(B(3), 'pedido');
+  decir(B(3), '1 hamburguesa simple');
+  decir(B(3), 'listo');
+  decir(B(3), 'que me lo traigan');
+  b = motor.procesarMensaje({ de: B(3), texto: '', ubicacion: { lat: -41.13, lng: -71.3 } });
+  chequear('la ubicación compartida sirve de dirección', textoPara(b, B(3)).includes('¿En qué zona'));
+  decir(B(3), '1');
+  decir(B(3), 'Leo');
+  decir(B(3), 'transfiero');
+  decir(B(3), 'si');
+  chequear('y va al pedido como link del mapa', ultimo().datos.entrega.direccion.includes('maps.google.com/?q=-41.13,-71.3'));
+  b = motor.procesarMensaje({ de: B(3), texto: '', rutaImagen: '/tmp/comprobante.jpg' });
+  chequear('el comprobante le llega al local con la foto', textoPara(b, B(3)).includes('Le paso el comprobante') && b.some((x) => x.para === D && x.imagenRuta === '/tmp/comprobante.jpg'));
+  decir(B(4), 'pedido');
+  decir(B(4), '1 hamburguesa simple');
+  decir(B(4), 'listo');
+  decir(B(4), 'que me lo traigan');
+  b = decir(B(4), 'Mitre');
+  chequear('una dirección sin altura: la pide una vez', textoPara(b, B(4)).includes('¿Me pasás la altura?'));
+  b = decir(B(4), 'no se la direccion');
+  chequear('"no sé la dirección" no se toma como dirección', textoPara(b, B(4)).includes('ubicación'));
+  decir(B(4), '0');
+
   console.log(fallas ? `\n❌ ${fallas} chequeos de gastronomía fallaron` : '\n✅ Gastronomía OK');
   process.exit(fallas ? 1 : 0);
 })();

@@ -107,6 +107,10 @@ const PRODUCTOS = {
   rotiseria: {
     mila: ['milanesa'], milas: ['milanesa'], milanga: ['milanesa'], empa: ['empanada'], empas: ['empanada'],
     fritas: ['papas'], pure: ['pure'], tallarines: ['tallarin', 'fideos'], ravioles: ['raviol', 'ravioles'], pollito: ['pollo'],
+    // Hamburgueserías (El dueño, 2026-10-23, Groove Burgers): cómo se piden de verdad.
+    vegetariana: ['veggie', 'vegana', 'vegetariana'], vegetariano: ['veggie', 'vegano', 'vegetariano'], vegana: ['veggie', 'vegana'],
+    hamburguesa: ['burger', 'hamburguesa'], burga: ['burger', 'hamburguesa'], hambur: ['hamburguesa', 'burger'], burger: ['burger', 'hamburguesa'],
+    birra: ['cerveza'], gaseosa: ['coca', 'sprite', 'fanta', 'gaseosa'],
   },
 };
 

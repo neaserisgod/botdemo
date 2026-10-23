@@ -23,8 +23,12 @@ function medidas(texto) {
 let vocabulario = new Set();
 let corregir = () => null;
 
+// Lo que va entre paréntesis describe, no nombra: "Combo pareja (2 dobles + papas + 2 cocas)" no es lo que pide quien escribe
+// "2 dobles" o "una coca" (El dueño, 2026-10-23: anotaba el combo de $38.000). "(por kg)" sí cuenta: marca lo que se pesa.
+const sinDescripcion = (nombre) => String(nombre || '').replace(/\((?!\s*por kg\s*\))[^)]*\)/gi, ' ');
+
 function fijar(nuevos, cuando = null) {
-  items = (nuevos || []).map((x) => ({ ...x, _norm: nlu.normalizar(medidas(x.nombre)) }));
+  items = (nuevos || []).map((x) => ({ ...x, _norm: nlu.normalizar(medidas(sinDescripcion(x.nombre))) }));
   actualizado = cuando;
   vocabulario = new Set(items.flatMap((x) => x._norm.split(' ')));
   corregir = crearCorrector(vocabulario);
