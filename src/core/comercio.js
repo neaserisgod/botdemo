@@ -264,7 +264,9 @@ function pedidoEnElMensaje(ctx) {
     lineas = lineas.flatMap((l) => l.split(/\s+y\s+/)).filter(Boolean);
     leidas = lineas.map((l) => ({ l, r: leerLinea(ctx, l) }));
   }
-  const productos = leidas.filter(esProducto);
+  // "Quería una doble con papas" sin un plato que se llame así: con el verbo es un pedido igual, y se pregunta cuál de los
+  // parecidos (los dobles) en vez de mandar el menú.
+  const productos = leidas.filter((x) => esProducto(x) || (verbo && x.r.tipo === 'parecidos'));
   const conCantidad = leidas.some(({ l }) => numeros.pesoInicial(l) || numeros.cantidadInicial(l));
   if (!productos.length || !(verbo || conCantidad)) return null;
   if (gastro.pausada(ctx.config)) return cocinaPausada(ctx);
