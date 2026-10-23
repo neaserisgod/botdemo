@@ -353,7 +353,9 @@ const ESTADO_DEL_PEDIDO = {
 function despuesDelPedido(ctx, norm) {
   const enCurso = pedidoEnCurso(ctx);
   if (enCurso) {
-    const hora = enCurso.datos.horaEstimada ? ` Calculamos ${enCurso.datos.entrega && enCurso.datos.entrega.forma !== 'RETIRO' ? 'que llega' : 'que está listo'} ${gastro.textoHora(new Date(enCurso.datos.horaEstimada))} aprox.` : '';
+    const hora = enCurso.datos.programado && enCurso.datos.horaEstimada
+      ? ` Sale ${textoDia(new Date(enCurso.datos.horaEstimada))}.`
+      : ' Te aviso por acá apenas salga.';
     if (/\b(?:cancel\w*|anul\w*|no lo quiero|ya no quiero|me arrepenti)\b/.test(norm)) {
       return derivarAHumano(ctx, `Quiere CANCELAR su pedido: "${ctx.msj.texto}"`, 'Le aviso al local para cancelarlo 🙏 Te confirman por acá en un ratito.');
     }
@@ -647,8 +649,8 @@ function cuantoTarda(ctx, norm) {
   if (!/\b(?:cuanto (?:tarda|tardan|demora|demoran|sale|esta)|en cuanto (?:sale|esta|lo tienen)|demora|tardan mucho|cuanto tiempo)\b/.test(norm) || /\b(?:sale|cuesta|vale|precio)\b.*\b(?:la|el|una|un)\b/.test(norm)) return null;
   const sale = gastro.cuandoSale(ctx.config, gastro.FORMAS.RETIRO, null);
   if (!sale) return '😕 Ahora la cocina no está tomando pedidos.';
-  if (sale.programado) return `🕐 Ahora estamos cerrados: lo que pidas queda programado y está listo ${gastro.textoHora(sale.hora)}.`;
-  return `🕐 Ahora la cocina tarda unos ${gastro.minutosDePreparacion(ctx.config)} minutos (para retirar; con envío suma el viaje).`;
+  if (sale.programado) return `🗓️ Ahora estamos cerrados: lo que pidas sale ${textoDia(sale.hora)}.`;
+  return '🛵 Depende de cuántos pedidos haya en la cocina: te aviso por acá apenas salga el tuyo.';
 }
 
 // "Retiro", "paso a buscarlo", "a domicilio", "efectivo", "transferencia": lo que va a contestar más adelante. Solo el
@@ -1063,6 +1065,13 @@ function pidiendo_direccion(ctx) {
   return siguienteGastro(ctx);
 }
 
+// "el Sábado 24/10, desde las 19:00" / "hoy, desde las 19:00": el día en que sale un pedido programado, sin prometer la hora.
+function textoDia(hora) {
+  const abre = gastro.textoHora(hora).replace(/ a las \d{2}:\d{2}$/, '').trim();
+  const desde = `${String(hora.getHours()).padStart(2, '0')}:00`;
+  return `${abre || 'hoy'}, desde las ${desde}`;
+}
+
 // Antepone [nota] al primer mensaje de una respuesta.
 function conNota(r, nota) {
   if (r && r[0] && nota) r[0].texto = `${nota}\n\n${r[0].texto}`;
@@ -1170,11 +1179,11 @@ function resumenGastro(ctx) {
   const lineas = items.map((x) => `• ${cuantoDe(x)} — ${catalogo.plata(subtotal(x))}`).join('\n');
   const envio = forma.envio ? `\n🛵 Envío a ${ctx.datos.direccion} (${ctx.datos.zona}) — ${precioEnvio(costo)}` : '';
   const donde = forma.envio ? '' : '\n📍 Lo retirás en el local.';
-  const cuando = sale.programado && ctx.datos.dia
-    ? `🗓️ ${forma.envio ? 'Llega' : 'Está listo'} ${gastro.textoHora(sale.hora)} aprox.`
-    : sale.programado
-    ? `🕐 Ahora estamos cerrados: lo dejamos programado y está ${forma.envio ? 'llegando' : 'listo'} ${gastro.textoHora(sale.hora)}.`
-    : `🕐 ${forma.envio ? 'Llega' : 'Está listo'} ${gastro.textoHora(sale.hora)} aprox.`;
+  // Sin hora prometida (El dueño, 2026-10-23: "en vez de decir cuánto va a tardar, cuando salga el cadete: ya salió tu
+  // pedido"): con una plancha y un cadete, cualquier hora falla justo cuando hay más pedidos. Otro día sí: el día y desde cuándo.
+  const cuando = sale.programado
+    ? `🗓️ ${forma.envio ? 'Llega' : 'Está listo'} ${textoDia(sale.hora)}.`
+    : forma.envio ? '🛵 Te avisamos por acá apenas salga.' : '🍽️ Te avisamos por acá apenas esté listo.';
   const pago = { alias: '\n💳 Pagás ahora por transferencia.', mp: '\n💳 Pagás ahora con Mercado Pago (te paso el link).' }[ctx.datos.pago]
     || `\n💵 Pagás al recibir${ctx.datos.vuelto ? ` (con ${catalogo.plata(ctx.datos.vuelto)})` : ''}.`;
   const aclaraciones = notaDelPedido(ctx) ? `\n📝 ${notaDelPedido(ctx)}` : '';
@@ -1224,6 +1233,8 @@ function confirmando_pedido(ctx) {
   if (ctx.texto === '2') return responder(ctx, 'armando_pedido', 'Dale, decime qué más querés.');
   if (ctx.texto === '0' || /^(?:cancelar|cancela|cancelo|no quiero nada|dejalo)$/.test(norm)) { ctx.datos = {}; return responder(ctx, 'inicio', 'Listo, no anoté nada. Cuando quieras escribí *hola* 😊'); }
   if (ctx.texto !== '1' && gastro.esGastro(ctx.config)) {
+    const demora = cuantoTarda(ctx, norm);
+    if (demora) return conNota(siguienteGastro(ctx), demora);
     const cambio = cambiarEnElResumen(ctx, norm);
     if (cambio) return cambio;
   }
@@ -1291,7 +1302,7 @@ function avisoDePedido(config, pedido, estado) {
   if (entrega) {
     const envio = entrega.forma !== 'RETIRO';
     const donde = config.negocio.direccion ? `\n📍 ${config.negocio.direccion}` : '';
-    const hora = pedido.datos.horaEstimada ? ` (${gastro.textoHora(new Date(pedido.datos.horaEstimada))} aprox.)` : '';
+    const hora = pedido.datos.programado && pedido.datos.horaEstimada ? ` (${textoDia(new Date(pedido.datos.horaEstimada))})` : '';
     const texto = {
       pagado: '💸 ¡Recibimos tu pago! Ya le pasé tu pedido al local; te aviso por acá apenas lo confirmen.',
       aceptado: `✅ ¡Confirmamos tu pedido! Te aviso por acá cuando esté ${envio ? 'en camino' : 'listo'}${hora}.`,
