@@ -117,6 +117,25 @@ const p2 = qPedidos.porEnviar().pop();
 chequear('el pedido lleva entrega, pago y hora', p2.datos.entrega.forma === 'CADETE' && p2.datos.entrega.zona === 'Centro'
   && p2.datos.entrega.costoEnvioCentavos === 150000 && p2.datos.pago === 'alias' && Number.isSafeInteger(p2.datos.horaEstimada) && !p2.datos.programado);
 
+console.log('\n— 5b. Preguntar y sacar mientras arma el pedido (El dueño, 2026-10-23) —');
+const C2b = '5492944200012';
+decir(C2b, 'pedido');
+decir(C2b, '2 milanesas');
+r = decir(C2b, '¿tienen empanadas?');
+chequear('"¿tienen empanadas?" no anota: muestra la que hay y pregunta', textoPara(r, C2b).includes('Sí, tenemos') && textoPara(r, C2b).includes('*1* — Empanada de carne') && !textoPara(r, C2b).includes('Anotado'));
+r = decir(C2b, '0');
+r = decir(C2b, '3 empanadas');
+chequear('después sí la anota', textoPara(r, C2b).includes('3 × Empanada de carne'));
+r = decir(C2b, 'sacame una empanada');
+chequear('"sacame una empanada" baja la cantidad', textoPara(r, C2b).includes('Saqué 1 × Empanada de carne (quedan 2)'));
+r = decir(C2b, 'sacá las empanadas');
+chequear('"sacá las empanadas" saca el renglón', textoPara(r, C2b).includes('Saqué 2 × Empanada de carne'));
+r = decir(C2b, 'quitá el flan');
+chequear('lo que no está anotado: lo dice y muestra lo que hay', textoPara(r, C2b).includes('No tenés anotado') && textoPara(r, C2b).includes('2 × Milanesa con papas'));
+r = decir(C2b, 'borrá eso');
+chequear('"borrá eso" saca lo último y avisa que no queda nada', textoPara(r, C2b).includes('Saqué 2 × Milanesa con papas') && textoPara(r, C2b).includes('No te queda nada anotado'));
+decir(C2b, '0');
+
 console.log('\n— 6. Retiro y pago al recibir —');
 const C3 = '5492944200003';
 decir(C3, 'hola, quiero 6 empanadas de carne');

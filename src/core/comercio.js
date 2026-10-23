@@ -455,6 +455,9 @@ function armando_pedido(ctx) {
   }
   // "listo", y también "listo gracias", "eso es todo, gracias".
   if (TERMINAR.includes(norm) || (nlu.esCortesia(ctx.msj.texto || '') && /\b(?:listo|eso es todo|nada mas|ya esta|eso nomas)\b/.test(norm))) return terminarPedido(ctx);
+  // "Sacá la bebida", "quitame una empanada": se saca de lo anotado, no se busca como producto (El dueño, 2026-10-23).
+  const quitar = norm.match(QUITAR);
+  if (quitar) return quitarDelPedido(ctx, norm.slice(quitar[0].length));
   // "Quería pedirte una doble con papas, dirección De los Satélites 12963": el verbo y la dirección no son el producto.
   const dicho = separarDireccion(ctx.msj.texto);
   guardarDireccion(ctx, dicho.direccion);
@@ -472,6 +475,9 @@ function armando_pedido(ctx) {
   if (lineas.length > 1) return anotarVarias(ctx, lineas, []);
 
   const r = leerLinea(ctx, texto);
+  // "¿Tienen bebida?" sin una respuesta cargada: se muestran las que hay y elige él. Una pregunta nunca anota sola (antes
+  // anotaba lo único que encontraba, El dueño, 2026-10-23).
+  if (r.tipo === 'anotar' && esPreguntaSinCantidad(texto)) return preguntarCual(ctx, [r.producto], 1, ['Sí, tenemos 🙂']);
   if (r.tipo === 'no_encontre' || r.tipo === 'parecidos') {
     // No es un producto: ¿es una pregunta de siempre ("¿hacen envíos?", "¿hasta qué hora están?")? Se contesta sin perder
     // lo anotado. Va después de buscar en el catálogo, así una palabra de un producto nunca se confunde con una pregunta.
@@ -490,6 +496,40 @@ function armando_pedido(ctx) {
   if (r.tipo === 'pesar') return preguntarPeso(ctx, r.producto, []);
   if (r.tipo === 'elegir') return preguntarCual(ctx, r.resultados, r.cantidad, [], r.gramos);
   return agregar(ctx, r.producto, r);
+}
+
+const QUITAR = /^(?:me\s+)?(?:saca|sacame|sacale|sacar|quita|quitame|quitale|quitar|borra|borrame|borrar|elimina|eliminame|cancela(?=\s+(?:el|la|los|las|lo|un|una|\d)\b)|ya no quiero|no quiero (?:mas )?(?:el|la|los|las))\b\s*/;
+
+// Saca de lo anotado lo que nombra [resto] ("la bebida", "una empanada", "eso"): cada renglón cuyo producto aparece al
+// buscar esas palabras en la carta, o que las tiene en el nombre. Con una cantidad menor a la anotada, solo baja la cantidad.
+function quitarDelPedido(ctx, resto) {
+  const items = ctx.datos.items || [];
+  if (!items.length) return responder(ctx, 'armando_pedido', 'Todavía no anotaste nada 😅 Decime qué querés, o *0* para cancelar.');
+  const { cantidad, busqueda, como } = leerCantidad(resto);
+  const palabras = catalogo.palabrasClave(busqueda.replace(/^(?:el|la|los|las|lo|eso|esa|ese|ultimo|ultima)\b\s*/, ''));
+  let elegidos;
+  if (!palabras.length) elegidos = [items[items.length - 1]]; // "sacá eso", "borrá lo último"
+  else {
+    const gids = new Set(catalogo.buscar(palabras.join(' '), 20, sinonimos(ctx)).resultados.map((x) => x.gid));
+    elegidos = items.filter((x) => gids.has(x.gid) || palabras.every((w) => catalogo.palabrasClave(x.nombre).includes(w)));
+  }
+  if (!elegidos.length) {
+    const lista = items.map((x) => `• ${cuantoDe(x)}`).join('\n');
+    return responder(ctx, 'armando_pedido', `No tenés anotado "${busqueda.trim()}" 🤔 Lo que tenés:\n${lista}\n\nDecime cuál saco, o *listo* para terminar.`);
+  }
+  const notas = [];
+  for (const x of elegidos) {
+    if (como && elegidos.length === 1 && !x.gramos && cantidad < x.cantidad) {
+      x.cantidad -= cantidad;
+      notas.push(`➖ Saqué ${cantidad} × ${x.nombre} (quedan ${x.cantidad})`);
+    } else {
+      items.splice(items.indexOf(x), 1);
+      notas.push(`➖ Saqué ${cuantoDe(x)}`);
+    }
+  }
+  ctx.datos.items = items;
+  if (!items.length) return responder(ctx, 'armando_pedido', `${notas.join('\n')}\n\nNo te queda nada anotado. Decime qué querés, o *0* para cancelar.`);
+  return responder(ctx, 'armando_pedido', `${notas.join('\n')}\n\n¿Algo más? Si no, escribí *listo*.`);
 }
 
 const noJustoAsi = (busqueda) => `🤔 No tengo "${busqueda.trim()}" con ese nombre.`;
