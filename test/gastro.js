@@ -474,6 +474,20 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   chequear('"no sé la dirección" no se toma como dirección', textoPara(b, B(4)).includes('ubicación'));
   decir(B(4), '0');
 
+  // Prueba de punta a punta con la carta de Groove (2026-10-23).
+  catalogo.fijar([
+    { gid: 'g-bc', nombre: 'Bacon Cheese (medallón, cheddar y panceta, con papas fritas)', precioCentavos: 1400000, hay: true },
+    { gid: 'g-bcd', nombre: 'Bacon Cheese Doble (doble medallón, doble cheddar y doble panceta, con papas fritas)', precioCentavos: 1700000, hay: true },
+    { gid: 'g-esp', nombre: 'Especial (doble medallón, cheddar, panceta, mayo de palta y cebolla caramelizada, con papas fritas)', precioCentavos: 1850000, hay: true },
+  ]);
+  b = decir(B(5), 'quiero 2 especiales, una sin cebolla y 1 bacon cheese');
+  chequear('"una sin cebolla" es aclaración de lo anterior y "bacon cheese" es la que se llama así', textoPara(b, B(5)).includes('2 × Especial')
+    && textoPara(b, B(5)).includes('📝 Especial: una sin cebolla') && textoPara(b, B(5)).includes('1 × Bacon Cheese —') && !textoPara(b, B(5)).includes('¿Cuál de estos?'));
+  decir(B(5), 'cancelar');
+  b = decir(B(6), 'dale quiero una doble');
+  chequear('"dale quiero una doble" es un pedido, no charla', textoPara(b, B(6)).includes('1 × Bacon Cheese Doble'));
+  decir(B(6), 'cancelar');
+
   console.log(fallas ? `\n❌ ${fallas} chequeos de gastronomía fallaron` : '\n✅ Gastronomía OK');
   process.exit(fallas ? 1 : 0);
 })();
