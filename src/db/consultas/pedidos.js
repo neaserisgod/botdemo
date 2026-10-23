@@ -77,4 +77,9 @@ function sinAvisar() {
     .all(...ESTADOS_RESUELTOS).map(leer);
 }
 
-module.exports = { ESTADOS_RESUELTOS, crear, porId, porEnviar, marcarEnviado, marcarAMano, porRemotoId, resolver, marcarAvisado, sinAvisar, pagaAlRecibir };
+// El último pedido de un cliente (para "¿ya está mi pedido?", "lo mismo que la otra vez" y el comprobante de la transferencia).
+function ultimoDe(clientaId) {
+  return leer(obtener().prepare('SELECT * FROM pedidos WHERE clienta_id = ? ORDER BY id DESC LIMIT 1').get(clientaId));
+}
+
+module.exports = { ESTADOS_RESUELTOS, crear, porId, ultimoDe, porEnviar, marcarEnviado, marcarAMano, porRemotoId, resolver, marcarAvisado, sinAvisar, pagaAlRecibir };

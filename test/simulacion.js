@@ -190,7 +190,10 @@ function proximoDiaAbierto() {
   for (let i = 1; i <= 8; i++) {
     d.setDate(d.getDate() + (i === 1 ? 1 : 1));
     const ymd = fechasT.aTexto(d).slice(0, 10);
-    if (config.horarios[fechasT.nombreDia(ymd)]) return ymd;
+    // Y que abra a las 9 o antes: el sábado (10 a 14) el turno que toma antes otra clienta (desde las 10) pisa las 11 y el
+    // chequeo fallaba los viernes por el calendario, no por un bug.
+    const h = config.horarios[fechasT.nombreDia(ymd)];
+    if (h && h.desde <= '09:00') return ymd;
   }
   throw new Error('no hay ningún día abierto en config');
 }

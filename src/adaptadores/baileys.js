@@ -298,7 +298,11 @@ function crearAdaptador(config, hooks) {
 
     // Audio o nota de voz: el bot no los escucha, pero le avisa al cliente (ver motor.js).
     const tipo = m.audioMessage ? 'audio' : null;
-    const salientes = hooks.alRecibir({ de, texto, rutaImagen, productoId, tipo, ...(leido ? { carrito: leido.productos, carritoResumen: leido.resumen } : {}) });
+    // Una ubicación compartida: sirve de dirección para el envío (core/comercio.js).
+    const loc = m.locationMessage || m.liveLocationMessage;
+    const ubicacion = loc && Number.isFinite(loc.degreesLatitude) && Number.isFinite(loc.degreesLongitude)
+      ? { lat: loc.degreesLatitude, lng: loc.degreesLongitude, nombre: loc.name || null, direccion: loc.address || null } : null;
+    const salientes = hooks.alRecibir({ de, texto, rutaImagen, productoId, tipo, ...(ubicacion ? { ubicacion } : {}), ...(leido ? { carrito: leido.productos, carritoResumen: leido.resumen } : {}) });
     await enviarTodos(salientes, { respondiendo: de });
   }
 

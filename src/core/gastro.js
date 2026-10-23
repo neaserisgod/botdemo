@@ -112,5 +112,5 @@ const conCatalogoWhatsapp = (config) => !!(config.pedidos?.catalogo_whatsapp || 
 const linkCatalogo = (config) => (conCatalogoWhatsapp(config) ? `https://wa.me/c/${config.numero_actual}` : null);
 
 module.exports = {
-  esGastro, formas, zonas, costoEnvio, pausada, cuandoSale, textoHora, pagos, TEXTO_PAGO, textoAlias, linkCatalogo, conCatalogoWhatsapp, FORMAS,
+  esGastro, formas, zonas, costoEnvio, pausada, cuandoSale, minutosDePreparacion, textoHora, pagos, TEXTO_PAGO, textoAlias, linkCatalogo, conCatalogoWhatsapp, FORMAS,
 };
