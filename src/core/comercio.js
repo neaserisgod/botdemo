@@ -211,12 +211,44 @@ const VERBO_PEDIDO = '(?:me )?(?:podes |podrias |puedes |vas a )?(?:cortar|corta
 const SALUDO_INICIAL = /^(?:(?:hola|holis|buenas|buen dia|buenos dias|buenas tardes|buenas noches|che|como va|que tal|disculpa|perdon)[\s,!.¡¿?]*)+/;
 const RELLENO_FINAL = /[\s,.!?¿¡]*(?:(?:porfa|por favor|gracias|plis|please|dale)[\s,.!?¿¡]*)*$/;
 
+// "Quería una doble. Para De los Satélites 12963", "2 empanadas, dirección Mitre 150, timbre B": la dirección que viene con
+// el pedido no es un producto. Desde ese renglón hasta el final es la dirección (sigue con el timbre o la seña); se guarda
+// para el envío. "Para" o "en" solos no alcanzan: hace falta un número que no sea una hora ni un día ("para las 21").
+const ABRE_DIRECCION = /^(?:(?:mi |la )?(?:direccion|domicilio)\b(?: es)?:?|(?:es |seria |lo quiero )?para|(?:llevalo|llevamelo|mandalo|mandamelo|traelo|traemelo|envialo|enviamelo) a|a domicilio en|vivo en|estoy en|en)\s+/;
+function separarDireccion(texto) {
+  const partes = String(texto || '').split(/(\n|[.;,](?!\d)|(?<!\d)[.;,])/);
+  for (let i = 0; i < partes.length; i += 2) {
+    const n = partes[i].trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const m = n.match(ABRE_DIRECCION);
+    if (!m) continue;
+    const resto = n.slice(m[0].length);
+    const conPalabra = /^(?:direccion|domicilio|mi |la )/.test(m[0]);
+    const conNumero = /[a-z]{3,}/.test(resto) && /\b\d{2,5}\b/.test(resto)
+      && !/\b(?:el|las?|hs|horas?)\s*\d|\d\s*(?:hs|horas?)\b/.test(resto);
+    if (!conPalabra && !conNumero) continue;
+    const direccion = (partes[i].trim().slice(m[0].length) + partes.slice(i + 1).join('')).replace(/^[\s:]+|[\s.,;]+$/g, '');
+    if (direccion.length < 4) continue;
+    return { texto: partes.slice(0, i).join('').replace(/[\s.,;]+$/, ''), direccion: direccion.slice(0, 160) };
+  }
+  return { texto: String(texto || ''), direccion: null };
+}
+
+// La dirección que dijo con el pedido: si el local hace envíos, ya queda elegido el envío y no se le pregunta de nuevo.
+function guardarDireccion(ctx, direccion) {
+  if (!direccion || !gastro.esGastro(ctx.config)) return;
+  const envio = gastro.formas(ctx.config).find((f) => f.envio);
+  if (!envio) return;
+  ctx.datos.direccion = direccion;
+  ctx.datos.entrega = envio.clave;
+}
+
 // Si el mensaje es un pedido ("hola, ¿me podés cortar 200 de jamón y 1/4 de queso?", "quiero 2 cocas y 1/4 de jamón"),
 // arranca el pedido con todo anotado. Hace falta un verbo de pedido o que algún renglón traiga cantidad o peso, y que
 // algún producto exista; "¿cuánto sale el 1/4 de jamón?" o "¿tienen coca?" siguen siendo consultas.
 function pedidoEnElMensaje(ctx) {
   if (!catalogo.cargado()) return null;
-  let t = (ctx.msj.texto || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(SALUDO_INICIAL, '');
+  const { texto, direccion } = separarDireccion(ctx.msj.texto);
+  let t = texto.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(SALUDO_INICIAL, '');
   const norm = nlu.normalizar(t);
   if (/\b(?:cuanto|cuanta|precio|precios|sale|salen|cuesta|cuestan|vale|valen)\b/.test(norm)) return null;
   // "quiero pedirte un combo": puede haber más de un verbo seguido.
@@ -237,6 +269,7 @@ function pedidoEnElMensaje(ctx) {
   if (!productos.length || !(verbo || conCantidad)) return null;
   if (gastro.pausada(ctx.config)) return cocinaPausada(ctx);
   ctx.datos = { items: [] };
+  guardarDireccion(ctx, direccion);
   const r = anotarVarias(ctx, lineas, []);
   r[0].texto = `${encabezadoPedido(ctx)}\n\n${r[0].texto}`;
   return r;
@@ -257,6 +290,7 @@ function empezarPedido(ctx) {
   if (!catalogo.cargado()) return sinCatalogo(ctx);
   if (gastro.pausada(ctx.config)) return cocinaPausada(ctx);
   ctx.datos = { items: [] };
+  guardarDireccion(ctx, separarDireccion(ctx.msj.texto).direccion);
   if (gastro.esGastro(ctx.config)) {
     return responder(ctx, 'armando_pedido',
       `${encabezadoPedido(ctx)} Decime qué te preparamos y cuántos${ejemploDeLaCarta(ctx, ' (ej: ', ')')}. Si son varias cosas, mandalas juntas, una por renglón.\nCuando termines, escribí *listo*.`);
@@ -269,7 +303,9 @@ function empezarPedido(ctx) {
 // pudo). Cada producto del catálogo de WhatsApp lleva como "ID de contenido" (retailer id) el global_id del plato en Nodo Sur;
 // si no lo tiene, se busca por el nombre. El precio es el de Nodo Sur, no el que dice WhatsApp: es el que cobra la caja.
 function carritoDelCatalogo(ctx) {
-  const lineas = Array.isArray(ctx.msj.carrito) ? ctx.msj.carrito : [];
+  let lineas = Array.isArray(ctx.msj.carrito) ? ctx.msj.carrito : [];
+  const deducido = !lineas.length && carritoPorTotal(ctx.msj.carritoResumen);
+  if (deducido) lineas = deducido;
   if (!lineas.length) {
     // WhatsApp puede no dar el detalle: con lo que trae el mensaje, al menos se le confirma qué llegó.
     const r = ctx.msj.carritoResumen;
@@ -298,6 +334,31 @@ function carritoDelCatalogo(ctx) {
   const r = terminarPedido(ctx);
   r[0].texto = `🛒 Recibí tu carrito:\n${notas.join('\n')}\n\n${r[0].texto}`;
   return r;
+}
+
+// Sin el detalle, con cuántos productos y el total que trae el mensaje: la única combinación de la carta que da justo eso
+// ("1 producto, $16.000" en una carta con un solo plato de $16.000). Si hay más de una (o ninguna), null: que lo escriba.
+const MAX_DEDUCIR = 10;
+function carritoPorTotal(resumen) {
+  const { cantidad, totalCentavos } = resumen || {};
+  if (!catalogo.cargado() || !cantidad || cantidad > MAX_DEDUCIR || !totalCentavos) return null;
+  const platos = catalogo.todos().filter((x) => x.hay && !catalogo.esPesable(x) && x.precioCentavos > 0);
+  const soluciones = [];
+  const elegidos = [];
+  (function probar(desde, faltan, plata) {
+    if (soluciones.length > 1) return;
+    if (!faltan) { if (!plata) soluciones.push([...elegidos]); return; }
+    for (let i = desde; i < platos.length; i++) {
+      if (platos[i].precioCentavos > plata) continue;
+      elegidos.push(platos[i]);
+      probar(i, faltan - 1, plata - platos[i].precioCentavos);
+      elegidos.pop();
+    }
+  })(0, cantidad, totalCentavos);
+  if (soluciones.length !== 1) return null;
+  const porGid = new Map();
+  for (const x of soluciones[0]) porGid.set(x.gid, (porGid.get(x.gid) || 0) + 1);
+  return [...porGid].map(([gid, n]) => ({ retailerId: gid, nombre: null, cantidad: n }));
 }
 
 // La carta: el link del catálogo de WhatsApp si el local lo tiene, y si no, escrita (lo que hay hoy).
@@ -392,11 +453,17 @@ function armando_pedido(ctx) {
   }
   // "listo", y también "listo gracias", "eso es todo, gracias".
   if (TERMINAR.includes(norm) || (nlu.esCortesia(ctx.msj.texto || '') && /\b(?:listo|eso es todo|nada mas|ya esta|eso nomas)\b/.test(norm))) return terminarPedido(ctx);
-  const texto = ctx.msj.texto || '';
+  // "Quería pedirte una doble con papas, dirección De los Satélites 12963": el verbo y la dirección no son el producto.
+  const dicho = separarDireccion(ctx.msj.texto);
+  guardarDireccion(ctx, dicho.direccion);
+  if (dicho.direccion && !dicho.texto.trim()) return responder(ctx, 'armando_pedido', 'Anoté la dirección 🏠 Decime qué te preparamos, o *listo* para terminar.');
+  const conVerbo = new RegExp(`^(?:${VERBO_PEDIDO}\\b\\s*)+`);
+  const sinVerbo = dicho.texto.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(SALUDO_INICIAL, '');
+  const texto = conVerbo.test(sinVerbo) ? sinVerbo.replace(conVerbo, '').replace(RELLENO_FINAL, '') : dicho.texto;
   // "¿tienen cerveza?" mientras arma el pedido es una pregunta, no un renglón: si la contesta una pregunta de siempre o del
   // negocio, se contesta y no se anota nada. Con una cantidad ("¿me sumás 2 cervezas?") sí es un renglón.
   if (esPreguntaSinCantidad(texto)) {
-    const aparte = entenderEnPaso(ctx, '¿Algo más? Si no, escribí *listo*.');
+    const aparte = !dicho.direccion && entenderEnPaso(ctx, '¿Algo más? Si no, escribí *listo*.');
     if (aparte) return aparte;
   }
   const lineas = separarLineas(texto);
@@ -406,7 +473,7 @@ function armando_pedido(ctx) {
   if (r.tipo === 'no_encontre' || r.tipo === 'parecidos') {
     // No es un producto: ¿es una pregunta de siempre ("¿hacen envíos?", "¿hasta qué hora están?")? Se contesta sin perder
     // lo anotado. Va después de buscar en el catálogo, así una palabra de un producto nunca se confunde con una pregunta.
-    const aparte = entenderEnPaso(ctx, '¿Algo más? Si no, escribí *listo*.');
+    const aparte = !dicho.direccion && entenderEnPaso(ctx, '¿Algo más? Si no, escribí *listo*.');
     if (aparte) return aparte;
     // "jamón y queso": dos productos, si cada uno existe por separado.
     const partes = texto.split(/\s+y\s+/i);
