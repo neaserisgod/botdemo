@@ -66,6 +66,15 @@ chequear('un horario sin días abiertos no frena', !gastro.cuandoSale({ ...confi
 chequear('la hora se dice linda', gastro.textoHora(new Date(2026, 9, 17, 19, 30), vie20) === 'mañana a las 19:30'
   && gastro.textoHora(new Date(2026, 9, 16, 20, 30), vie20) === 'a las 20:30');
 
+// Un local que entrega solo el finde (El dueño, 2026-10-23, Groove): los días para elegir y la hora de cada uno.
+const finde = { ...config, horarios: { ...SIN_HORARIO, viernes: { desde: '19:00', hasta: '23:59' }, sabado: { desde: '19:00', hasta: '23:59' }, domingo: { desde: '19:00', hasta: '23:59' } } };
+const lun = new Date(2026, 9, 19, 15, 0); // lunes 19/10
+const dias = gastro.proximosDias(finde, 3, lun);
+chequear('un lunes, los días para elegir son viernes, sábado y domingo', dias.map((x) => x.ymd).join() === '2026-10-23,2026-10-24,2026-10-25');
+s = gastro.saleElDia(finde, retiro, null, '2026-10-24', lun);
+chequear('elegido el sábado, sale ese día desde que abre', s.programado && s.hora.getDate() === 24 && s.hora.getHours() === 19 && s.hora.getMinutes() === 30);
+chequear('el viernes a las 21 el viernes cuenta desde ahora', gastro.proximosDias(finde, 1, new Date(2026, 9, 23, 21, 0))[0].ymd === '2026-10-23');
+
 console.log('\n— 3. Formas y pagos —');
 chequear('cadete y reparto juntos se ofrecen como uno', gastro.formas({ pedidos: { retiro: true, cadete: true, reparto: true, zonas: PEDIDOS.zonas } }).length === 2);
 chequear('sin zonas no se ofrece envío', gastro.formas({ pedidos: { retiro: true, cadete: true } }).length === 1);
