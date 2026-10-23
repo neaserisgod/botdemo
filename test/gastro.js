@@ -346,6 +346,19 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   r15 = await decir(C20, 'quiero 2 simple con papas para las 21');
   chequear('"para las 21" no es una dirección', !textoPara(r15, C20).includes('Anoté la dirección'));
 
+  // La carta real no tiene "doble con papas": con el verbo, pregunta cuál de los dobles en vez de mandar el menú (2026-10-23).
+  catalogo.fijar([
+    { gid: 'h-bcd', nombre: 'Combo Bacon Cheese Doble', precioCentavos: 1600000, hay: true },
+    { gid: 'h-bcs', nombre: 'Combo Bacon Cheese Simple', precioCentavos: 1350000, hay: true },
+    { gid: 'h-kmd', nombre: 'Combo La Km Doble', precioCentavos: 1700000, hay: true },
+  ]);
+  const C21 = '5492944200021';
+  r15 = await decir(C21, 'Quería una doble con papas. Para De los Satélites 12963');
+  chequear('sin un plato con ese nombre, pregunta cuál de los parecidos', textoPara(r15, C21).includes('¿Cuál de estos?') && textoPara(r15, C21).includes('Combo Bacon Cheese Doble') && !textoPara(r15, C21).includes('Gracias por escribir'));
+  await decir(C21, '1');
+  r15 = await decir(C21, 'listo');
+  chequear('y la dirección que dijo queda', !textoPara(r15, C21).includes('¿A qué dirección') && !textoPara(r15, C21).includes('¿Cómo lo querés'));
+
   console.log(fallas ? `\n❌ ${fallas} chequeos de gastronomía fallaron` : '\n✅ Gastronomía OK');
   process.exit(fallas ? 1 : 0);
 })();
