@@ -90,13 +90,21 @@ function formas(palabra, sinonimos) {
 }
 const calza = (palabra, tokens, sinonimos = {}) => formas(palabra, sinonimos).some((f) => calzaUna(f, tokens));
 
+const SIMPLES = new Set(['simple', 'simples', 'comun', 'normal']);
+const MULTIPLES = new Set(['doble', 'dobles', 'triple', 'triples', 'cuadruple']);
+
 // Productos que calzan con TODAS las palabras clave, los que hay primero. Devuelve hasta `max` y cuántos eran.
 // `sinonimos`: los del rubro (diccionario/rubros.js `productosDe`).
 function buscar(texto, max = 5, sinonimos = {}) {
-  const claves = palabrasClave(texto);
+  let claves = palabrasClave(texto);
+  // "Una bacon cheese simple" (El dueño, 2026-10-23, daba "no encontré"): "simple" no está en ningún nombre; quiere decir la que
+  // no es doble ni triple. Si algún producto se llama "simple", es una palabra más.
+  const simple = claves.some((p) => SIMPLES.has(p) && !vocabulario.has(p));
+  if (simple) claves = claves.filter((p) => !SIMPLES.has(p));
   if (!claves.length) return { resultados: [], total: 0, claves };
   const conClaves = (cs) => items.filter((x) => {
     const tokens = x._norm.split(' ');
+    if (simple && tokens.some((t) => MULTIPLES.has(t))) return false;
     return cs.every((p) => calza(p, tokens, sinonimos));
   });
   let encontrados = conClaves(claves);
