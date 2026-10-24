@@ -487,6 +487,11 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   b = decir(B(6), 'dale quiero una doble');
   chequear('"dale quiero una doble" es un pedido, no charla', textoPara(b, B(6)).includes('1 × Bacon Cheese Doble'));
   decir(B(6), 'cancelar');
+  // Prueba del dueño (2026-10-23): "Una bacon cheese simple" daba "No encontré".
+  decir(B(7), '1');
+  b = decir(B(7), 'Una bacon cheese simple');
+  chequear('"una bacon cheese simple" es la Bacon Cheese (no la doble)', textoPara(b, B(7)).includes('1 × Bacon Cheese —'));
+  decir(B(7), 'cancelar');
 
   console.log(fallas ? `\n❌ ${fallas} chequeos de gastronomía fallaron` : '\n✅ Gastronomía OK');
   process.exit(fallas ? 1 : 0);
