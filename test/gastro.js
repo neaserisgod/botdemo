@@ -342,7 +342,7 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   r14 = await decir(C17, '1');
   chequear('y se anota el elegido', textoPara(r14, C17).includes('Anotado'));
   r14 = await decir(C17, 'Burger');
-  chequear('sin nada parecido, sigue diciendo que no lo encontró', textoPara(r14, C17).includes('No encontré "Burger"'));
+  chequear('"burger" sin ninguna que se llame así: la carta para elegir (antes "no encontré")', textoPara(r14, C17).includes('¿Cuál querés?'));
   decir(C17, 'cancelar');
   r14 = await decir(C17, '¿Qué bebidas tienen?');
   chequear('"¿qué bebidas tienen?" lista las bebidas', textoPara(r14, C17).includes('Coca Cola') && textoPara(r14, C17).includes('Agua sin gas') && !textoPara(r14, C17).includes('Combo'));
@@ -492,6 +492,22 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   b = decir(B(7), 'Una bacon cheese simple');
   chequear('"una bacon cheese simple" es la Bacon Cheese (no la doble)', textoPara(b, B(7)).includes('1 × Bacon Cheese —'));
   decir(B(7), 'cancelar');
+  // Prueba del dueño (2026-10-23): "Quiero llevar 4 hamburguesas, para el viernes 30" mandaba el menú. Ninguna se llama
+  // "hamburguesa": se muestra la carta para elegir, y el día queda anotado.
+  const motorFinde = crearMotor(finde);
+  b = motorFinde.procesarMensaje({ de: B(8), texto: 'Quiero llevar 4 hamburguesas, para el viernes 30' });
+  chequear('"4 hamburguesas" pregunta cuáles, con la carta', textoPara(b, B(8)).includes('¿Cuáles serían las 4?') && textoPara(b, B(8)).includes('*3* — Especial'));
+  chequear('y el día queda anotado', textoPara(b, B(8)).toLowerCase().includes('🗓️ anotado: para el viernes'));
+  b = motorFinde.procesarMensaje({ de: B(8), texto: '2 especial y 2 bacon cheese' });
+  chequear('contestar con los nombres anota las dos, sin decir que lo de antes quedó sin anotar', textoPara(b, B(8)).includes('2 × Especial')
+    && textoPara(b, B(8)).includes('2 × Bacon Cheese —') && !textoPara(b, B(8)).includes('quedó sin anotar'));
+  motorFinde.procesarMensaje({ de: B(8), texto: 'cancelar' });
+  b = motorFinde.procesarMensaje({ de: B(9), texto: 'quiero 2 burgers' });
+  b = motorFinde.procesarMensaje({ de: B(9), texto: '3' });
+  chequear('con el número, van todas de esa', textoPara(b, B(9)).includes('2 × Especial'));
+  b = motorFinde.procesarMensaje({ de: B(9), texto: 'y 1 doble para el sabado' });
+  chequear('el día dicho junto con un plato no lo pierde', textoPara(b, B(9)).toLowerCase().includes('🗓️ anotado: para el sábado') && textoPara(b, B(9)).includes('1 × Bacon Cheese Doble'));
+  motorFinde.procesarMensaje({ de: B(9), texto: 'cancelar' });
 
   console.log(fallas ? `\n❌ ${fallas} chequeos de gastronomía fallaron` : '\n✅ Gastronomía OK');
   process.exit(fallas ? 1 : 0);

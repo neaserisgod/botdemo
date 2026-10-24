@@ -251,7 +251,8 @@ function precioDePeso(ctx, estado) {
 
 // ---------- pedido ----------
 // Verbos de pedido de mostrador: "cortame", "¿me podés cortar…?", "preparame", "separame", "dame", "quiero", "me llevo".
-const VERBO_PEDIDO = '(?:me )?(?:podes |podrias |puedes |vas a )?(?:cortar|cortame|cortas|preparar|preparame|preparas|separar|separame|separas|guardar|guardame|guardas|anotar|anotame|anotas|dar|dame|das|mandar|mandame|quiero|quisiera|queria|necesito|me llevo|llevo|encargar|encargo|pedirte|pedirle|pedirles|pedir|pido|traeme|me traes)';
+const VERBO_PEDIDO = '(?:me )?(?:podes |podrias |puedes |vas a )?(?:cortar|cortame|cortas|preparar|preparame|preparas|separar|separame|separas|guardar|guardame|guardas|anotar|anotame|anotas|dar|dame|das|mandar|mandame|quiero|quisiera|queria|necesito|me llevo|llevo|llevar|encargar|encargo|pedirte|pedirle|pedirles|pedir|pido|traeme|me traes)';
+const quitarVerbo = (t) => t.replace(new RegExp(`^(?:${VERBO_PEDIDO}\\b\\s*)+`), '');
 // También las muletillas de arranque ("dale quiero una doble", "bueno, 2 especiales"): sin esto el verbo no quedaba al
 // principio y el pedido se tomaba como charla (El dueño, 2026-10-23, prueba con la carta de Groove).
 const SALUDO_INICIAL = /^(?:(?:hola|holis|holaa+|buenas|buen dia|buenos dias|buenas tardes|buenas noches|che|como va|que tal|disculpa|perdon|dale|bueno|buenisimo|ok|okey|oka|joya|perfecto|genial|barbaro|entonces|si)[\s,!.¡¿?]*)+/;
@@ -270,7 +271,9 @@ function separarDireccion(texto) {
     const resto = n.slice(m[0].length);
     const conPalabra = /^(?:direccion|domicilio|mi |la )/.test(m[0]);
     const conNumero = /[a-z]{3,}/.test(resto) && /\b\d{2,5}\b/.test(resto)
-      && !/\b(?:el|las?|hs|horas?)\s*\d|\d\s*(?:hs|horas?)\b/.test(resto);
+      && !/\b(?:el|las?|hs|horas?)\s*\d|\d\s*(?:hs|horas?)\b/.test(resto)
+      // "para el viernes 30" es un día, no una dirección (El dueño, 2026-10-23).
+      && !/^(?:el\s+)?(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo)\s+\d{1,2}\b/.test(resto.trim());
     if (!conPalabra && !conNumero) continue;
     const direccion = (partes[i].trim().slice(m[0].length) + partes.slice(i + 1).join('')).replace(/^[\s:]+|[\s.,;]+$/g, '');
     if (direccion.length < 4) continue;
@@ -301,6 +304,9 @@ function pedidoEnElMensaje(ctx) {
   const conVerbo = new RegExp(`^(?:${VERBO_PEDIDO}\\b\\s*)+`);
   const verbo = conVerbo.test(t);
   t = t.replace(conVerbo, '').replace(RELLENO_FINAL, '');
+  // "4 hamburguesas, para el viernes 30": el día no es un renglón.
+  const dia = sacarDia(ctx, t);
+  t = dia.resto;
   let lineas = separarLineas(t);
   if (!lineas.length) return null;
   const esProducto = ({ r }) => ['anotar', 'elegir', 'pesar', 'paquete'].includes(r.tipo);
@@ -312,13 +318,14 @@ function pedidoEnElMensaje(ctx) {
   }
   // "Quería una doble con papas" sin un plato que se llame así: con el verbo es un pedido igual, y se pregunta cuál de los
   // parecidos (los dobles) en vez de mandar el menú.
-  const productos = leidas.filter((x) => esProducto(x) || (verbo && x.r.tipo === 'parecidos'));
+  const productos = leidas.filter((x) => esProducto(x) || x.r.tipo === 'generico' || (verbo && x.r.tipo === 'parecidos'));
   const conCantidad = leidas.some(({ l }) => numeros.pesoInicial(l) || numeros.cantidadInicial(l));
   if (!productos.length || !(verbo || conCantidad)) return null;
   if (gastro.pausada(ctx.config)) return cocinaPausada(ctx);
   ctx.datos = { items: [] };
+  if (dia.ymd) ctx.datos.dia = dia.ymd;
   guardarDireccion(ctx, direccion);
-  const r = anotarVarias(ctx, lineas, []);
+  const r = anotarVarias(ctx, lineas, dia.nota ? [dia.nota] : []);
   r[0].texto = `${encabezadoPedido(ctx)}\n\n${r[0].texto}`;
   return r;
 }
@@ -547,6 +554,7 @@ function leerLinea(ctx, linea) {
   const gramosDichos = como === 'numero' && cantidad >= 50 ? cantidad : null;
   resultados = resultados || buscar(busqueda);
   if (!resultados.length) {
+    if (esGenerico(ctx, busqueda)) return { tipo: 'generico', cantidad };
     const parecidos = catalogo.parecidos(busqueda, 5, sin);
     return parecidos.length ? { tipo: 'parecidos', busqueda, resultados: parecidos, cantidad } : { tipo: 'no_encontre', busqueda };
   }
@@ -580,8 +588,15 @@ function armando_pedido(ctx) {
   const otraCantidad = cambiarCantidad(ctx, norm);
   if (otraCantidad) return otraCantidad;
   // "Para el sábado": el día que lo quiere.
-  const diaDicho = anotarDia(ctx);
-  if (diaDicho) return responder(ctx, 'armando_pedido', `${diaDicho}\n¿Algo más? Si no, escribí *listo*.`);
+  const conDia = sacarDia(ctx, (ctx.msj.texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''));
+  if (conDia.nota) {
+    if (conDia.ymd) ctx.datos.dia = conDia.ymd;
+    if (!catalogo.palabrasClave(quitarVerbo(conDia.resto)).length) return responder(ctx, 'armando_pedido', `${conDia.nota}\n¿Algo más? Si no, escribí *listo*.`);
+    // "Y 1 doble para el sábado": el día queda anotado y lo demás se lee como siempre.
+    ctx.msj = { ...ctx.msj, texto: conDia.resto };
+    ctx.texto = conDia.resto;
+    return conNota(armando_pedido(ctx), conDia.nota);
+  }
   // "Una sin cebolla" después de anotar: aclaración de lo último.
   const suelta = aclaracionSuelta(ctx, ctx.msj.texto || '');
   if (suelta) return responder(ctx, 'armando_pedido', `${suelta}\n¿Algo más? Si no, escribí *listo*.`);
@@ -636,6 +651,7 @@ function armando_pedido(ctx) {
     anotarNoEntendido(ctx);
     return responder(ctx, 'armando_pedido', `No encontré "${r.busqueda.trim()}" 🤔 ${mirarCarta(ctx)}Probá con otro nombre, o *listo* para terminar.`);
   }
+  if (r.tipo === 'generico') return preguntarCuales(ctx, r.cantidad, []);
   if (r.tipo === 'nada') return noEntendi(ctx, 'Decime qué producto querés (ej: *2 coca*), o *listo* para terminar.');
   if (r.tipo === 'cantidad_mala') return responder(ctx, 'armando_pedido', cantidadMala(ctx));
   if (r.tipo === 'paquete') return responder(ctx, 'armando_pedido', `${textoPaquete(r.producto)} ¿Cuántos querés? (ej: *1 ${catalogo.palabrasClave(r.producto.nombre)[0]}*)`);
@@ -815,6 +831,9 @@ function anotarVarias(ctx, lineas, notas) {
     else if (r.tipo === 'parecidos') {
       ctx.datos.pendientes = resto;
       return preguntarCual(ctx, r.resultados, r.cantidad, [...notas, noJustoAsi(r.busqueda)]);
+    } else if (r.tipo === 'generico') {
+      ctx.datos.pendientes = resto;
+      return preguntarCuales(ctx, r.cantidad, notas);
     } else {
       ctx.datos.pendientes = resto;
       return r.tipo === 'pesar' ? preguntarPeso(ctx, r.producto, notas) : preguntarCual(ctx, r.resultados, r.cantidad, notas, r.gramos, r.nota);
@@ -834,14 +853,38 @@ function seguir(ctx, notas) {
   return responder(ctx, 'armando_pedido', `${notas.join('\n')}\n\n¿Algo más? Si no, escribí *listo*.`);
 }
 
-function preguntarCual(ctx, resultados, cantidad, notas, gramos, nota) {
+function preguntarCual(ctx, resultados, cantidad, notas, gramos, nota, { pregunta = '¿Cuál de estos?', pie = 'Respondé con el número, o *0* para buscar otro.', generico = false } = {}) {
+  if (generico) ctx.datos.generico = true; else delete ctx.datos.generico;
   ctx.datos.opciones = resultados.map((x) => x.gid);
   ctx.datos.cantidad = cantidad;
   if (nota) ctx.datos.notaPendiente = nota; else delete ctx.datos.notaPendiente;
   if (gramos) ctx.datos.gramos = gramos; else delete ctx.datos.gramos;
   const antes = notas.length ? `${notas.join('\n')}\n\n` : '';
   const lista = resultados.map((x, i) => `*${i + 1}* — ${nombreConPrecio(x)}${x.hay ? '' : ' (sin stock)'}`).join('\n');
-  return responder(ctx, 'eligiendo_producto', `${antes}¿Cuál de estos?\n\n${lista}\n\nRespondé con el número, o *0* para buscar otro.`);
+  return responder(ctx, 'eligiendo_producto', `${antes}${pregunta}\n\n${lista}\n\n${pie}`);
+}
+
+// "Quiero llevar 4 hamburguesas" en una hamburguesería donde ninguna se llama así (El dueño, 2026-10-23: el bot mandaba el menú):
+// es la carta entera. Se muestra y elige; si son de distintas, las escribe ("2 especial y 2 bacon cheese").
+const GENERICOS = new Set(['hamburguesa', 'hamburguesas', 'hamburgesa', 'hamburgesas', 'hambur', 'burger', 'burgers', 'burguer',
+  'burguers', 'burga', 'burgas', 'burguera', 'burgueras', 'pizza', 'pizzas', 'empanada', 'empanadas', 'sanguche', 'sanguches',
+  'sandwich', 'sandwiches', 'plato', 'platos', 'comida', 'comidas']);
+function esGenerico(ctx, busqueda) {
+  if (!gastro.esGastro(ctx.config)) return false;
+  const claves = catalogo.palabrasClave(busqueda);
+  return claves.length > 0 && claves.every((p) => GENERICOS.has(p));
+}
+function preguntarCuales(ctx, cantidad, notas) {
+  const hay = catalogo.todos().filter((x) => x.hay).slice(0, 9);
+  if (!hay.length) return responder(ctx, 'armando_pedido', `${notas.length ? `${notas.join('\n')}\n\n` : ''}😕 Hoy no nos queda nada de la carta.`);
+  const varias = cantidad > 1;
+  const ejemplo = hay.length > 1 ? ` (ej: *${Math.ceil(cantidad / 2)} ${sinDescripcion(hay[0].nombre).toLowerCase()} y ${Math.floor(cantidad / 2) || 1} ${sinDescripcion(hay[1].nombre).toLowerCase()}*)` : '';
+  return preguntarCual(ctx, hay, cantidad, notas, null, null, {
+    pregunta: varias ? `¿Cuáles serían las ${cantidad}? ${ctx.config.textos.emoji}` : `¿Cuál querés? ${ctx.config.textos.emoji}`,
+    pie: varias ? `Respondé con el número si son todas iguales, o escribime cuántas de cada una${ejemplo}.` : 'Respondé con el número.',
+    // Contestar con los nombres ("2 especial y 2 bacon cheese") es lo esperado, no dejar la pregunta sin contestar.
+    generico: true,
+  });
 }
 
 const ORDINALES = { primera: 1, primero: 1, primer: 1, segunda: 2, segundo: 2, tercera: 3, tercero: 3, cuarta: 4, cuarto: 4, quinta: 5, quinto: 5, ultima: -1, ultimo: -1 };
@@ -850,7 +893,7 @@ const ORDINALES = { primera: 1, primero: 1, primer: 1, segunda: 2, segundo: 2, t
 // bot se callaba con el pedido a medias (El dueño, 2026-10-23). Ahora se elige también por el nombre ("la hamburguesa") o el
 // orden ("la primera"); "listo" vuelve a preguntar; y cualquier otra cosa deja la pregunta y se atiende como un renglón nuevo.
 function eligiendo_producto(ctx) {
-  const limpiar = () => { delete ctx.datos.opciones; delete ctx.datos.cantidad; delete ctx.datos.gramos; delete ctx.datos.notaPendiente; };
+  const limpiar = () => { delete ctx.datos.opciones; delete ctx.datos.cantidad; delete ctx.datos.gramos; delete ctx.datos.notaPendiente; delete ctx.datos.generico; };
   const opciones = (ctx.datos.opciones || []).map(catalogo.porGid).filter(Boolean);
   if (ctx.texto === '0') { limpiar(); return seguir(ctx, []); }
   const norm = nlu.normalizar(ctx.texto);
@@ -882,7 +925,7 @@ function eligiendo_producto(ctx) {
     }
     // Otra cosa ("una coca", "¿hacen envíos?", "sacá la doble"): la pregunta queda sin contestar y se sigue armando, avisando
     // que lo anterior no se anotó (si no, creería que sí).
-    const anterior = opciones[0] ? catalogo.palabrasClave(opciones[0].nombre).slice(-1)[0] : null;
+    const anterior = opciones[0] && !ctx.datos.generico ? catalogo.palabrasClave(opciones[0].nombre).slice(-1)[0] : null;
     limpiar();
     delete ctx.datos.yaPregunte;
     ctx.clienta.estado_conv = 'armando_pedido';
@@ -1122,6 +1165,19 @@ function eligiendo_dia(ctx) {
 const manianaYmd = () => { const a = fechas.ahora(); return fechas.aTexto(new Date(a.getFullYear(), a.getMonth(), a.getDate() + 1)).slice(0, 10); };
 
 // "Para el sábado", "lo quiero el viernes": el día, si es uno de los que entregan. Devuelve el texto de lo anotado, o null.
+// El día dicho dentro de un mensaje con más cosas ("4 hamburguesas, para el viernes 30"): `{ ymd, nota, resto }`, con el resto
+// del texto sin el día. Sin día, `{ resto: texto }`. [t] ya en minúsculas y sin tildes.
+const RE_DIA = /(?:^|[\s,.])(?:para|el|lo quiero|seria)\s+(?:el\s+)?(lunes|martes|miercoles|jueves|viernes|sabado|domingo|manana)(?:\s+\d{1,2})?\b/;
+function sacarDia(ctx, t) {
+  if (!gastro.esGastro(ctx.config)) return { resto: t };
+  const m = t.match(RE_DIA);
+  if (!m) return { resto: t };
+  const resto = `${t.slice(0, m.index)} ${t.slice(m.index + m[0].length)}`.replace(/\s+/g, ' ').replace(/^[\s,.]+|[\s,.]+$/g, '');
+  const dia = gastro.proximosDias(ctx.config, 7).find((x) => (m[1] === 'manana' ? x.ymd === manianaYmd() : fechas.nombreDia(x.ymd) === m[1]));
+  if (!dia) return { resto, nota: `😕 Ese día no hacemos ${gastro.formas(ctx.config).some((f) => f.envio) ? 'envíos' : 'entregas'}.` };
+  return { ymd: dia.ymd, resto, nota: `🗓️ Anotado: para el ${fechas.diaLindo(dia.ymd)}.` };
+}
+
 function anotarDia(ctx) {
   if (!gastro.esGastro(ctx.config)) return null;
   const t = nlu.normalizar(ctx.msj.texto || '');
