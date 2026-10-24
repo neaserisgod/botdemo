@@ -509,6 +509,28 @@ console.log('\n— 8. Viaja a Nodo Sur y los avisos de cada paso —');
   chequear('el día dicho junto con un plato no lo pierde', textoPara(b, B(9)).toLowerCase().includes('🗓️ anotado: para el sábado') && textoPara(b, B(9)).includes('1 × Bacon Cheese Doble'));
   motorFinde.procesarMensaje({ de: B(9), texto: 'cancelar' });
 
+  // Prueba del dueño (2026-10-24, sábado a la tarde, envíos de 19 a 23): pidió y le dijo "Hoy no hacemos envíos". Si hoy
+  // todavía abre, el pedido es para hoy.
+  const fechas = require('../src/core/fechas');
+  const ahoraReal = fechas.ahora;
+  fechas.ahora = () => new Date(2026, 9, 24, 15, 0);
+  const deNoche = { ...config, horarios: { ...SIN_HORARIO, viernes: { desde: '19:00', hasta: '23:00' }, sabado: { desde: '19:00', hasta: '23:00' } } };
+  const motorNoche = crearMotor(deNoche);
+  const noche = (texto) => motorNoche.procesarMensaje({ de: B(10), texto });
+  b = noche('hola');
+  chequear('a la tarde, el saludo dice que abre hoy y ya toma pedidos', textoPara(b, B(10)).includes('Abrimos hoy a las 19:00, pero ya te tomamos el pedido')
+    && !textoPara(b, B(10)).includes('Hoy no hacemos'));
+  for (const t of ['2', '1 especial', 'listo', '2', 'Moreno 400', '1', 'Ana', '1']) b = noche(t);
+  chequear('no pregunta el día ni dice "hoy no hacemos envíos"', !textoPara(b, B(10)).includes('Hoy no hacemos') && !textoPara(b, B(10)).includes('¿Para qué día'));
+  chequear('el resumen dice que llega hoy desde que abre', textoPara(b, B(10)).includes('Llega hoy, desde las 19:00'));
+  noche('cancelar');
+  fechas.ahora = () => new Date(2026, 9, 24, 23, 30);
+  b = noche('hola');
+  for (const t of ['2', '1 especial', 'listo', '2', 'Moreno 400', '1', '1']) b = noche(t);
+  chequear('ya cerrado el sábado: "por hoy ya cerramos" y que elija el día', textoPara(b, B(10)).includes('Por hoy ya cerramos. ¿Para qué día'));
+  noche('cancelar');
+  fechas.ahora = ahoraReal;
+
   console.log(fallas ? `\n❌ ${fallas} chequeos de gastronomía fallaron` : '\n✅ Gastronomía OK');
   process.exit(fallas ? 1 : 0);
 })();

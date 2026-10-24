@@ -113,10 +113,15 @@ const saludo = (ctx) => (gastro.esGastro(ctx.config)
   ? `¡Hola! 👋 Gracias por escribir a *${ctx.config.negocio.nombre}*.${avisoDeDias(ctx)}`
   : `¡Hola! 👋 Soy el asistente de *${ctx.config.negocio.nombre}*.`);
 
-// Hoy no hay entregas (un local que entrega solo el finde): se dice de entrada para cuándo toma pedidos.
+// Hoy no hay entregas (un local que entrega solo el finde): se dice de entrada para cuándo toma pedidos. Si hoy abre más
+// tarde (escribe a las 15 y abren a las 19), que sepa que el pedido para hoy ya se toma (El dueño, 2026-10-24: "me tiró
+// hoy no hacemos envíos, y hacemos de 19 a 23").
 function avisoDeDias(ctx) {
   const dias = gastro.proximosDias(ctx.config, 3);
-  if (!dias.length || dias[0].ymd === fechas.hoyYmd()) return '';
+  if (!dias.length) return '';
+  if (dias[0].ymd === hoyYmd()) {
+    return dias[0].abre > fechas.ahora() ? `\n🕖 Abrimos hoy a las ${horaDe(dias[0].abre)}, pero ya te tomamos el pedido 🙌` : '';
+  }
   const nombres = dias.map((x) => fechas.diaLindo(x.ymd).split(' ')[0]);
   const lista = nombres.length > 1 ? `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}` : nombres[0];
   return `\n🗓️ Hoy no hacemos entregas, pero ya tomamos pedidos para el ${lista.toLowerCase()} 🙌`;
@@ -1046,9 +1051,13 @@ function siguienteGastro(ctx) {
     const zona = forma.envio ? zs.find((z) => z.nombre === d.zona) || null : null;
     const ahora = gastro.cuandoSale(c, forma, zona);
     const dias = gastro.proximosDias(c, 3);
-    if (ahora && ahora.programado && dias.length > 1) {
+    // Si hoy todavía abre, el pedido es para hoy sin preguntar: el resumen dice "llega hoy, desde las 19:00" y si lo quiere
+    // otro día lo dice ("para el sábado").
+    if (ahora && ahora.programado && dias.length > 1 && dias[0].ymd !== hoyYmd()) {
       const lista = dias.map((x, i) => `*${i + 1}* — ${fechas.diaLindo(x.ymd)}`).join('\n');
-      return responder(ctx, 'eligiendo_dia', `🗓️ Hoy no hacemos ${forma.envio ? 'envíos' : 'entregas'}. ¿Para qué día lo querés?\n\n${lista}`);
+      const hoy = (ctx.config.horarios || {})[fechas.DIAS[fechas.ahora().getDay()]];
+      const porQue = hoy && hoy.desde ? 'Por hoy ya cerramos' : `Hoy no hacemos ${forma.envio ? 'envíos' : 'entregas'}`;
+      return responder(ctx, 'eligiendo_dia', `🗓️ ${porQue}. ¿Para qué día lo querés?\n\n${lista}`);
     }
   }
   return resumen(ctx);
@@ -1110,7 +1119,7 @@ function pidiendo_direccion(ctx) {
 
 // "el Sábado 24/10, desde las 19:00" / "hoy, desde las 19:00": el día en que sale un pedido programado, sin prometer la hora.
 function textoDia(hora) {
-  const abre = gastro.textoHora(hora).replace(/ a las \d{2}:\d{2}$/, '').trim();
+  const abre = gastro.textoHora(hora).replace(/(?:^| )a las \d{2}:\d{2}$/, '').trim();
   const desde = `${String(hora.getHours()).padStart(2, '0')}:00`;
   return `${abre || 'hoy'}, desde las ${desde}`;
 }
@@ -1162,6 +1171,8 @@ function eligiendo_dia(ctx) {
   ctx.datos.dia = dias[r.i].ymd;
   return siguienteGastro(ctx);
 }
+const hoyYmd = () => fechas.aTexto(fechas.ahora()).slice(0, 10);
+const horaDe = (d) => fechas.aTexto(d).slice(11);
 const manianaYmd = () => { const a = fechas.ahora(); return fechas.aTexto(new Date(a.getFullYear(), a.getMonth(), a.getDate() + 1)).slice(0, 10); };
 
 // "Para el sábado", "lo quiero el viernes": el día, si es uno de los que entregan. Devuelve el texto de lo anotado, o null.
