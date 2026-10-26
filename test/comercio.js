@@ -48,7 +48,11 @@ catalogo.fijar([
 
 console.log('\n— 3. Consultas —');
 r = decir(C1, 'hola');
+chequear('el "hola" es un saludo corto, sin opciones (sin encuesta)', textoPara(r, C1).includes('Soy el asistente de') && !textoPara(r, C1).includes('*1* —') && r.filter((x) => x.para === C1).length === 1);
+r = decir(C1, 'menu');
 chequear('menú de comercio con 🛒 y pedido para retirar', textoPara(r, C1).includes('Consultar precios 🛒') && textoPara(r, C1).includes('Hacer un pedido para retirar'));
+r = motor.procesarMensaje({ de: C1, texto: '', ubicacion: { lat: -41.13, lng: -71.3 } });
+chequear('la ubicación sin pedido tiene respuesta: los pedidos son para retirar', textoPara(r, C1).includes('retirar en el local'));
 r = decir(C1, '¿cuánto sale la yerba?');
 chequear('precio con miles y centavos, y que hay', textoPara(r, C1).includes('Yerba Playadito 1 kg — $5.200,50 ✅'));
 chequear('aclara que el precio es de hoy', textoPara(r, C1).includes('Precios de hoy, pueden cambiar'));

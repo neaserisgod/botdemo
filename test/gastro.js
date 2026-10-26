@@ -25,6 +25,7 @@ const catalogo = require('../src/core/catalogo');
 const comercio = require('../src/core/comercio');
 const gastro = require('../src/core/gastro');
 const qPedidos = require('../src/db/consultas/pedidos');
+const qClientas = require('../src/db/consultas/clientas');
 const { crearSincronizador } = require('../src/nube/sincronizar');
 const motor = crearMotor(config);
 
@@ -85,9 +86,28 @@ chequear('costo del envío en centavos', gastro.costoEnvio(cadete, PEDIDOS.zonas
 // La conversación con el horario siempre abierto, así la hora no depende de cuándo corre el test.
 config.horarios = SIN_HORARIO;
 
+console.log('\n— 3b. De entrada (chats reales de Groove, 2026-10-24) —');
+const E1 = '5492944299901';
+let e = decir(E1, 'hola jonas');
+e = decir(E1, 'mira el celular');
+chequear('no lo entiende después del saludo: no lo saluda de nuevo, le da las opciones', !textoPara(e, E1).includes('Gracias por escribir') && textoPara(e, E1).includes('No te entendí') && textoPara(e, E1).includes('*4* — Hablar con una persona'));
+e = decir(E1, 'hola');
+chequear('otro "hola" enseguida: corto, sin el saludo entero', textoPara(e, E1).includes('Acá estoy') && !textoPara(e, E1).includes('Gracias por escribir'));
+const E2 = '5492944299902';
+e = motor.procesarMensaje({ de: E2, texto: '', ubicacion: { lat: -41.11, lng: -71.44 } });
+chequear('la ubicación de entrada arranca el pedido con envío ahí (antes, silencio)', textoPara(e, E2).includes('te lo llevamos ahí') && qClientas.porTelefono(E2).estado_conv === 'armando_pedido');
+e = decir(E2, 'Calle 10 12356');
+chequear('la dirección escrita después del pin queda junto al pin', textoPara(e, E2).includes('Anoté la dirección') && JSON.parse(qClientas.porTelefono(E2).datos_conv).direccion.startsWith('Calle 10 12356 — ') && JSON.parse(qClientas.porTelefono(E2).datos_conv).direccion.includes('maps.google.com'));
+const E3 = '5492944299903';
+e = decir(E3, 'Mitre 150 timbre B');
+chequear('una dirección escrita de entrada arranca el pedido con envío', textoPara(e, E3).includes('te lo llevamos ahí') && JSON.parse(qClientas.porTelefono(E3).datos_conv).direccion === 'Mitre 150 timbre B');
+chequear('una frase cualquiera no es una dirección', !comercio.pareceDireccion('mira el celular') && !comercio.pareceDireccion('son las 22') && comercio.pareceDireccion('av bustillo km 5'));
+
 console.log('\n— 4. La carta —');
 const C1 = '5492944200001';
 let r = decir(C1, 'hola');
+chequear('el "hola" es un saludo corto, sin opciones (sin encuesta)', textoPara(r, C1).includes('Gracias por escribir a *Lo de Juan*') && textoPara(r, C1).includes('*carta*') && !textoPara(r, C1).includes('*1* —'));
+r = decir(C1, 'menu');
 chequear('el menú ofrece la carta y "hacer un pedido" (sin "para retirar")', textoPara(r, C1).includes('Ver la carta 🍗') && textoPara(r, C1).includes('*2* — Hacer un pedido\n'));
 r = decir(C1, '1');
 chequear('la carta escrita: lo que hay, con precio', textoPara(r, C1).includes('Milanesa con papas — $6.500') && !textoPara(r, C1).includes('Flan'));

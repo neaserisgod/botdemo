@@ -113,6 +113,41 @@ const saludo = (ctx) => (gastro.esGastro(ctx.config)
   ? `¡Hola! 👋 Gracias por escribir a *${ctx.config.negocio.nombre}*.${avisoDeDias(ctx)}`
   : `¡Hola! 👋 Soy el asistente de *${ctx.config.negocio.nombre}*.`);
 
+const saludoReciente = (ctx) => ctx.datos.menuVisto && Date.now() - ctx.datos.menuVisto < 30 * 60000;
+
+// De entrada, un saludo corto y sin opciones: el menú numerado sale como encuesta y, junto al saludo y el pie, eran tres
+// mensajes al primer "hola" (El dueño, 2026-10-26: "agobia"). Las opciones salen con "menú" o si no se le entiende.
+function bienvenida(ctx) {
+  const reciente = saludoReciente(ctx);
+  menuVisto(ctx);
+  const ayuda = gastro.esGastro(ctx.config)
+    ? `Contame qué querés pedir${ejemploDeLaCarta(ctx, ' (ej: ', ')')}, o escribí *carta* para verla.`
+    : 'Preguntame por lo que buscás (ej: *coca*) y te digo el precio y si hay, o escribí *menú* para ver las opciones.';
+  return responder(ctx, 'inicio', reciente ? `Acá estoy 🙂 ${ayuda}` : `${saludo(ctx)}\n${ayuda}`);
+}
+
+// La forma de entrega con envío del local gastronómico, o null si no lleva.
+const envioDe = (ctx) => (gastro.esGastro(ctx.config) && gastro.formas(ctx.config).find((f) => f.envio)) || null;
+
+// "Calle 10 12356", "Mitre 150 timbre B", "Av Bustillo km 5": un mensaje que es solo una dirección. `norm` ya normalizado.
+const TIPO_DE_CALLE = /^(?:calle|avenida|av|pasaje|pje|ruta|diagonal|bv|boulevard|bulevar)\b/;
+function pareceDireccion(norm) {
+  if (!norm || norm.length > 60 || norm.split(' ').length > 6) return false;
+  if (TIPO_DE_CALLE.test(norm)) return /\d/.test(norm);
+  return /^[a-z][a-z ]{2,30} (?:\d{3,5}|km \d{1,2})\b/.test(norm);
+}
+
+// Mandó la ubicación o la dirección sin haber pedido nada: es para que se lo lleven. Arranca el pedido con la dirección
+// anotada (antes la ubicación no tenía respuesta y la dirección escrita recibía el menú; El dueño, 2026-10-26).
+function direccionSinPedido(ctx, direccion) {
+  if (!envioDe(ctx)) return responder(ctx, 'inicio', ctx.config.respuestas?.envios || porDefecto(ctx).envios);
+  if (!catalogo.cargado() || gastro.pausada(ctx.config)) return empezarPedido(ctx);
+  ctx.datos = { items: [] };
+  guardarDireccion(ctx, direccion);
+  return responder(ctx, 'armando_pedido',
+    `📍 Anotado: te lo llevamos ahí.\nDecime qué te preparamos y cuántos${ejemploDeLaCarta(ctx, ' (ej: ', ')')}. Cuando termines, escribí *listo*.`);
+}
+
 // Hoy no hay entregas (un local que entrega solo el finde): se dice de entrada para cuándo toma pedidos. Si hoy abre más
 // tarde (escribe a las 15 y abren a las 19), que sepa que el pedido para hoy ya se toma (El dueño, 2026-10-24: "me tiró
 // hoy no hacemos envíos, y hacemos de 19 a 23").
@@ -150,6 +185,7 @@ function inicio(ctx, estado = 'inicio') {
     const comp = comprobante(ctx);
     if (comp) return comp;
   }
+  if (ctx.msj.ubicacion) return direccionSinPedido(ctx, direccionDeUbicacion(ctx.msj.ubicacion));
   if (!t || nlu.esRisa(t)) return [];
   if (nlu.esCortesia(t)) return responder(ctx, 'inicio', '¡Gracias a vos! 😊 Cualquier cosa escribime *hola*.');
   const apurado = apuro(ctx);
@@ -228,14 +264,17 @@ function inicio(ctx, estado = 'inicio') {
   // Enojo sin otro pedido: perdón, y una persona.
   const enojado = enojo(ctx);
   if (enojado) return enojado;
-  if (inter.intencion === 'saludo') return menu(ctx, saludo(ctx));
+  if (inter.intencion === 'saludo') return bienvenida(ctx);
+  // "Calle 10 12356" sin haber pedido nada: es adónde se lo llevan.
+  if (!pregunta && envioDe(ctx) && pareceDireccion(norm)) return direccionSinPedido(ctx, ctx.msj.texto.trim());
   // Lo que no se entendió queda anotado; a la segunda seguida, una persona en vez del menú otra vez.
   anotarNoEntendido(ctx);
   if (sinEntender >= 1) {
     return derivarAHumano(ctx, ctx.msj.texto, `Perdón, no te estoy entendiendo 😅 Ya le aviso ${aQuienAtiende(ctx.config.textos)} para que te responda personalmente.`);
   }
   ctx.datos.sinEntender = sinEntender + 1;
-  if (!pregunta) return menu(ctx, saludo(ctx));
+  // Si ya lo saludó, no lo saluda de nuevo: las opciones, que es lo que le sirve si no se le entiende.
+  if (!pregunta) return saludoReciente(ctx) ? menu(ctx, 'No te entendí bien 🤔') : bienvenida(ctx);
   return responder(ctx, estado, 'No te entendí bien 🤔 Decime qué producto buscás, o escribí *menú* para ver las opciones.');
 }
 
@@ -624,6 +663,12 @@ function armando_pedido(ctx) {
   const dicho = separarDireccion(ctx.msj.texto);
   guardarDireccion(ctx, dicho.direccion);
   if (dicho.direccion && !dicho.texto.trim()) return responder(ctx, 'armando_pedido', 'Anoté la dirección 🏠 Decime qué te preparamos, o *listo* para terminar.');
+  // "Calle 10 12356" suelto (muchas veces después del pin): la dirección escrita, junto al pin si ya lo mandó.
+  if (envio && pareceDireccion(norm) && !catalogo.buscar(ctx.msj.texto, 1, sinonimos(ctx)).resultados.length) {
+    const escrita = ctx.msj.texto.trim();
+    guardarDireccion(ctx, (ctx.datos.direccion || '').includes('📍') ? `${escrita} — ${ctx.datos.direccion}` : escrita);
+    return responder(ctx, 'armando_pedido', 'Anoté la dirección 🏠 Decime qué te preparamos, o *listo* para terminar.');
+  }
   const conVerbo = new RegExp(`^(?:${VERBO_PEDIDO}\\b\\s*)+`);
   const sinVerbo = dicho.texto.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(SALUDO_INICIAL, '');
   let texto = conVerbo.test(sinVerbo) ? sinVerbo.replace(conVerbo, '').replace(RELLENO_FINAL, '') : dicho.texto;
@@ -1389,4 +1434,4 @@ function avisoDePedido(config, pedido, estado) {
   return { para: telefono, texto: '😕 El local no puede preparar tu pedido ahora. Si querés, escribí *4* y te responde una persona.' };
 }
 
-module.exports = { procesar, avisoDePedido, cantidadYProducto };
+module.exports = { procesar, avisoDePedido, cantidadYProducto, pareceDireccion };
